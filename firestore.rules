@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidPublicVault(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.overseerName is string && data.overseerName.size() >= 1 && data.overseerName.size() <= 40 &&
+             data.vaultName is string && data.vaultName.size() >= 1 && data.vaultName.size() <= 50 &&
+             data.visibility == 'public' &&
+             data.prestigeLevel is int && data.prestigeLevel >= 0 && data.prestigeLevel <= 1000 &&
+             data.commandLevel is int && data.commandLevel >= 1 && data.commandLevel <= 500 &&
+             data.dayCounter is int && data.dayCounter >= 1 && data.dayCounter <= 100000 &&
+             data.totalSurvivors is int && data.totalSurvivors >= 0 && data.totalSurvivors <= 5000 &&
+             data.uniqueDwellersCount is int && data.uniqueDwellersCount >= 0 && data.uniqueDwellersCount <= 5000 &&
+             data.totalDefenseRating is int && data.totalDefenseRating >= 0 && data.totalDefenseRating <= 1000000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSupplyDrop(data) {
+      return data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 40 &&
+             data.resourceType is string && data.resourceType in ['SCRAP', 'WATER', 'RATIONS', 'BIO_FUEL'] &&
+             data.amount is int && data.amount >= 5 && data.amount <= 500 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 120 &&
+             data.visibility == 'public' &&
+             data.status is string && data.status in ['open', 'claimed'] &&
+             (!('claimedByUid' in data) || data.claimedByUid == null || (data.claimedByUid is string && data.claimedByUid.size() >= 1 && data.claimedByUid.size() <= 128)) &&
+             (!('claimedByName' in data) || data.claimedByName == null || (data.claimedByName is string && data.claimedByName.size() >= 1 && data.claimedByName.size() <= 40)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /public_vaults/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (existing().visibility == 'public' || request.auth.uid == userId);
+      allow list: if isSignedIn() && existing().visibility == 'public';
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'overseerName', 'vaultName', 'visibility',
+                         'prestigeLevel', 'commandLevel', 'dayCounter',
+                         'totalSurvivors', 'uniqueDwellersCount', 'totalDefenseRating',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'overseerName', 'vaultName', 'visibility',
+                         'prestigeLevel', 'commandLevel', 'dayCounter',
+                         'totalSurvivors', 'uniqueDwellersCount', 'totalDefenseRating',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidPublicVault(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidPublicVault(incoming()) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'overseerName', 'vaultName', 'visibility',
+                         'prestigeLevel', 'commandLevel', 'dayCounter',
+                         'totalSurvivors', 'uniqueDwellersCount', 'totalDefenseRating',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /public_supply_drops/{dropId} {
+      allow get: if isSignedIn() && isValidId(dropId) && existing().visibility == 'public';
+      allow list: if isSignedIn() && existing().visibility == 'public';
+
+      allow create: if isSignedIn() &&
+                       isValidId(dropId) &&
+                       incoming().senderUid == request.auth.uid &&
+                       incoming().status == 'open' &&
+                       incoming().keys().hasAll([
+                         'senderUid', 'senderName', 'resourceType', 'amount',
+                         'message', 'visibility', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'senderUid', 'senderName', 'resourceType', 'amount',
+                         'message', 'visibility', 'status', 'claimedByUid',
+                         'claimedByName', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidSupplyDrop(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(dropId) &&
+                       isValidSupplyDrop(incoming()) &&
+                       existing().status == 'open' &&
+                       incoming().senderUid == existing().senderUid &&
+                       incoming().senderName == existing().senderName &&
+                       incoming().resourceType == existing().resourceType &&
+                       incoming().amount == existing().amount &&
+                       incoming().message == existing().message &&
+                       incoming().visibility == existing().visibility &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (incoming().status == 'claimed' &&
+                          incoming().claimedByUid == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'status', 'claimedByUid', 'claimedByName', 'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(dropId) && existing().senderUid == request.auth.uid;
+    }
+  }
+}

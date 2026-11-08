@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Vault City</string>
+    <string name="tab_outpost">Mine &amp; Vault</string>
+    <string name="tab_craft_hunt">Defend &amp; Hunt</string>
+    <string name="tab_survivors">Dwellers</string>
+    <string name="tab_network">Net &amp; Trade</string>
+    <string name="tab_skill_tree">Skills (Lv.100)</string>
+    <string name="action_scavenge">Swing Pickaxe</string>
+    <string name="action_recruit">Hire with Gold</string>
+    <string name="action_train_class">Train Dwellers</string>
+    <string name="action_solar_flare">Reactor Overdrive</string>
+    <string name="action_eclipse_shroud">Stealth Field</string>
+    <string name="offline_report_title">Vault City Overseer Report</string>
+    <string name="offline_report_claim">Claim Vault Supplies &amp; XP</string>
+    <string name="hero_banner_desc">Vault City Nuclear Shelter</string>
+</resources>

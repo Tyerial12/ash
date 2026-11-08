@@ -1,0 +1,582 @@
+package com.example.ui.components
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.example.R
+import com.example.data.local.OutpostStateEntity
+import com.example.domain.ProductionSnapshot
+import com.example.model.ActiveBuildingConstruction
+import com.example.model.ActiveDoorUpgrade
+import com.example.model.ActiveDwellerExpedition
+import com.example.model.ActiveItemCrafting
+import com.example.model.CommandLevelProgression
+import com.example.model.DayNightPhase
+import com.example.model.ResourceType
+import com.example.ui.theme.BioluminescentViolet
+import com.example.ui.theme.BunkerSlate
+import com.example.ui.theme.CryoCyan
+import com.example.ui.theme.HazardRed
+import com.example.ui.theme.ObsidianCharcoal
+import com.example.ui.theme.RadTeal
+import com.example.ui.theme.RustCopper
+import com.example.ui.theme.SolarAmber
+import com.example.ui.theme.SurplusGreen
+import com.example.ui.theme.TextMutedAsh
+import com.example.ui.theme.WarningOrange
+import com.example.ui.theme.XpGold
+import java.util.Locale
+import kotlin.math.roundToInt
+
+private enum class HeaderTelemetryTab(val label: String) {
+    COMPACT("Compact"),
+    RESOURCES_GATHERED("Resources Gathered"),
+    SYSTEMS_ONLINE("Systems Online")
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun WastelandSkyHeader(
+    state: OutpostStateEntity,
+    production: ProductionSnapshot,
+    activeConstruction: ActiveBuildingConstruction? = null,
+    activeCrafting: ActiveItemCrafting? = null,
+    activeDoorUpgrade: ActiveDoorUpgrade? = null,
+    activeExpedition: ActiveDwellerExpedition? = null,
+    modifier: Modifier = Modifier
+) {
+    var selectedTab by rememberSaveable { mutableStateOf(HeaderTelemetryTab.COMPACT) }
+    val phase = production.activePhase
+    val xpReq = CommandLevelProgression.xpRequiredForLevel(state.commandLevel)
+    val xpFraction = (state.currentXp / xpReq).toFloat().coerceIn(0f, 1f)
+    val isBlackout = production.isVaultBlackout
+    val isBrownout = production.isVaultBrownout
+    val isNightDanger = phase == DayNightPhase.RAD_NIGHT
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = BunkerSlate,
+        tonalElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = when {
+                        isBlackout || production.isWorkersStarvingOrDehydrated -> HazardRed.copy(alpha = 0.85f)
+                        isNightDanger || state.needsDefenseRepair -> WarningOrange.copy(alpha = 0.8f)
+                        else -> phase.accentColor.copy(alpha = 0.45f)
+                    },
+                    shape = RoundedCornerShape(14.dp)
+                )
+        ) {
+            // ROW 1: Compact Vault Status & Life-Support Strip
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.img_wasteland_outpost_1794107188307),
+                    contentDescription = "Vault City Skyline",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp),
+                    alpha = 0.28f
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    phase.accentColor.copy(alpha = 0.22f),
+                                    ObsidianCharcoal.copy(alpha = 0.94f)
+                                )
+                            )
+                        )
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                color = XpGold.copy(alpha = 0.22f),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.border(1.dp, XpGold, RoundedCornerShape(6.dp))
+                            ) {
+                                Text(
+                                    text = if (state.prestigeLevel > 0) {
+                                        "★P${state.prestigeLevel} • LV.${state.commandLevel}"
+                                    } else {
+                                        "LV.${state.commandLevel}/100"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = XpGold,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Text(
+                                text = "DAY ${state.dayCounter} • ${phase.displayName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isNightDanger) BioluminescentViolet else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        val siegeBadgeColor = when {
+                            production.isWorkersStarvingOrDehydrated -> HazardRed
+                            production.daysUntilDay10Siege == 0 || isNightDanger -> WarningOrange
+                            else -> SolarAmber
+                        }
+                        Text(
+                            text = when {
+                                production.isWorkersStarvingOrDehydrated -> "CREW STARVING!"
+                                production.daysUntilDay10Siege == 0 -> "SIEGE TODAY!"
+                                isNightDanger -> "NIGHT SWARM +35%"
+                                else -> "SIEGE: ${production.daysUntilDay10Siege}D • CREW ${state.totalSurvivors}/${production.maxWorkerCapacity}"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = siegeBadgeColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // Life-Support Telemetry Pills Row
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        val powerStatusLabel = when {
+                            isBrownout -> "⚡ ${production.totalMegawattGenerated.roundToInt()}/${production.totalMegawattDemand.roundToInt()}MW (LOW)"
+                            isBlackout -> "⚡ ${production.totalMegawattGenerated.roundToInt()}/${production.totalMegawattDemand.roundToInt()}MW (OUT)"
+                            else -> "⚡ ${production.totalMegawattGenerated.roundToInt()}/${production.totalMegawattDemand.roundToInt()}MW"
+                        }
+                        val powerColor = when {
+                            isBrownout -> WarningOrange
+                            isBlackout -> HazardRed
+                            else -> SurplusGreen
+                        }
+                        StatusMiniText(powerStatusLabel, powerColor)
+
+                        val o2Color = when {
+                            state.oxygenPercent < 45 -> HazardRed
+                            state.oxygenPercent < 75 -> WarningOrange
+                            else -> CryoCyan
+                        }
+                        StatusMiniText("O2: ${state.oxygenPercent}%", o2Color)
+
+                        val radColor = when {
+                            state.radiationMillisieverts >= 120 -> HazardRed
+                            state.radiationMillisieverts >= 35 -> WarningOrange
+                            else -> SurplusGreen
+                        }
+                        StatusMiniText("RAD: ${state.radiationMillisieverts}mSv", radColor)
+
+                        val autoDefLabel = if (production.isAutoDefenseActive) "AUTO-DEF: ON" else "AUTO-DEF: OFF"
+                        val autoDefColor = if (production.isAutoDefenseActive) SurplusGreen else WarningOrange
+                        StatusMiniText(autoDefLabel, autoDefColor)
+
+                        val doorColor = if (state.needsDefenseRepair) WarningOrange else RadTeal
+                        StatusMiniText("DOOR: ${state.defenseIntegrityPercent}%", doorColor)
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { xpFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = XpGold,
+                        trackColor = ObsidianCharcoal
+                    )
+                }
+            }
+
+            // ROW 2: Mobile-Friendly Collapsible Telemetry Drawer Tab Switcher
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ObsidianCharcoal.copy(alpha = 0.92f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HeaderTelemetryTab.entries.forEach { tab ->
+                    val isSelected = selectedTab == tab
+                    val tag = when (tab) {
+                        HeaderTelemetryTab.COMPACT -> "header_tab_compact"
+                        HeaderTelemetryTab.RESOURCES_GATHERED -> "header_tab_resources"
+                        HeaderTelemetryTab.SYSTEMS_ONLINE -> "header_tab_systems"
+                    }
+                    Surface(
+                        color = if (isSelected) SolarAmber.copy(alpha = 0.22f) else BunkerSlate,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) SolarAmber else TextMutedAsh.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                selectedTab = if (selectedTab == tab && tab != HeaderTelemetryTab.COMPACT) {
+                                    HeaderTelemetryTab.COMPACT
+                                } else {
+                                    tab
+                                }
+                            }
+                            .testTag(tag)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) SolarAmber else TextMutedAsh,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ROW 3: Always-Visible Compact Primary Resource Strip
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ObsidianCharcoal.copy(alpha = 0.82f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                ResourceChip("SCRAP", state.scrap, production.scrapPerSec, ResourceType.SCRAP.color)
+                ResourceChip("WATER", state.water, production.waterPerSec, ResourceType.WATER.color)
+                ResourceChip("FOOD", state.rations, production.rationsPerSec, ResourceType.RATIONS.color)
+                ResourceChip("FUEL", state.bioFuel, production.bioFuelPerSec, ResourceType.BIO_FUEL.color)
+                RareBadgeChip("GOLD", state.gold.toInt(), XpGold)
+                RareBadgeChip("AMMO", state.ammoRounds, SolarAmber)
+                if (state.prestigeCores > 0) {
+                    RareBadgeChip("★CORES", state.prestigeCores, XpGold)
+                }
+            }
+
+            // EXPANDABLE TELEMETRY DRAWER: Resources Gathered OR Current Systems Online
+            AnimatedVisibility(visible = selectedTab != HeaderTelemetryTab.COMPACT) {
+                Surface(
+                    color = ObsidianCharcoal.copy(alpha = 0.96f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    when (selectedTab) {
+                        HeaderTelemetryTab.RESOURCES_GATHERED -> ResourcesGatheredDrawerPanel(
+                            state = state,
+                            production = production
+                        )
+                        HeaderTelemetryTab.SYSTEMS_ONLINE -> CurrentSystemsOnlineDrawerPanel(
+                            state = state,
+                            production = production,
+                            activeConstruction = activeConstruction,
+                            activeCrafting = activeCrafting,
+                            activeDoorUpgrade = activeDoorUpgrade,
+                            activeExpedition = activeExpedition
+                        )
+                        HeaderTelemetryTab.COMPACT -> {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ResourcesGatheredDrawerPanel(
+    state: OutpostStateEntity,
+    production: ProductionSnapshot
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, SolarAmber.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+            .padding(8.dp)
+            .testTag("drawer_resources_gathered"),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "RESOURCES GATHERED & DAILY WORKER UPKEEP",
+                style = MaterialTheme.typography.labelMedium,
+                color = SolarAmber,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Storage Cap: ${production.storageCap.toInt()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = RadTeal,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            ResourceChip("SCRAP", state.scrap, production.scrapPerSec, SolarAmber)
+            ResourceChip("WATER", state.water, production.waterPerSec, CryoCyan)
+            ResourceChip("FOOD", state.rations, production.rationsPerSec, SurplusGreen)
+            ResourceChip("FUEL", state.bioFuel, production.bioFuelPerSec, RustCopper)
+            ResourceChip("TECH", state.researchData, production.researchPerSec, RadTeal)
+            ResourceChip("MUTAGEN", state.mutagenCores, production.mutagenCoresPerSec, BioluminescentViolet)
+        }
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            RareBadgeChip("GOLD", state.gold.toInt(), XpGold)
+            RareBadgeChip("THORIUM", state.thoriumRods.toInt(), WarningOrange)
+            RareBadgeChip("AETHER", state.aetherCells.toInt(), CryoCyan)
+            RareBadgeChip("CRATES", state.rawSalvageCaches, SolarAmber)
+            RareBadgeChip("PRESTIGE CORES", state.prestigeCores, XpGold)
+        }
+
+        val upkeepColor = if (production.isWorkersStarvingOrDehydrated) HazardRed else SurplusGreen
+        Text(
+            text = if (production.isWorkersStarvingOrDehydrated) {
+                "ALERT: Workers need Food & Water daily! Stock is 0 — All worker rooms & automated turrets are HALTED until fed!"
+            } else {
+                "Daily Upkeep: Crew -${production.dailyFoodUpkeepPerDay.roundToInt()}F/-${production.dailyWaterUpkeepPerDay.roundToInt()}W • High-Lv Rooms Drain -${production.dailyRoomScrapUpkeep.roundToInt()}S/-${production.dailyRoomWaterUpkeep.roundToInt()}W/-${production.dailyRoomFuelUpkeep.roundToInt()}Fuel/Day"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = upkeepColor,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun CurrentSystemsOnlineDrawerPanel(
+    state: OutpostStateEntity,
+    production: ProductionSnapshot,
+    activeConstruction: ActiveBuildingConstruction?,
+    activeCrafting: ActiveItemCrafting?,
+    activeDoorUpgrade: ActiveDoorUpgrade?,
+    activeExpedition: ActiveDwellerExpedition?
+) {
+    val hasBuiltTurrets = state.sentryTurretCount > 0 || state.plasmaCannonCount > 0
+    val hasFedAssignedWorkers = state.totalSurvivors > 0 && production.totalAssignedWorkers > 0 && !production.isWorkersStarvingOrDehydrated
+    val hasGridPower = !production.isVaultBlackout
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, RadTeal.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+            .padding(8.dp)
+            .testTag("drawer_systems_online"),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Text(
+            text = "CURRENT SYSTEMS ONLINE & LIVE TELEMETRY",
+            style = MaterialTheme.typography.labelMedium,
+            color = RadTeal,
+            fontWeight = FontWeight.Bold
+        )
+
+        // 1. Power Grid MW Load, Generator Wear, and Blackout Status
+        val gridStatus = when {
+            production.isVaultBlackout -> "BLACKOUT (OFFLINE)"
+            production.isVaultBrownout -> "BROWNOUT (LOW MW)"
+            else -> "ONLINE (${(production.powerGridEfficiencyMultiplier * 100).roundToInt()}% EFF)"
+        }
+        Text(
+            text = "⚡ Power Grid: ${production.totalMegawattGenerated.roundToInt()}/${production.totalMegawattDemand.roundToInt()} MW • $gridStatus • Gen Wear: ${state.generatorWearPercent}%",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (production.isVaultBlackout) HazardRed else SurplusGreen,
+            fontWeight = FontWeight.Bold
+        )
+
+        // 2. Automated Defense Grid Status (Requires Built Turrets + Fed Workers + Power)
+        val defStatus = if (production.isAutoDefenseActive) "ONLINE & ARMED" else "OFFLINE (CHECK REQUIREMENTS)"
+        Text(
+            text = "🛡 Auto-Defense Grid: $defStatus • Built(${if (hasBuiltTurrets) "YES" else "NO"}) • Fed Crew(${if (hasFedAssignedWorkers) "YES" else "NO"}) • Power(${if (hasGridPower) "YES" else "NO"}) • Door Lv.${state.blastDoorLevel} (${state.defenseIntegrityPercent}%)",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (production.isAutoDefenseActive) SurplusGreen else WarningOrange,
+            fontWeight = FontWeight.Bold
+        )
+
+        // 3. Life Support O2 Scrubbers, Radiation Levels, and Room Automation Status
+        Text(
+            text = "🫁 Life Support & Rooms: ${production.onlineRoomsCount}/${production.totalBuiltRoomsCount} Rooms Online • O2 ${state.oxygenPercent}% (${formatRate(production.oxygenDeltaPerSec)}/s) • Rads ${state.radiationMillisieverts}mSv (${formatRate(production.radiationDeltaPerSec)}/s)",
+            style = MaterialTheme.typography.labelSmall,
+            color = CryoCyan
+        )
+
+        // 4. Active Timers for Room Construction, Blast Door Upgrade, Item Crafting, and Wasteland Expeditions
+        val buildTimerStr = activeConstruction?.let {
+            "Build ${it.buildingType.displayName} Lv.${it.targetLevel}: ${it.remainingSeconds}s"
+        } ?: "Build: Idle"
+        val doorTimerStr = activeDoorUpgrade?.let {
+            "Door Lv.${it.targetLevel}: ${it.remainingSeconds}s"
+        } ?: "Door: Idle"
+        val craftTimerStr = activeCrafting?.let {
+            "Craft ${it.item.title}: ${it.remainingSeconds}s"
+        } ?: "Armory: Idle"
+        val expTimerStr = activeExpedition?.let {
+            "Expedition: ${it.remainingSeconds}s"
+        } ?: "Expedition: Idle"
+
+        Text(
+            text = "⏱ Active Timers: $buildTimerStr • $doorTimerStr • $craftTimerStr • $expTimerStr",
+            style = MaterialTheme.typography.labelSmall,
+            color = XpGold,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun StatusMiniText(
+    text: String,
+    color: Color
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun ResourceChip(
+    label: String,
+    amount: Double,
+    rate: Double,
+    color: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
+    ) {
+        Text(
+            text = "$label:",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextMutedAsh
+        )
+        Spacer(modifier = Modifier.width(2.dp))
+        Text(
+            text = formatCompact(amount),
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Bold
+        )
+        val sign = if (rate >= 0) "+" else ""
+        Text(
+            text = "($sign${formatRate(rate)})",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (rate >= 0) SurplusGreen else WarningOrange
+        )
+    }
+}
+
+@Composable
+private fun RareBadgeChip(
+    label: String,
+    amount: Int,
+    color: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+    ) {
+        Text(
+            text = "$label:",
+            style = MaterialTheme.typography.labelSmall,
+            color = color
+        )
+        Spacer(modifier = Modifier.width(2.dp))
+        Text(
+            text = amount.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+fun formatCompact(value: Double): String {
+    return when {
+        value >= 10_000 -> String.format(Locale.US, "%.1fk", value / 1000.0)
+        value >= 100 -> value.toInt().toString()
+        else -> String.format(Locale.US, "%.1f", value)
+    }
+}
+
+fun formatRate(value: Double): String {
+    return String.format(Locale.US, "%.1f", value)
+}

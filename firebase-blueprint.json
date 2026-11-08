@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "PublicVaultProfile": {
+      "title": "PublicVaultProfile",
+      "description": "Publicly visible Vault profile in the Global Overseer Leaderboard and Wasteland Directory.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the Vault Overseer."
+        },
+        "overseerName": {
+          "type": "string",
+          "description": "Display name or callsign of the Overseer (1-40 chars)."
+        },
+        "vaultName": {
+          "type": "string",
+          "description": "Custom or designated name of the Vault (1-50 chars)."
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"],
+          "description": "Visibility scope for query enforcement."
+        },
+        "prestigeLevel": {
+          "type": "integer",
+          "description": "Overseer Ascension Prestige Rank (>= 0)."
+        },
+        "commandLevel": {
+          "type": "integer",
+          "description": "Current Vault Command Level (>= 1)."
+        },
+        "dayCounter": {
+          "type": "integer",
+          "description": "Days survived in the current Vault run (>= 1)."
+        },
+        "totalSurvivors": {
+          "type": "integer",
+          "description": "Current population of Vault Dwellers (>= 0)."
+        },
+        "uniqueDwellersCount": {
+          "type": "integer",
+          "description": "Count of rare Unique Vault Dwellers recruited (>= 0)."
+        },
+        "totalDefenseRating": {
+          "type": "integer",
+          "description": "Current total Vault Defense Rating (>= 0)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the Vault was first registered."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the Vault profile was last synced."
+        }
+      },
+      "required": [
+        "userId",
+        "overseerName",
+        "vaultName",
+        "visibility",
+        "prestigeLevel",
+        "commandLevel",
+        "dayCounter",
+        "totalSurvivors",
+        "uniqueDwellersCount",
+        "totalDefenseRating",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PublicSupplyDrop": {
+      "title": "PublicSupplyDrop",
+      "description": "Public supply crate broadcast by an Overseer that another player can claim.",
+      "type": "object",
+      "properties": {
+        "senderUid": {
+          "type": "string",
+          "description": "Authenticated UID of the Overseer who broadcast the supply drop."
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of the sender Overseer (1-40 chars)."
+        },
+        "resourceType": {
+          "type": "string",
+          "enum": ["SCRAP", "WATER", "RATIONS", "BIO_FUEL"],
+          "description": "Type of survival resource inside the supply drop."
+        },
+        "amount": {
+          "type": "integer",
+          "description": "Quantity of the resource dropped (5-500)."
+        },
+        "message": {
+          "type": "string",
+          "description": "Radio broadcast note attached to the supply drop (1-120 chars)."
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public"],
+          "description": "Visibility scope for query enforcement."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "claimed"],
+          "description": "Lifecycle status of the supply drop."
+        },
+        "claimedByUid": {
+          "type": "string",
+          "description": "Optional UID of the player who claimed the supply drop."
+        },
+        "claimedByName": {
+          "type": "string",
+          "description": "Optional display name of the player who claimed the supply drop."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the supply drop was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the supply drop was last updated."
+        }
+      },
+      "required": [
+        "senderUid",
+        "senderName",
+        "resourceType",
+        "amount",
+        "message",
+        "visibility",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/public_vaults/{userId}": {
+      "schema": {
+        "$ref": "#/entities/PublicVaultProfile"
+      },
+      "description": "Global directory of public player Vaults and Overseer standings."
+    },
+    "/public_supply_drops/{dropId}": {
+      "schema": {
+        "$ref": "#/entities/PublicSupplyDrop"
+      },
+      "description": "Shared public wasteland supply drops broadcast and claimed by players."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Vault City",
+  "description": "A nuclear apocalypse shelter-building survival RPG where you start with nothing but a pickaxe, power your Vault with megawatts, hire dwellers with Gold, hunt and fish, defend your base each day with post-attack repairs, and progress to Level 100.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
