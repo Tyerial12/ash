@@ -313,6 +313,20 @@ enum class HuntingTarget(
         baseCoresReward = 1.0,
         baseXpReward = 55.0,
         accentColor = BioluminescentViolet
+    ),
+    GLOWING_LEVIATHAN_WYRM(
+        id = "GLOWING_LEVIATHAN_WYRM",
+        title = "Slay Glowing Leviathan Wyrm",
+        subtitle = "Apex Crater Boss (Requires Crossbow + 2 Spears + 2 Traps): Huge Food, Water, Gold & +2 Mutagen Cores",
+        spearsRequired = 2,
+        trapsRequired = 2,
+        requiresCrossbow = true,
+        baseFoodReward = 155.0,
+        baseWaterReward = 50.0,
+        baseGoldReward = 85.0,
+        baseCoresReward = 2.0,
+        baseXpReward = 95.0,
+        accentColor = HazardRed
     );
 }
 
@@ -423,6 +437,21 @@ enum class WastelandExpeditionType(
         coresReward = 1.0,
         xpReward = 110.0,
         accentColor = BioluminescentViolet
+    ),
+    SUNKEN_SUBMARINE_REACTOR(
+        id = "SUNKEN_SUBMARINE_REACTOR",
+        title = "Sunken Ballistic Sub Salvage",
+        subtitle = "Deep trench dive for massive Scrap, Bio-Fuel, Gold & +2 Mutagen Cores (10% Base Death Risk)",
+        durationSeconds = 22,
+        deathChancePercent = 10,
+        goldReward = 155.0,
+        foodReward = 55.0,
+        waterReward = 55.0,
+        scrapReward = 125.0,
+        fuelReward = 75.0,
+        coresReward = 2.0,
+        xpReward = 160.0,
+        accentColor = CryoCyan
     );
 }
 
@@ -431,6 +460,94 @@ data class ActiveDwellerExpedition(
     val remainingSeconds: Int,
     val totalSeconds: Int
 )
+
+enum class VaultOperationalPosture(
+    val id: String,
+    val shortLabel: String,
+    val title: String,
+    val summary: String,
+    val outputMultiplier: Double,
+    val upkeepMultiplier: Double,
+    val megawattDemandMultiplier: Double,
+    val accentColor: Color
+) {
+    ECO_CONSERVATION(
+        id = "ECO_CONSERVATION",
+        shortLabel = "ECO (-40% DRAIN)",
+        title = "Eco-Conservation Protocol",
+        summary = "Cuts Vault & Room Resource Upkeep by -40% and MW draw by -15% (-15% Output) — ideal to exit Resource Deficits & restore Defenses!",
+        outputMultiplier = 0.85,
+        upkeepMultiplier = 0.60,
+        megawattDemandMultiplier = 0.85,
+        accentColor = SurplusGreen
+    ),
+    STANDARD(
+        id = "STANDARD",
+        shortLabel = "STANDARD (100%)",
+        title = "Standard Bunker Posture",
+        summary = "Balanced 100% Vault resource production, standard room upkeep, and normal Megawatt draw.",
+        outputMultiplier = 1.0,
+        upkeepMultiplier = 1.0,
+        megawattDemandMultiplier = 1.0,
+        accentColor = RadTeal
+    ),
+    OVERCLOCK(
+        id = "OVERCLOCK",
+        shortLabel = "OVERCLOCK (+30%)",
+        title = "High-Yield Overclock",
+        summary = "Boosts all Vault Resource & XP Output by +30%, but increases Room Upkeep by +25% and MW draw by +15%.",
+        outputMultiplier = 1.30,
+        upkeepMultiplier = 1.25,
+        megawattDemandMultiplier = 1.15,
+        accentColor = SolarAmber
+    );
+
+    companion object {
+        fun fromId(id: String): VaultOperationalPosture {
+            return entries.firstOrNull { it.id == id } ?: STANDARD
+        }
+    }
+}
+
+enum class SiegeCountermeasureType(
+    val id: String,
+    val buttonLabel: String,
+    val description: String,
+    val defenseReductionPercent: Int,
+    val bonusIntegrityRestore: Int,
+    val ammoCost: Int = 0,
+    val bioFuelCost: Double = 0.0,
+    val scrapCost: Double = 0.0,
+    val accentColor: Color
+) {
+    FLAK_VOLLEY(
+        id = "FLAK_VOLLEY",
+        buttonLabel = "FLAK VOLLEY (8 AMMO)",
+        description = "Fires concentrated flak salvos to shred incoming raiders (-25% Siege DEF Req & +10s timer).",
+        defenseReductionPercent = 25,
+        bonusIntegrityRestore = 0,
+        ammoCost = 8,
+        accentColor = SolarAmber
+    ),
+    EMP_PULSE(
+        id = "EMP_PULSE",
+        buttonLabel = "EMP PULSE (20 FUEL)",
+        description = "Detonates an electromagnetic shockwave that cripples Warlord armor (-35% Siege DEF Req).",
+        defenseReductionPercent = 35,
+        bonusIntegrityRestore = 0,
+        bioFuelCost = 20.0,
+        accentColor = CryoCyan
+    ),
+    EMERGENCY_WELD(
+        id = "EMERGENCY_WELD",
+        buttonLabel = "DOOR WELD (25 SCRAP)",
+        description = "Welds emergency blast plates mid-siege (+25% Door Integrity immediately & -15% Siege DEF Req).",
+        defenseReductionPercent = 15,
+        bonusIntegrityRestore = 25,
+        scrapCost = 25.0,
+        accentColor = SurplusGreen
+    )
+}
 
 object PickaxeTier {
     fun nameForLevel(level: Int): String = when {
@@ -455,7 +572,10 @@ data class RaiderSiegeThreat(
     val remainingSeconds: Int,
     val dayNumber: Int = 1,
     val isDay10MegaSiege: Boolean = false,
-    val isNightMutantSwarm: Boolean = false
+    val isNightMutantSwarm: Boolean = false,
+    val bossClassTitle: String = "",
+    val countermeasuresUsedCount: Int = 0,
+    val weakenedByPercent: Int = 0
 )
 
 enum class TradeTown(
@@ -1055,6 +1175,40 @@ enum class BuildingType(
         baseFuelCost = 70.0,
         baseCoresCost = 1.0,
         favoredWorkerClass = WorkerClassType.NIGHT_STALKER
+    ),
+    GEOTHERMAL_TAP(
+        id = "GEOTHERMAL_TAP",
+        displayName = "Deep-Core Geothermal Tap",
+        category = BuildingCategory.INFRASTRUCTURE,
+        requiredCommandLevel = 3,
+        description = "Subterranean Floor B5 magma bore that generates +7.5 MW/Lv clean 24/7 power and reduces Generator Wear.",
+        gameplayNeedSummary = "CLEAN 24/7 POWER (FLOOR B5): +7.5 MW/Lv Continuous Power (0 MW Draw!) & -10% Generator Wear/Lv",
+        primaryResource = ResourceType.BIO_FUEL,
+        baseOutputPerLevel = 1.4,
+        megawattDemandPerLevel = 1.0,
+        baseBuildTimeSeconds = 38,
+        manualSalvageBonusDesc = "+7.5 Continuous Baseline MW & -10% Generator Wear per level",
+        baseScrapCost = 125.0,
+        baseWaterCost = 35.0,
+        favoredWorkerClass = WorkerClassType.TECH_SAVANT
+    ),
+    CRYO_STASIS_VAULT(
+        id = "CRYO_STASIS_VAULT",
+        displayName = "Cryo-Stasis & Ration Vault",
+        category = BuildingCategory.INFRASTRUCTURE,
+        requiredCommandLevel = 4,
+        description = "Deep-freeze preservation vaults on Floor B5 that cut Dweller 5-min & daily Food/Water appetite by -8%/Lv.",
+        gameplayNeedSummary = "CUTS DWELLER HUNGER (FLOOR B5): -8% Dweller 5-Min & Daily Food/Water Drain/Lv & +400 Storage/Lv",
+        primaryResource = ResourceType.RATIONS,
+        baseOutputPerLevel = 2.2,
+        megawattDemandPerLevel = 5.0,
+        baseBuildTimeSeconds = 42,
+        manualSalvageBonusDesc = "-8% Dweller Food/Water Appetite Drain & +400 Vault Storage per level",
+        baseScrapCost = 165.0,
+        baseWaterCost = 45.0,
+        baseFuelCost = 30.0,
+        favoredWorkerClass = WorkerClassType.HYDRO_ENGINEER,
+        storageBonusPerLevel = 400.0
     );
 }
 
@@ -1462,6 +1616,22 @@ enum class VaultMapStation(
         wingColumn = 1,
         buildingType = BuildingType.NOCTURNAL_EXTRACTION_RIG,
         accentColor = BioluminescentViolet
+    ),
+    ROOM_9_GEOTHERMAL(
+        id = "ROOM_9_GEOTHERMAL",
+        shortTitle = "#9 Geothermal Tap",
+        floorIndex = 5,
+        wingColumn = 0,
+        buildingType = BuildingType.GEOTHERMAL_TAP,
+        accentColor = WarningOrange
+    ),
+    ROOM_10_CRYO_VAULT(
+        id = "ROOM_10_CRYO_VAULT",
+        shortTitle = "#10 Cryo Ration Vault",
+        floorIndex = 5,
+        wingColumn = 1,
+        buildingType = BuildingType.CRYO_STASIS_VAULT,
+        accentColor = CryoCyan
     );
 }
 

@@ -65,6 +65,7 @@ import com.example.model.DayNightPhase
 import com.example.model.FishingSpot
 import com.example.model.HuntingTarget
 import com.example.model.RaiderSiegeThreat
+import com.example.model.SiegeCountermeasureType
 import com.example.ui.components.formatRate
 import com.example.ui.theme.BioluminescentViolet
 import com.example.ui.theme.BunkerSlate
@@ -97,6 +98,7 @@ fun CraftHuntDefenseTabScreen(
     onExecuteHunt: (HuntingTarget) -> Unit,
     onExecuteFishing: (FishingSpot) -> Unit,
     onRepelRaid: () -> Unit,
+    onExecuteCountermeasure: (SiegeCountermeasureType) -> Unit = {},
     onRepairDefenses: () -> Unit,
     onUpgradeBlastDoor: () -> Unit,
     onAccelerateDoorUpgrade: () -> Unit = {},
@@ -197,15 +199,22 @@ fun CraftHuntDefenseTabScreen(
                         turretsCount = state.sentryTurretCount,
                         plasmaCount = state.plasmaCannonCount,
                         ammoRounds = state.ammoRounds,
+                        scrapStock = state.scrap,
+                        bioFuelStock = state.bioFuel,
                         raidsRepelled = state.totalRaidsRepelled,
                         luckyNoRepairCount = state.luckyNoRepairCount,
                         isVaultBlackout = prod.isVaultBlackout,
+                        isDefenseShutDownByDeficit = prod.isDefenseShutDownByDeficit,
+                        deficitDaysCount = state.deficitDaysCount,
+                        totalDrainPerSec = prod.totalVaultResourceDrainPerSec,
+                        totalGainPerSec = prod.totalGrossResourceGainPerSec,
                         autoDefenseEnabled = state.autoDefenseEnabled,
                         isAutoDefenseActive = prod.isAutoDefenseActive,
                         hasAssignedFedWorkers = state.totalSurvivors > 0 && prod.totalAssignedWorkers > 0 && !prod.isWorkersStarvingOrDehydrated,
                         activePhase = prod.activePhase,
                         activeRaid = uiState.activeRaidThreat,
                         onRepelRaid = onRepelRaid,
+                        onExecuteCountermeasure = onExecuteCountermeasure,
                         onRepairDefenses = onRepairDefenses,
                         onUpgradeBlastDoor = onUpgradeBlastDoor,
                         onToggleAutoDefense = onToggleAutoDefense
@@ -701,15 +710,22 @@ private fun DefensePerimeterCard(
     turretsCount: Int,
     plasmaCount: Int,
     ammoRounds: Int = 20,
+    scrapStock: Double = 0.0,
+    bioFuelStock: Double = 0.0,
     raidsRepelled: Int,
     luckyNoRepairCount: Int,
     isVaultBlackout: Boolean,
+    isDefenseShutDownByDeficit: Boolean = false,
+    deficitDaysCount: Int = 0,
+    totalDrainPerSec: Double = 0.0,
+    totalGainPerSec: Double = 0.0,
     autoDefenseEnabled: Boolean = true,
     isAutoDefenseActive: Boolean = false,
     hasAssignedFedWorkers: Boolean = false,
     activePhase: DayNightPhase = DayNightPhase.SCORCHING_DAY,
     activeRaid: RaiderSiegeThreat?,
     onRepelRaid: () -> Unit,
+    onExecuteCountermeasure: (SiegeCountermeasureType) -> Unit = {},
     onRepairDefenses: () -> Unit,
     onUpgradeBlastDoor: () -> Unit,
     onToggleAutoDefense: (Boolean) -> Unit = {}
@@ -729,6 +745,7 @@ private fun DefensePerimeterCard(
                 .border(
                     1.dp,
                     when {
+                        isDefenseShutDownByDeficit -> HazardRed
                         needsDefenseRepair -> WarningOrange
                         activeRaid != null -> HazardRed
                         else -> RadTeal.copy(alpha = 0.65f)
@@ -783,6 +800,25 @@ private fun DefensePerimeterCard(
                 }
             }
 
+            if (isDefenseShutDownByDeficit) {
+                Surface(
+                    color = HazardRed.copy(alpha = 0.22f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.5.dp, HazardRed),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("defense_deficit_shutdown_banner")
+                ) {
+                    Text(
+                        text = "🚨 VAULT DEFENSES SHUT DOWN (0 DEF — RESOURCE DEFICIT ${deficitDaysCount}/2D): Vault takes -${formatRate(totalDrainPerSec)}/s to run vs +${formatRate(totalGainPerSec)}/s gained! Restore positive resource generation within ${(2 - deficitDaysCount).coerceAtLeast(1)} Day(s) or GAME OVER!",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HazardRed,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
             // Escalating Daily Attack Difficulty Forecast Banner
             Surface(
                 color = ObsidianCharcoal,
@@ -791,7 +827,7 @@ private fun DefensePerimeterCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "⚠️ ESCALATING WASTELAND SIEGES: Day $dayCounter Threat requires $todayRequiredDefense DEF -> Tomorrow (Day ${dayCounter + 1}) escalates to $tomorrowRequiredDefense DEF! Attacks hit harder & demand more Defense every day.",
+                    text = "⚠️ ESCALATING WASTELAND SIEGES: Day $dayCounter Threat requires $todayRequiredDefense DEF -> Tomorrow (Day ${dayCounter + 1}) escalates to $tomorrowRequiredDefense DEF! Major Nuclear Warlord Mega-Sieges strike every 10 Days (Day 10, 20, 30...).",
                     style = MaterialTheme.typography.labelSmall,
                     color = WarningOrange,
                     fontWeight = FontWeight.SemiBold,
@@ -990,6 +1026,46 @@ private fun DefensePerimeterCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        if (activeRaid.weakenedByPercent > 0) {
+                            Text(
+                                text = "⚡ Countermeasures Deployed (${activeRaid.countermeasuresUsedCount}): Siege Armor Weakened by -${activeRaid.weakenedByPercent}%!",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = CryoCyan,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // 3 Active Tactical Siege Countermeasures (Flak Volley, EMP Pulse, Emergency Door Weld)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            SiegeCountermeasureType.entries.forEach { cm ->
+                                val canAffordCm = ammoRounds >= cm.ammoCost &&
+                                    bioFuelStock >= cm.bioFuelCost &&
+                                    scrapStock >= cm.scrapCost
+                                OutlinedButton(
+                                    onClick = { onExecuteCountermeasure(cm) },
+                                    enabled = canAffordCm,
+                                    border = BorderStroke(1.dp, if (canAffordCm) cm.accentColor else TextMutedAsh),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("countermeasure_button_${cm.id.lowercase()}")
+                                ) {
+                                    Text(
+                                        text = cm.buttonLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (canAffordCm) cm.accentColor else TextMutedAsh,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+
                         Button(
                             onClick = onRepelRaid,
                             enabled = canCounterStrike,

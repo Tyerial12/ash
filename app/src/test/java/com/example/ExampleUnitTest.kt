@@ -10,9 +10,11 @@ import com.example.model.CraftableItemType
 import com.example.model.DayNightPhase
 import com.example.model.FishingSpot
 import com.example.model.SalvageNodeType
+import com.example.model.SiegeCountermeasureType
 import com.example.model.SkillBranch
 import com.example.model.SkillTreeCatalog
 import com.example.model.VaultMapStation
+import com.example.model.VaultOperationalPosture
 import com.example.model.WastelandExpeditionType
 import com.example.model.WorkerClassType
 import org.junit.Assert.assertEquals
@@ -231,9 +233,9 @@ class ExampleUnitTest {
         assertEquals("Overseer Legacy branch has 4 permanent Prestige Core skills", 4, legacyNodes.size)
         assertTrue("All Legacy skills cost Prestige Cores", legacyNodes.all { it.prestigeCoreCostPerRank > 0 })
 
-        // Verify 2D Vault Cutaway stations cover Surface mining, Crater Lake fishing, and all 8 Vault rooms
-        assertEquals(10, VaultMapStation.entries.size)
-        assertEquals(8, VaultMapStation.entries.count { it.buildingType != null })
+        // Verify 2D Vault Cutaway stations cover Surface mining, Crater Lake fishing, and all 10 Vault rooms (Floors B1-B5)
+        assertEquals(12, VaultMapStation.entries.size)
+        assertEquals(10, VaultMapStation.entries.count { it.buildingType != null })
     }
 
     @Test
@@ -475,5 +477,198 @@ class ExampleUnitTest {
         val day5NightDef = OutpostCalculator.computeDailyRaidRequiredDefense(5, DayNightPhase.RAD_NIGHT)
         assertTrue("Night Mutant Swarms are +35% harder than daytime attacks on the same day", day5NightDef > day5Def)
     }
+
+    @Test
+    fun higherVaultCommandLevel_andRoomLevels_increaseOngoingResourceUpkeep() {
+        val vaultUpkeepLv1 = OutpostCalculator.computeVaultLevelResourceUpkeep(commandLevel = 1)
+        val vaultUpkeepLv3 = OutpostCalculator.computeVaultLevelResourceUpkeep(commandLevel = 3)
+        val vaultUpkeepLv6 = OutpostCalculator.computeVaultLevelResourceUpkeep(commandLevel = 6)
+
+        assertEquals(0.0, vaultUpkeepLv1.dailyScrap, 0.001)
+        assertTrue("Vault Command Level 3 takes ongoing Scrap & Cooling Water upkeep", vaultUpkeepLv3.dailyScrap > 0.0 && vaultUpkeepLv3.dailyWater > 0.0)
+        assertTrue("Vault Command Level 6 takes more Scrap, Water & Bio-Fuel than Level 3", vaultUpkeepLv6.dailyScrap > vaultUpkeepLv3.dailyScrap && vaultUpkeepLv6.dailyFuel > 0.0)
+
+        val roomAtVaultLv1 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, level = 2, hydroDiscountMult = 1.0, commandLevel = 1)
+        val roomAtVaultLv5 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, level = 2, hydroDiscountMult = 1.0, commandLevel = 5)
+        assertTrue("Same Room Level consumes more resources when overall Vault Command Level is higher", roomAtVaultLv5.dailyScrap > roomAtVaultLv1.dailyScrap)
+    }
+
+    @Test
+    fun vaultResourceDeficit_shutsDownDefensesImmediately_andEndsGameAfter2Days() {
+        // High-upkeep Vault with 0 assigned workers (so 0 gross resource gain/sec, but high Vault + Room upkeep/sec)
+        val deficitState = OutpostStateEntity(
+            commandLevel = 5,
+            blastDoorLevel = 3,
+            craftedShrapnelMines = 4,
+            sentryTurretCount = 2,
+            defenseIntegrityPercent = 100,
+            bioTurbineLevel = 2,
+            solarTowerLevel = 2,
+            bioFuel = 100.0
+        )
+        val buildings = mapOf(
+            BuildingType.SALVAGE_YARD.id to 3,
+            BuildingType.ATMOSPHERIC_CONDENSER.id to 2
+        )
+        val deficitSnap = OutpostCalculator.computeProductionSnapshot(
+            state = deficitState,
+            buildingsMap = buildings,
+            workersMap = emptyMap(),
+            skillsMap = emptyMap(),
+            nowMillis = 1000L
+        )
+
+        assertTrue("Vault should be in resource deficit when upkeep/sec exceeds gross gain/sec", deficitSnap.isVaultResourceDeficit)
+        assertTrue("Defenses must immediately shut down during resource deficit", deficitSnap.isDefenseShutDownByDeficit)
+        assertEquals("Total Defense Rating drops to 0 when Vault takes more to run than it gains", 0, deficitSnap.totalDefenseRating)
+        assertFalse("Automated Defense Grid shuts down during resource deficit", deficitSnap.isAutoDefenseActive)
+
+        val day1Eval = OutpostCalculator.evaluateSurvivalEndOfDay(deficitState, deficitSnap)
+        assertEquals(1, day1Eval.nextDeficitDaysCount)
+        assertFalse("Day 1 of resource deficit warns player but does not end game yet", day1Eval.isGameOver)
+
+        val day2Eval = OutpostCalculator.evaluateSurvivalEndOfDay(
+            deficitState.copy(deficitDaysCount = 1),
+            deficitSnap
+        )
+        assertEquals(2, day2Eval.nextDeficitDaysCount)
+        assertTrue("2 consecutive days of resource deficit triggers Game Over", day2Eval.isGameOver)
+        assertTrue(day2Eval.gameOverReason.isNotEmpty())
+    }
+
+    @Test
+    fun powerOutageBlackout_endsGameAfter6Days_andResetsWhenPowerRestored() {
+        val blackoutState = OutpostStateEntity(
+            commandLevel = 2,
+            bioTurbineLevel = 0,
+            solarTowerLevel = 0,
+            blackoutDaysCount = 4
+        )
+        val buildings = mapOf(BuildingType.SALVAGE_YARD.id to 2)
+        val blackoutSnap = OutpostCalculator.computeProductionSnapshot(
+            state = blackoutState,
+            buildingsMap = buildings,
+            workersMap = emptyMap(),
+            skillsMap = emptyMap(),
+            nowMillis = 1000L
+        )
+        assertTrue(blackoutSnap.isVaultBlackout)
+
+        val day5Eval = OutpostCalculator.evaluateSurvivalEndOfDay(blackoutState, blackoutSnap)
+        assertEquals(5, day5Eval.nextBlackoutDaysCount)
+        assertFalse("Day 5 of blackout does not end game yet", day5Eval.isGameOver)
+
+        val day6Eval = OutpostCalculator.evaluateSurvivalEndOfDay(
+            blackoutState.copy(blackoutDaysCount = 5),
+            blackoutSnap
+        )
+        assertEquals(6, day6Eval.nextBlackoutDaysCount)
+        assertTrue("6 consecutive days without power triggers Game Over", day6Eval.isGameOver)
+
+        // Restoring power resets blackoutDaysCount to 0
+        val poweredState = blackoutState.copy(bioTurbineLevel = 2, solarTowerLevel = 2, bioFuel = 100.0, generatorWearPercent = 0)
+        val poweredSnap = OutpostCalculator.computeProductionSnapshot(
+            state = poweredState,
+            buildingsMap = buildings,
+            workersMap = emptyMap(),
+            skillsMap = emptyMap(),
+            nowMillis = 1000L
+        )
+        assertFalse(poweredSnap.isVaultBlackout)
+        val recoveredEval = OutpostCalculator.evaluateSurvivalEndOfDay(poweredState, poweredSnap)
+        assertEquals(0, recoveredEval.nextBlackoutDaysCount)
+    }
+
+    @Test
+    fun dwellersConsumeFoodAndWaterEvery5Minutes_andEscalateAppetiteEvery2Minutes() {
+        val baseDwellerState = OutpostStateEntity(
+            totalSurvivors = 4,
+            dwellerAppetiteEscalationSeconds = 0
+        )
+        val tier2DwellerState = baseDwellerState.copy(dwellerAppetiteEscalationSeconds = 240) // 4 minutes = Tier 2 (+28%)
+        val tier4DwellerState = baseDwellerState.copy(dwellerAppetiteEscalationSeconds = 480) // 8 minutes = Tier 4 (+56%)
+
+        val snap0 = OutpostCalculator.computeProductionSnapshot(baseDwellerState, emptyMap(), emptyMap(), emptyMap(), 1000L)
+        val snap2 = OutpostCalculator.computeProductionSnapshot(tier2DwellerState, emptyMap(), emptyMap(), emptyMap(), 1000L)
+        val snap4 = OutpostCalculator.computeProductionSnapshot(tier4DwellerState, emptyMap(), emptyMap(), emptyMap(), 1000L)
+
+        assertTrue("Dwellers require Food and Water every 5 minutes", snap0.fiveMinDwellerFoodCost > 0.0 && snap0.fiveMinDwellerWaterCost > 0.0)
+        assertTrue(
+            "Dwellers take more resources every 2 minutes (0m < 4m < 8m)",
+            snap0.fiveMinDwellerFoodCost < snap2.fiveMinDwellerFoodCost &&
+                snap2.fiveMinDwellerFoodCost < snap4.fiveMinDwellerFoodCost &&
+                snap0.dailyFoodUpkeepPerDay < snap2.dailyFoodUpkeepPerDay &&
+                snap2.dailyFoodUpkeepPerDay < snap4.dailyFoodUpkeepPerDay
+        )
+    }
+
+    @Test
+    fun earlyBunkerGrace_operationalPostures_andFloorB5Rooms_workAsExpected() {
+        // 1. Early Bunker Grace (Days 1-3, Command Lv <= 2, < 2 rooms built) pauses 2-day deficit game over
+        val earlyGraceState = OutpostStateEntity(
+            dayCounter = 2,
+            commandLevel = 1,
+            deficitDaysCount = 0
+        )
+        val earlySnap = OutpostCalculator.computeProductionSnapshot(
+            state = earlyGraceState,
+            buildingsMap = mapOf(BuildingType.SALVAGE_YARD.id to 1),
+            workersMap = emptyMap(),
+            skillsMap = emptyMap(),
+            nowMillis = 1000L
+        )
+        assertTrue("Early Bunker Grace is active on Day 1-3 with < 2 rooms built", earlySnap.isEarlyBunkerGraceActive)
+        assertFalse("Early Bunker Grace prevents Vault Resource Deficit from shutting down defenses", earlySnap.isVaultResourceDeficit)
+        val earlyDayEval = OutpostCalculator.evaluateSurvivalEndOfDay(earlyGraceState, earlySnap)
+        assertEquals("Early Bunker Grace keeps deficit days count at 0", 0, earlyDayEval.nextDeficitDaysCount)
+
+        // 2. Operational Postures: ECO_CONSERVATION cuts resource drain by -40% compared to STANDARD
+        val midGameState = OutpostStateEntity(
+            dayCounter = 12,
+            commandLevel = 4,
+            totalSurvivors = 4,
+            operationalPostureId = VaultOperationalPosture.STANDARD.id,
+            bioTurbineLevel = 2,
+            solarTowerLevel = 2,
+            bioFuel = 100.0
+        )
+        val midBuildings = mapOf(
+            BuildingType.SALVAGE_YARD.id to 2,
+            BuildingType.ATMOSPHERIC_CONDENSER.id to 2
+        )
+        val standardSnap = OutpostCalculator.computeProductionSnapshot(midGameState, midBuildings, emptyMap(), emptyMap(), 1000L)
+        val ecoSnap = OutpostCalculator.computeProductionSnapshot(
+            midGameState.copy(operationalPostureId = VaultOperationalPosture.ECO_CONSERVATION.id),
+            midBuildings,
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        val overclockSnap = OutpostCalculator.computeProductionSnapshot(
+            midGameState.copy(operationalPostureId = VaultOperationalPosture.OVERCLOCK.id),
+            midBuildings,
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        assertTrue("ECO_CONSERVATION reduces total vault resource drain/sec by 40%", ecoSnap.totalVaultResourceDrainPerSec < standardSnap.totalVaultResourceDrainPerSec * 0.65)
+        assertTrue("OVERCLOCK increases vault resource drain/sec", overclockSnap.totalVaultResourceDrainPerSec > standardSnap.totalVaultResourceDrainPerSec)
+
+        // 3. Floor B5 Rooms #9 (Geothermal Tap) & #10 (Cryo-Stasis Vault)
+        val b5Buildings = midBuildings + mapOf(
+            BuildingType.GEOTHERMAL_TAP.id to 2,
+            BuildingType.CRYO_STASIS_VAULT.id to 2
+        )
+        val b5Snap = OutpostCalculator.computeProductionSnapshot(midGameState, b5Buildings, emptyMap(), emptyMap(), 1000L)
+        assertTrue("Room #9 Deep-Core Geothermal Tap generates +7.5 MW/Lv 24/7 power", b5Snap.totalMegawattGenerated >= standardSnap.totalMegawattGenerated + 15.0)
+        assertTrue("Room #10 Cryo-Stasis Vault cuts 5-minute Dweller Food/Water upkeep and adds +400/Lv storage", b5Snap.fiveMinDwellerFoodCost < standardSnap.fiveMinDwellerFoodCost && b5Snap.storageCap >= standardSnap.storageCap + 800.0)
+
+        // 4. Named 10-Day Warlord Bosses & Tactical Countermeasures
+        assertTrue(OutpostCalculator.computeDay10BossTitle(10).contains("Goliath", ignoreCase = true))
+        assertTrue(OutpostCalculator.computeDay10BossTitle(20).contains("Behemoth", ignoreCase = true))
+        assertEquals(3, SiegeCountermeasureType.entries.size)
+    }
 }
+
+
 

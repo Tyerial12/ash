@@ -77,6 +77,7 @@ fun WastelandSkyHeader(
     activeCrafting: ActiveItemCrafting? = null,
     activeDoorUpgrade: ActiveDoorUpgrade? = null,
     activeExpedition: ActiveDwellerExpedition? = null,
+    onRequestRestartGame: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(HeaderTelemetryTab.COMPACT) }
@@ -178,22 +179,47 @@ fun WastelandSkyHeader(
                             )
                         }
 
-                        val siegeBadgeColor = when {
-                            production.isWorkersStarvingOrDehydrated -> HazardRed
-                            production.daysUntilDay10Siege == 0 || isNightDanger -> WarningOrange
-                            else -> SolarAmber
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val siegeBadgeColor = when {
+                                production.isDefenseShutDownByDeficit || isBlackout || production.isWorkersStarvingOrDehydrated -> HazardRed
+                                production.daysUntilDay10Siege == 0 || isNightDanger -> WarningOrange
+                                else -> SolarAmber
+                            }
+                            Text(
+                                text = when {
+                                    production.isDefenseShutDownByDeficit -> "DEFICIT ${state.deficitDaysCount}/2D!"
+                                    isBlackout -> "NO POWER ${state.blackoutDaysCount}/6D!"
+                                    production.isWorkersStarvingOrDehydrated -> "CREW STARVING!"
+                                    production.daysUntilDay10Siege == 0 -> "10D MEGA-SIEGE!"
+                                    isNightDanger -> "NIGHT SWARM +35%"
+                                    else -> "10D SIEGE: ${production.daysUntilDay10Siege}D"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = siegeBadgeColor,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Surface(
+                                color = HazardRed.copy(alpha = 0.22f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, HazardRed.copy(alpha = 0.85f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable(onClick = onRequestRestartGame)
+                                    .testTag("restart_game_header_button")
+                            ) {
+                                Text(
+                                    text = "RESTART",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = HazardRed,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
                         }
-                        Text(
-                            text = when {
-                                production.isWorkersStarvingOrDehydrated -> "CREW STARVING!"
-                                production.daysUntilDay10Siege == 0 -> "SIEGE TODAY!"
-                                isNightDanger -> "NIGHT SWARM +35%"
-                                else -> "SIEGE: ${production.daysUntilDay10Siege}D • CREW ${state.totalSurvivors}/${production.maxWorkerCapacity}"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = siegeBadgeColor,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
 
                     // Life-Support Telemetry Pills Row
@@ -228,8 +254,16 @@ fun WastelandSkyHeader(
                         }
                         StatusMiniText("RAD: ${state.radiationMillisieverts}mSv", radColor)
 
-                        val autoDefLabel = if (production.isAutoDefenseActive) "AUTO-DEF: ON" else "AUTO-DEF: OFF"
-                        val autoDefColor = if (production.isAutoDefenseActive) SurplusGreen else WarningOrange
+                        val autoDefLabel = when {
+                            production.isDefenseShutDownByDeficit -> "DEF: SHUT DOWN (0)"
+                            production.isAutoDefenseActive -> "AUTO-DEF: ON"
+                            else -> "AUTO-DEF: OFF"
+                        }
+                        val autoDefColor = when {
+                            production.isDefenseShutDownByDeficit -> HazardRed
+                            production.isAutoDefenseActive -> SurplusGreen
+                            else -> WarningOrange
+                        }
                         StatusMiniText(autoDefLabel, autoDefColor)
 
                         val doorColor = if (state.needsDefenseRepair) WarningOrange else RadTeal
@@ -244,6 +278,60 @@ fun WastelandSkyHeader(
                             .clip(RoundedCornerShape(2.dp)),
                         color = XpGold,
                         trackColor = ObsidianCharcoal
+                    )
+                }
+            }
+
+            // HARDCORE DOOMSDAY & 5-MINUTE DWELLER FEEDING STATUS STRIP
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ObsidianCharcoal.copy(alpha = 0.96f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                StatusMiniText(
+                    text = "⚔ 10D SIEGE: ${production.daysUntilDay10Siege}D (${production.day10RequiredDefense} DEF)",
+                    color = if (production.daysUntilDay10Siege <= 2) WarningOrange else SolarAmber
+                )
+                StatusMiniText(
+                    text = "⚡ OUTAGE: ${state.blackoutDaysCount}/6D",
+                    color = if (isBlackout) HazardRed else SurplusGreen
+                )
+                StatusMiniText(
+                    text = "🛡 DEFICIT: ${state.deficitDaysCount}/2D",
+                    color = if (production.isDefenseShutDownByDeficit) HazardRed else SurplusGreen
+                )
+                val appetitePct = ((production.dwellerUpkeepEscalationMultiplier - 1.0) * 100).roundToInt()
+                StatusMiniText(
+                    text = "🍖 5M FEED: ${state.dwellerFeedCycleSecondsRemaining}s (+$appetitePct%/2m)",
+                    color = if (state.dwellerFeedCycleSecondsRemaining <= 45 && state.totalSurvivors > 0) WarningOrange else CryoCyan
+                )
+            }
+
+            if (production.isDefenseShutDownByDeficit || isBlackout) {
+                Surface(
+                    color = HazardRed.copy(alpha = 0.18f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, HazardRed)
+                ) {
+                    Text(
+                        text = when {
+                            isBlackout && production.isDefenseShutDownByDeficit ->
+                                "🚨 BLACKOUT (${state.blackoutDaysCount}/6D) & DEFICIT (${state.deficitDaysCount}/2D): Defenses SHUT DOWN (0 DEF)! Crank Dynamo or build Power & Resource rooms before Game Over!"
+                            production.isDefenseShutDownByDeficit ->
+                                "🚨 RESOURCE DEFICIT (${state.deficitDaysCount}/2D): Vault takes ${formatRate(production.totalVaultResourceDrainPerSec)}/s vs +${formatRate(production.totalGrossResourceGainPerSec)}/s gained! Defenses SHUT DOWN (0 DEF) — Game Over in ${production.deficitDaysRemainingBeforeGameOver}D!"
+                            else ->
+                                "🚨 POWER BLACKOUT (${state.blackoutDaysCount}/6D): Out of Power! Game ends in ${production.blackoutDaysRemainingBeforeGameOver} Day(s) unless MW is restored!"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HazardRed,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -405,12 +493,15 @@ private fun ResourcesGatheredDrawerPanel(
             RareBadgeChip("PRESTIGE CORES", state.prestigeCores, XpGold)
         }
 
-        val upkeepColor = if (production.isWorkersStarvingOrDehydrated) HazardRed else SurplusGreen
+        val upkeepColor = when {
+            production.isWorkersStarvingOrDehydrated || production.isDefenseShutDownByDeficit -> HazardRed
+            else -> SurplusGreen
+        }
         Text(
             text = if (production.isWorkersStarvingOrDehydrated) {
-                "ALERT: Workers need Food & Water daily! Stock is 0 — All worker rooms & automated turrets are HALTED until fed!"
+                "ALERT: Workers need Food & Water daily and every 5 minutes! Stock is 0 — All worker rooms & automated turrets are HALTED until fed!"
             } else {
-                "Daily Upkeep: Crew -${production.dailyFoodUpkeepPerDay.roundToInt()}F/-${production.dailyWaterUpkeepPerDay.roundToInt()}W • High-Lv Rooms Drain -${production.dailyRoomScrapUpkeep.roundToInt()}S/-${production.dailyRoomWaterUpkeep.roundToInt()}W/-${production.dailyRoomFuelUpkeep.roundToInt()}Fuel/Day"
+                "Vault Drain: -${formatRate(production.totalVaultResourceDrainPerSec)}/s vs Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s • 5m Feed (${state.dwellerFeedCycleSecondsRemaining}s): -${production.fiveMinDwellerFoodCost.roundToInt()}F/-${production.fiveMinDwellerWaterCost.roundToInt()}W (2m Escalation Tier ${production.dwellerUpkeepEscalationTier}) • Daily Vault & Room Drain: -${production.dailyRoomScrapUpkeep.roundToInt()}S/-${production.dailyRoomWaterUpkeep.roundToInt()}W/-${production.dailyRoomFuelUpkeep.roundToInt()}Fuel"
             },
             style = MaterialTheme.typography.labelSmall,
             color = upkeepColor,

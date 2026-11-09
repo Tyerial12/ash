@@ -79,8 +79,13 @@ data class OutpostStateEntity(
     val totalManualScavenges: Int = 0,
     val totalNodesStripped: Int = 0,
     val totalCachesDismantled: Int = 0,
+    val blackoutDaysCount: Int = 0, // Consecutive days in Power Blackout (6 days without power = Game Over!)
+    val blackoutSecondsAccumulated: Int = 0,
     val deficitDaysCount: Int = 0, // Consecutive days where Vault takes more resources to run than it gains (2 days = Game Over!)
     val deficitSecondsAccumulated: Int = 0,
+    val dwellerFeedCycleSecondsRemaining: Int = 300, // 5-minute (300s) real-time Food & Water feeding cycle for Vault Dwellers!
+    val dwellerAppetiteEscalationSeconds: Int = 0, // Every 2 minutes (120s) Dwellers take more resources!
+    val operationalPostureId: String = "STANDARD", // ECO_CONSERVATION (-40% upkeep), STANDARD (100%), or OVERCLOCK (+30% output)
     val isGameOver: Boolean = false,
     val gameOverReason: String = "",
     val lastSavedTimestampMillis: Long = System.currentTimeMillis()

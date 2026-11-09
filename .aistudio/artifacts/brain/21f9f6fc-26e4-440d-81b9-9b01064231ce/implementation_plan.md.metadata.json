@@ -1,6 +1,6 @@
 {
-  "summary":  "Updated implementation plan for Vault City adding Public Multi-User Wasteland Network (Firebase Firestore + Google Sign-In) with Global Overseer Leaderboard, Public Supply Drops & Caravan Aid between players, and Cloud Vault Sync alongside the Prestige System & Legacy Skill Tree, Daily Worker Food/Water Rations, and Mobile Telemetry Tabs.",
-  "updatedAt":  "2026-11-08T17:19:36.028434867Z",
+  "summary":  "Updated implementation plan built on the current Vault City game state: (1) Forgiving Days 1-10 Early-Game Grace & Rebalanced Resource/Dweller Upkeep with Eco-Conservation Mode to escape Resource Deficits, (2) Deeper 10-Day Boss Siege Combat with 3 Tactical Countermeasures (EMP Pulse, Flak Volley, Emergency Door Seal), (3) 2 New Deep-Core B5 Vault Rooms (#9 Geothermal Tap & #10 Cryo-Stasis Vault) + Room Specialization Modes, (4) Expanded Wasteland Expeditions & Apex Boss Hunts, and (5) Enhanced 2D Vault B5 Cutaway Visuals, CRT Radar Sweep Animations & Haptic Alerts.",
+  "updatedAt":  "2026-11-09T14:11:10.582629857Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

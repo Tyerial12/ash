@@ -37,8 +37,10 @@ import com.example.data.remote.PublicSupplyDrop
 import com.example.data.remote.PublicVaultProfile
 import com.example.data.remote.PublicVaultRepository
 import com.example.model.SkillNodeDefinition
+import com.example.model.SiegeCountermeasureType
 import com.example.model.TradeTown
 import com.example.model.VaultMapStation
+import com.example.model.VaultOperationalPosture
 import com.example.model.WastelandExpeditionType
 import com.example.model.WorkerClassType
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -295,6 +297,10 @@ class OutpostViewModel(
                 val now = System.currentTimeMillis()
                 val current = uiState.value
                 val state = current.state
+                if (state.isGameOver) {
+                    overlayFlow.update { it.copy(nowMillis = now) }
+                    continue
+                }
                 val snap = current.production
 
                 val prevProgress = state.cycleProgress
@@ -326,6 +332,36 @@ class OutpostViewModel(
                             )
                         }
                         repository.logEvent("NIGHT SWARM", "${nightSwarm.title} attacked the Vault at nightfall!")
+                    }
+                }
+
+                // 5-Minute (300s) Dweller Food & Water Feeding Cycle + 2-Minute (120s) Appetite Escalation
+                var fiveMinFoodDeduct = 0.0
+                var fiveMinWaterDeduct = 0.0
+                var nextFeedSeconds = state.dwellerFeedCycleSecondsRemaining
+                var nextEscalationSeconds = state.dwellerAppetiteEscalationSeconds
+                if (state.totalSurvivors > 0) {
+                    nextEscalationSeconds += 1
+                    if (nextEscalationSeconds % OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS == 0) {
+                        val newTier = nextEscalationSeconds / OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS
+                        repository.logEvent(
+                            "CREW APPETITE",
+                            "2-Minute Dweller Appetite Escalation (Tier $newTier): Vault Dwellers now require +${newTier * 14}% more Food & Water!"
+                        )
+                    }
+                    if (state.dwellerFeedCycleSecondsRemaining <= 1) {
+                        fiveMinFoodDeduct = snap.fiveMinDwellerFoodCost
+                        fiveMinWaterDeduct = snap.fiveMinDwellerWaterCost
+                        nextFeedSeconds = OutpostCalculator.DWELLER_FEED_INTERVAL_SECONDS
+                        if (state.rations >= fiveMinFoodDeduct && state.water >= fiveMinWaterDeduct && nextEscalationSeconds >= OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS) {
+                            nextEscalationSeconds = (nextEscalationSeconds - OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS).coerceAtLeast(0)
+                        }
+                        repository.logEvent(
+                            "5-MIN FEEDING",
+                            "5-Minute Dweller Feeding Cycle: Crew consumed -${fiveMinFoodDeduct.roundToInt()} Food & -${fiveMinWaterDeduct.roundToInt()} Water!"
+                        )
+                    } else {
+                        nextFeedSeconds = state.dwellerFeedCycleSecondsRemaining - 1
                     }
                 }
 
@@ -755,6 +791,42 @@ class OutpostViewModel(
                     refineryLv * 2
                 } else 0
 
+                // Track 2-Day Resource Deficit Shutdown & 6-Day Power Blackout Game Over Clocks
+                val survivalEval = if (wrapped) {
+                    OutpostCalculator.evaluateSurvivalEndOfDay(state, snap)
+                } else {
+                    null
+                }
+                val nextDeficitDays = when {
+                    !snap.isVaultResourceDeficit -> 0
+                    survivalEval != null -> survivalEval.nextDeficitDaysCount
+                    else -> state.deficitDaysCount
+                }
+                val nextBlackoutDays = when {
+                    !snap.isVaultBlackout -> 0
+                    survivalEval != null -> survivalEval.nextBlackoutDaysCount
+                    else -> state.blackoutDaysCount
+                }
+                val nextDeficitSeconds = if (snap.isVaultResourceDeficit) state.deficitSecondsAccumulated + 1 else 0
+                val nextBlackoutSeconds = if (snap.isVaultBlackout) state.blackoutSecondsAccumulated + 1 else 0
+                val nextIsGameOver = survivalEval?.isGameOver ?: false
+                val nextGameOverReason = survivalEval?.gameOverReason ?: ""
+
+                if (wrapped && nextDeficitDays == 1 && !nextIsGameOver) {
+                    val warn = "CRITICAL DEFICIT (DAY 1/2): Vault takes more resources to run than it gains! Vault Defenses are SHUT DOWN — restore resource generation within 1 Day or GAME OVER!"
+                    overlayFlow.update { it.copy(lastDefenseDamageFeedback = warn) }
+                    repository.logEvent("DEFICIT SHUTDOWN", warn)
+                }
+                if (wrapped && nextBlackoutDays in 1 until OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER && !nextIsGameOver) {
+                    val rem = OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER - nextBlackoutDays
+                    val warn = "POWER BLACKOUT (DAY $nextBlackoutDays/6): Restore Vault Power within $rem Day(s) or total life-support failure ends the game!"
+                    overlayFlow.update { it.copy(lastSalvageFeedback = warn) }
+                    repository.logEvent("BLACKOUT CLOCK", warn)
+                }
+                if (nextIsGameOver) {
+                    repository.logEvent("GAME OVER", nextGameOverReason)
+                }
+
                 var updatedState = applyXpAndResourceDelta(
                     baseState = state.copy(
                         totalSurvivors = (state.totalSurvivors + expSurvivorDelta).coerceAtLeast(0),
@@ -790,11 +862,19 @@ class OutpostViewModel(
                         aetherCells = state.aetherCells + convoyAetherAward,
                         cycleProgress = nextProgress,
                         dayCounter = nextDayCounter,
+                        blackoutDaysCount = nextBlackoutDays,
+                        blackoutSecondsAccumulated = nextBlackoutSeconds,
+                        deficitDaysCount = nextDeficitDays,
+                        deficitSecondsAccumulated = nextDeficitSeconds,
+                        dwellerFeedCycleSecondsRemaining = nextFeedSeconds,
+                        dwellerAppetiteEscalationSeconds = nextEscalationSeconds,
+                        isGameOver = nextIsGameOver,
+                        gameOverReason = nextGameOverReason,
                         lastSavedTimestampMillis = now
                     ),
                     scrapDelta = snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus - newDayScrapDeduct - autoRepairScrapUsed,
-                    waterDelta = snap.waterPerSec + cacheWaterBonus + expWaterAward + newDayRoomWaterBonus - newDayWaterDeduct,
-                    rationsDelta = snap.rationsPerSec + cacheRationsBonus + expFoodAward + newDayRoomFoodBonus - newDayFoodDeduct,
+                    waterDelta = snap.waterPerSec + cacheWaterBonus + expWaterAward + newDayRoomWaterBonus - newDayWaterDeduct - fiveMinWaterDeduct,
+                    rationsDelta = snap.rationsPerSec + cacheRationsBonus + expFoodAward + newDayRoomFoodBonus - newDayFoodDeduct - fiveMinFoodDeduct,
                     fuelDelta = snap.bioFuelPerSec + expFuelAward - newDayFuelDeduct,
                     researchDelta = snap.researchPerSec,
                     goldDelta = convoyGoldAward + raidGoldDelta + expGoldAward,
@@ -864,15 +944,16 @@ class OutpostViewModel(
         val scrapBounty = (24.0 * scale).roundToInt().toDouble()
         val xpBounty = (28.0 * scale).roundToInt().toDouble()
 
+        val bossTitle = if (isDay10MegaSiege) OutpostCalculator.computeDay10BossTitle(dayNumber) else ""
         val raidTitle = when {
-            isDay10MegaSiege -> "DAY $dayNumber NUCLEAR WARLORD MEGA-SIEGE!"
+            isDay10MegaSiege -> "DAY $dayNumber BOSS: ${bossTitle.uppercase()}!"
             dayNumber >= 15 -> "Day $dayNumber Cyber-Enclave Assault Battalion"
             dayNumber >= 9 -> "Day $dayNumber Deathclaw & Heavy Raider Siege"
             dayNumber >= 5 -> "Day $dayNumber Armored Raider Warband"
             else -> "Day $dayNumber Wasteland Raider Attack"
         }
         val raidSubtitle = when {
-            isDay10MegaSiege -> "Cataclysmic Day $dayNumber Mega-Siege ($reqDef DEF Req)! Reinforce Blast Door & Turrets!"
+            isDay10MegaSiege -> "10-Day Warlord Boss Siege ($reqDef DEF Req)! Deploy Tactical Countermeasures (Flak, EMP, Door Weld)!"
             dayNumber >= 9 -> "Escalating Day $dayNumber Heavy Siege ($reqDef DEF Req) — Attacks grow deadlier each day!"
             else -> "Daily base attack ($reqDef DEF Req) — Raider warbands grow stronger every passing day!"
         }
@@ -888,7 +969,8 @@ class OutpostViewModel(
             remainingSeconds = 45,
             dayNumber = dayNumber,
             isDay10MegaSiege = isDay10MegaSiege,
-            isNightMutantSwarm = false
+            isNightMutantSwarm = false,
+            bossClassTitle = bossTitle
         )
     }
 
@@ -1599,6 +1681,22 @@ class OutpostViewModel(
                 }
             }
 
+            // Evaluate 2-Day Resource Deficit & 6-Day Power Blackout Game Over Rules
+            val survivalEval = OutpostCalculator.evaluateSurvivalEndOfDay(state, snap)
+            val nextEscalationSecs = if (state.totalSurvivors > 0) {
+                state.dwellerAppetiteEscalationSeconds + 90
+            } else {
+                state.dwellerAppetiteEscalationSeconds
+            }
+            val nextFeedSecs = if (state.totalSurvivors > 0) {
+                val rem = state.dwellerFeedCycleSecondsRemaining - 90
+                if (rem <= 0) OutpostCalculator.DWELLER_FEED_INTERVAL_SECONDS else rem
+            } else {
+                state.dwellerFeedCycleSecondsRemaining
+            }
+            val extraFiveMinFood = if (state.totalSurvivors > 0 && state.dwellerFeedCycleSecondsRemaining <= 90) snap.fiveMinDwellerFoodCost else 0.0
+            val extraFiveMinWater = if (state.totalSurvivors > 0 && state.dwellerFeedCycleSecondsRemaining <= 90) snap.fiveMinDwellerWaterCost else 0.0
+
             // Grant daily Vault room production if Vault has enough Power (not in Blackout)!
             val dailyProdSeconds = if (snap.isVaultBlackout) 0.0 else 15.0
             val dailyScrapBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomScrapBonus
@@ -1612,11 +1710,17 @@ class OutpostViewModel(
                     totalRaidsRepelled = state.totalRaidsRepelled + raidRepelledDelta,
                     defenseIntegrityPercent = nextIntegrity,
                     needsDefenseRepair = nextNeedsRepair,
-                    luckyNoRepairCount = nextLuckyCount
+                    luckyNoRepairCount = nextLuckyCount,
+                    blackoutDaysCount = survivalEval.nextBlackoutDaysCount,
+                    deficitDaysCount = survivalEval.nextDeficitDaysCount,
+                    dwellerFeedCycleSecondsRemaining = nextFeedSecs,
+                    dwellerAppetiteEscalationSeconds = nextEscalationSecs,
+                    isGameOver = survivalEval.isGameOver,
+                    gameOverReason = survivalEval.gameOverReason
                 ),
                 scrapDelta = snap.scrapPerSec * dailyProdSeconds + dailyScrapBonus + raidScrapDelta - roomScrapUpkeep,
-                waterDelta = snap.waterPerSec.coerceAtLeast(0.0) * dailyProdSeconds + dailyWaterBonus - waterUpkeep,
-                rationsDelta = snap.rationsPerSec.coerceAtLeast(0.0) * dailyProdSeconds + dailyFoodBonus - foodUpkeep,
+                waterDelta = snap.waterPerSec.coerceAtLeast(0.0) * dailyProdSeconds + dailyWaterBonus - waterUpkeep - extraFiveMinWater,
+                rationsDelta = snap.rationsPerSec.coerceAtLeast(0.0) * dailyProdSeconds + dailyFoodBonus - foodUpkeep - extraFiveMinFood,
                 fuelDelta = snap.bioFuelPerSec.coerceAtLeast(0.0) * dailyProdSeconds - roomFuelUpkeep,
                 researchDelta = snap.researchPerSec * dailyProdSeconds,
                 goldDelta = raidGoldDelta,
@@ -1624,11 +1728,14 @@ class OutpostViewModel(
                 storageCap = snap.storageCap
             )
             repository.updateOutpostState(updated)
+            if (survivalEval.isGameOver) {
+                repository.logEvent("GAME OVER", survivalEval.gameOverReason)
+            }
             overlayFlow.update {
                 it.copy(
                     activeConstruction = nextActiveBuild,
-                    activeRaidThreat = createDailyRaidThreat(nextDay, updated.commandLevel, updated.plasmaCannonCount),
-                    lastDefenseDamageFeedback = defenseFeedback
+                    activeRaidThreat = if (survivalEval.isGameOver) null else createDailyRaidThreat(nextDay, updated.commandLevel, updated.plasmaCannonCount),
+                    lastDefenseDamageFeedback = if (survivalEval.isGameOver) survivalEval.gameOverReason else defenseFeedback
                 )
             }
             repository.logEvent(
@@ -1638,21 +1745,63 @@ class OutpostViewModel(
         }
     }
 
+    fun restartGame(keepPrestige: Boolean = false) {
+        viewModelScope.launch {
+            val freshState = repository.resetEntireGame(keepPrestige = keepPrestige)
+            val rankDrills = if (keepPrestige) (repository.getSkillSnapshot("WRK_GUILD_DRILLS")?.currentRank ?: 0) else 0
+            val discountMult = (1.0 - rankDrills * 0.10).coerceAtLeast(0.50)
+            overlayFlow.update { ov ->
+                ov.copy(
+                    salvageNodes = listOf(
+                        SalvageNodeSlot(0, SalvageNodeType.ARMORED_CONVOY_WRECK, 0, SalvageNodeType.ARMORED_CONVOY_WRECK.maxDurability),
+                        SalvageNodeSlot(1, SalvageNodeType.DEW_VAPOR_GEYSER, 0, SalvageNodeType.DEW_VAPOR_GEYSER.maxDurability),
+                        SalvageNodeSlot(2, SalvageNodeType.OVERGROWN_BIO_DOME, 0, SalvageNodeType.OVERGROWN_BIO_DOME.maxDurability)
+                    ),
+                    hireableCandidates = CaravanCandidateGenerator.generateBoard(
+                        freshState.totalSurvivors,
+                        freshState.commandLevel,
+                        discountMult
+                    ),
+                    lastSalvageFeedback = if (keepPrestige) {
+                        "Legacy Restart Complete: Day 1 started with Prestige Rank ${freshState.prestigeLevel} & ${freshState.prestigeCores} Prestige Cores preserved!"
+                    } else {
+                        "Full Fresh Restart Complete: Day 1 started with your Rusty Pickaxe!"
+                    },
+                    lastDefenseDamageFeedback = null,
+                    lastExpeditionFeedback = null,
+                    activeConvoy = null,
+                    activeExpedition = null,
+                    activeConstruction = null,
+                    activeCrafting = null,
+                    activeDoorUpgrade = null,
+                    activeAnomaly = null,
+                    activeRaidThreat = null,
+                    offlineReport = null,
+                    levelUpBanner = null
+                )
+            }
+        }
+    }
+
     fun crankEmergencyDynamo() {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val current = uiState.value
             val state = current.state
+            val prod = current.production
+            val restoresPower = (prod.totalMegawattGenerated + 16.0) >= prod.totalMegawattDemand
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
-                    thoriumOverdriveUntilMillis = now + 45_000L
+                    thoriumOverdriveUntilMillis = now + 45_000L,
+                    blackoutDaysCount = if (restoresPower) 0 else state.blackoutDaysCount,
+                    blackoutSecondsAccumulated = if (restoresPower) 0 else state.blackoutSecondsAccumulated
                 ),
                 xpDelta = 10.0,
-                storageCap = current.production.storageCap
+                storageCap = prod.storageCap
             )
             repository.updateOutpostState(updated)
             overlayFlow.update {
-                it.copy(lastSalvageFeedback = "Emergency Hand-Crank Dynamo active: +16 MW Vault Power for 45s!")
+                it.copy(lastSalvageFeedback = "Emergency Hand-Crank Dynamo active: +16 MW Vault Power for 45s (Blackout Clock Reset)!")
             }
             repository.logEvent("VAULT POWER", "Cranked Emergency Vault Dynamo: +16 MW Power for 45s so Vault rooms & turrets can run!")
         }
@@ -3041,6 +3190,100 @@ class OutpostViewModel(
                 "ANOMALY",
                 "Harvested ${anomaly.title}: +${anomaly.goldReward.toInt()} Gold, +${anomaly.mutagenCoresReward.toInt()} Cores & +${anomaly.xpReward.toInt()} XP!"
             )
+        }
+    }
+
+    fun setOperationalPosture(posture: VaultOperationalPosture) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val updated = current.state.copy(operationalPostureId = posture.id)
+            repository.updateOutpostState(updated)
+            val msg = "VAULT POSTURE -> ${posture.title.uppercase()}: ${posture.summary}"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("POSTURE", msg)
+        }
+    }
+
+    fun executeSiegeCountermeasure(type: SiegeCountermeasureType) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val activeRaid = overlayFlow.value.activeRaidThreat ?: return@launch
+
+            if (state.ammoRounds < type.ammoCost ||
+                state.bioFuel < type.bioFuelCost ||
+                state.scrap < type.scrapCost
+            ) {
+                overlayFlow.update {
+                    it.copy(lastDefenseDamageFeedback = "Need resources for ${type.buttonLabel}!")
+                }
+                return@launch
+            }
+
+            val reductionFactor = (100 - type.defenseReductionPercent).coerceIn(45, 95) / 100.0
+            val newReqDef = (activeRaid.requiredDefenseRating * reductionFactor).roundToInt().coerceAtLeast(10)
+            val newRemainingSec = if (type == SiegeCountermeasureType.FLAK_VOLLEY) {
+                (activeRaid.remainingSeconds + 10).coerceAtMost(60)
+            } else {
+                activeRaid.remainingSeconds
+            }
+            val newWeakenedPct = (activeRaid.weakenedByPercent + type.defenseReductionPercent).coerceAtMost(65)
+
+            val newIntegrity = (state.defenseIntegrityPercent + type.bonusIntegrityRestore).coerceIn(20, 100)
+            val updatedState = state.copy(
+                ammoRounds = (state.ammoRounds - type.ammoCost).coerceAtLeast(0),
+                bioFuel = (state.bioFuel - type.bioFuelCost).coerceAtLeast(0.0),
+                scrap = (state.scrap - type.scrapCost).coerceAtLeast(0.0),
+                defenseIntegrityPercent = newIntegrity,
+                needsDefenseRepair = newIntegrity < 100
+            )
+            repository.updateOutpostState(updatedState)
+
+            val updatedRaid = activeRaid.copy(
+                requiredDefenseRating = newReqDef,
+                remainingSeconds = newRemainingSec,
+                countermeasuresUsedCount = activeRaid.countermeasuresUsedCount + 1,
+                weakenedByPercent = newWeakenedPct
+            )
+            val msg = "COUNTERMEASURE DEPLOYED (${type.id}): ${activeRaid.title} weakened to $newReqDef DEF Req" +
+                if (type.bonusIntegrityRestore > 0) " & Blast Door restored to $newIntegrity% Integrity!" else "!"
+            overlayFlow.update {
+                it.copy(
+                    activeRaidThreat = updatedRaid,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("COUNTERMEASURE", msg)
+        }
+    }
+
+    fun callEmergencyReliefDrop() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val goldCost = 25.0
+            if (state.gold < goldCost) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "Need 25 Gold Sovereigns to call an Emergency Faction Air-Drop!")
+                }
+                return@launch
+            }
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    dwellerAppetiteEscalationSeconds = (state.dwellerAppetiteEscalationSeconds - 240).coerceAtLeast(0)
+                ),
+                scrapDelta = 45.0,
+                waterDelta = 50.0,
+                rationsDelta = 50.0,
+                fuelDelta = 40.0,
+                goldDelta = -goldCost,
+                xpDelta = 30.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "EMERGENCY FACTION AIR-DROP RECEIVED (-25 Gold): +45 Scrap, +50 Food, +50 Water, +40 Fuel & -2 Appetite Tiers!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("AIR-DROP", msg)
         }
     }
 

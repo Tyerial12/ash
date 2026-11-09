@@ -73,8 +73,11 @@ import com.example.model.WorkerClassType
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Phishing
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.example.model.FishingSpot
 import com.example.model.VaultMapStation
+import com.example.model.VaultOperationalPosture
 import com.example.ui.components.formatCompact
 import com.example.ui.theme.BioluminescentViolet
 import com.example.ui.theme.BunkerCharcoal
@@ -96,12 +99,11 @@ import com.example.viewmodel.OutpostUiState
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private enum class VaultSubView(val label: String) {
-    ALL("All"),
-    VAULT_2D_MAP("2D Vault Map"),
-    MINE_AND_FIX("Mine & Fix"),
-    VAULT_ROOMS("Rooms #1-#8"),
-    POWER_GRID("Power Grid")
+private enum class VaultSubView(val label: String, val tag: String) {
+    MAP_AND_MINE("2D Vault & Mine", "vault_subtab_map"),
+    VAULT_ROOMS("Rooms #1-#10", "vault_subtab_rooms"),
+    POWER_AND_CLOCKS("Power & Clocks", "vault_subtab_power"),
+    ALL("All Systems", "vault_subtab_all")
 }
 
 @Composable
@@ -125,45 +127,60 @@ fun OutpostTabScreen(
     onWalkToStation: (VaultMapStation) -> Unit = {},
     onFishSpot: (FishingSpot) -> Unit = {},
     onIssueEmergencyRations: () -> Unit = {},
+    onSetOperationalPosture: (VaultOperationalPosture) -> Unit = {},
+    onCallEmergencyReliefDrop: () -> Unit = {},
+    onRequestRestartGame: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var selectedSubView by remember { mutableStateOf(VaultSubView.ALL) }
+    var selectedSubView by remember { mutableStateOf(VaultSubView.MAP_AND_MINE) }
     var selectedCategory by remember { mutableStateOf<BuildingCategory?>(null) }
     val filteredBuildings = remember(selectedCategory) {
         if (selectedCategory == null) BuildingType.entries
         else BuildingType.entries.filter { it.category == selectedCategory }
     }
 
-    val show2dVaultMap = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.VAULT_2D_MAP
-    val showMineAndFix = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.MINE_AND_FIX
-    val showPowerGrid = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.POWER_GRID
+    val show2dVaultMap = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.MAP_AND_MINE
+    val showMineAndFix = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.MAP_AND_MINE
     val showVaultRooms = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.VAULT_ROOMS
+    val showPowerGrid = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.POWER_AND_CLOCKS
 
     Column(modifier = modifier.fillMaxSize()) {
-        // Streamlined Mobile Sub-View Switcher Bar
-        LazyRow(
+        // Mobile-First CRT Bunker Sub-Tab Switcher Bar (48.dp touch targets, zero horizontal scroll needed)
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            items(VaultSubView.entries) { subView ->
+            VaultSubView.entries.forEach { subView ->
                 val isSelected = selectedSubView == subView
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { selectedSubView = subView },
-                    label = {
+                Surface(
+                    color = if (isSelected) SolarAmber.copy(alpha = 0.24f) else SteelPanel,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(
+                        width = if (isSelected) 1.5.dp else 1.dp,
+                        color = if (isSelected) SolarAmber else PanelBorder
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { selectedSubView = subView }
+                        .testTag(subView.tag)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
                         Text(
                             text = subView.label,
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            color = if (isSelected) SolarAmber else TextSecondary,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1
                         )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = SolarAmber.copy(alpha = 0.24f),
-                        selectedLabelColor = SolarAmber
-                    )
-                )
+                    }
+                }
             }
         }
 
@@ -182,6 +199,24 @@ fun OutpostTabScreen(
                 }
             }
 
+            // Always show the compact Doomsday, Power & Quick-Fix Control Deck at top of Power & Clocks, Map & Mine, or during emergencies
+            if (showPowerGrid || showMineAndFix || uiState.production.isVaultBlackout || uiState.production.isDefenseShutDownByDeficit) {
+                item(key = "survival_outpost_status_banner") {
+                    VaultPowerAndDayControlCard(
+                        uiState = uiState,
+                        onCrankDynamo = onCrankDynamo,
+                        onMaintainGenerators = onMaintainGenerators,
+                        onScrubAir = onScrubAir,
+                        onFlushRadiation = onFlushRadiation,
+                        onIssueEmergencyRations = onIssueEmergencyRations,
+                        onSetOperationalPosture = onSetOperationalPosture,
+                        onCallEmergencyReliefDrop = onCallEmergencyReliefDrop,
+                        onAdvanceDay = onAdvanceDay,
+                        onRequestRestartGame = onRequestRestartGame
+                    )
+                }
+            }
+
             if (show2dVaultMap) {
                 // Interactive 2D Underground Cutaway Vault Map (Walk to click each room to upgrade, mine, or fish!)
                 item(key = "interactive_2d_vault_cutaway_map") {
@@ -191,21 +226,6 @@ fun OutpostTabScreen(
                         onMineOreAtStation = { onHarvestNode(0) },
                         onFishAtStation = { onFishSpot(FishingSpot.CRATER_SHALLOWS_TROUT) },
                         onUpgradeRoomAtStation = onUpgradeBuilding
-                    )
-                }
-            }
-
-            if (showMineAndFix || showPowerGrid) {
-                // 1. Empty Broken Vault Status, Life-Support & Solo 2x2 Quick-Fix Control Card
-                item(key = "survival_outpost_status_banner") {
-                    VaultPowerAndDayControlCard(
-                        uiState = uiState,
-                        onCrankDynamo = onCrankDynamo,
-                        onMaintainGenerators = onMaintainGenerators,
-                        onScrubAir = onScrubAir,
-                        onFlushRadiation = onFlushRadiation,
-                        onIssueEmergencyRations = onIssueEmergencyRations,
-                        onAdvanceDay = onAdvanceDay
                     )
                 }
             }
@@ -776,21 +796,27 @@ private fun VaultPowerAndDayControlCard(
     onScrubAir: () -> Unit,
     onFlushRadiation: () -> Unit,
     onIssueEmergencyRations: () -> Unit,
-    onAdvanceDay: () -> Unit
+    onSetOperationalPosture: (VaultOperationalPosture) -> Unit = {},
+    onCallEmergencyReliefDrop: () -> Unit = {},
+    onAdvanceDay: () -> Unit,
+    onRequestRestartGame: () -> Unit = {}
 ) {
+    val haptics = LocalHapticFeedback.current
     val state = uiState.state
     val prod = uiState.production
     val isBlackout = prod.isVaultBlackout
     val isBrownout = prod.isVaultBrownout
     val isStarving = prod.isWorkersStarvingOrDehydrated
+    val isDeficitShutdown = prod.isDefenseShutDownByDeficit
     val builtRoomsCount = BuildingType.entries.count { (uiState.buildingsMap[it.id] ?: 0) > 0 }
+    val activePosture = prod.operationalPosture
 
     Surface(
-        color = if (isBlackout || isStarving) HazardRed.copy(alpha = 0.14f) else SteelPanel,
+        color = if (isBlackout || isStarving || isDeficitShutdown) HazardRed.copy(alpha = 0.14f) else SteelPanel,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(
             1.dp,
-            if (isBlackout || isStarving) HazardRed else SurplusGreen.copy(alpha = 0.70f)
+            if (isBlackout || isStarving || isDeficitShutdown) HazardRed else SurplusGreen.copy(alpha = 0.70f)
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -807,39 +833,145 @@ private fun VaultPowerAndDayControlCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     val gridHeadline = when {
+                        isDeficitShutdown -> "DEFENSES SHUT DOWN! (VAULT TAKES MORE TO RUN THAN GAINING • ${state.deficitDaysCount}/2D)"
                         isStarving -> "CREW STARVING / DEHYDRATED! (WORKER ROOMS & TURRETS HALTED)"
-                        isBrownout -> "GRID BROWNOUT (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • WEAR ${state.generatorWearPercent}%)"
-                        isBlackout -> "VAULT POWER BLACKOUT! (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • WEAR ${state.generatorWearPercent}%)"
+                        isBrownout -> "GRID BROWNOUT (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • OUTAGE ${state.blackoutDaysCount}/6D)"
+                        isBlackout -> "VAULT POWER BLACKOUT! (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • OUTAGE ${state.blackoutDaysCount}/6D)"
                         else -> "VAULT LIFE-SUPPORT ONLINE (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • WEAR ${state.generatorWearPercent}%)"
                     }
                     Text(
                         text = gridHeadline,
                         style = MaterialTheme.typography.titleSmall,
-                        color = if (isBlackout || isStarving) HazardRed else SurplusGreen,
+                        color = if (isBlackout || isStarving || isDeficitShutdown) HazardRed else SurplusGreen,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (state.totalSurvivors == 0) {
-                            "SOLO BROKEN VAULT (0 Dwellers • $builtRoomsCount/8 Rooms Repaired • Rooms Drain -${prod.dailyRoomScrapUpkeep.toInt()}S/-${prod.dailyRoomWaterUpkeep.toInt()}W/Day): Crank Dynamo, Tune Gen, Scrub O2 & Mine Gold!"
-                        } else {
-                            "DAILY VAULT NEED (${state.totalSurvivors} Dwellers + $builtRoomsCount Rooms): -${prod.dailyFoodUpkeepPerDay.toInt()} Food, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()} Water, -${prod.dailyRoomScrapUpkeep.toInt()} Scrap & -${prod.dailyRoomFuelUpkeep.toInt()} Fuel/Day"
-                        },
+                        text = "Vault Lv.${state.commandLevel} + $builtRoomsCount Rooms Drain -${String.format(Locale.US, "%.1f", prod.totalVaultResourceDrainPerSec)}/s vs Gain +${String.format(Locale.US, "%.1f", prod.totalGrossResourceGainPerSec)}/s • Daily Upkeep: -${prod.dailyFoodUpkeepPerDay.toInt()}F, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()}W, -${prod.dailyRoomScrapUpkeep.toInt()}S, -${prod.dailyRoomFuelUpkeep.toInt()}Fuel",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextPrimary
                     )
                 }
 
                 Surface(
-                    color = (if (state.needsDefenseRepair) WarningOrange else RadTeal).copy(alpha = 0.18f),
+                    color = (if (state.needsDefenseRepair || isDeficitShutdown) WarningOrange else RadTeal).copy(alpha = 0.18f),
                     shape = RoundedCornerShape(6.dp),
-                    border = BorderStroke(1.dp, if (state.needsDefenseRepair) WarningOrange else RadTeal)
+                    border = BorderStroke(1.dp, if (state.needsDefenseRepair || isDeficitShutdown) WarningOrange else RadTeal)
                 ) {
                     Text(
-                        text = "DOOR ${state.defenseIntegrityPercent}%",
+                        text = if (isDeficitShutdown) "0 DEF!" else "DOOR ${state.defenseIntegrityPercent}%",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (state.needsDefenseRepair) WarningOrange else RadTeal,
+                        color = if (state.needsDefenseRepair || isDeficitShutdown) WarningOrange else RadTeal,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Hardcore Apocalypse Survival Clocks Readout (6-Day Blackout, 2-Day Deficit, 10-Day Mega-Siege, 5-Min/2-Min Dweller Feeding)
+            Surface(
+                color = BunkerCharcoal,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, PanelBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = "⏱ DOOMSDAY CLOCKS: 6D Power Outage (${state.blackoutDaysCount}/6D) • 2D Resource Deficit (${state.deficitDaysCount}/2D) • Next 10D Mega-Siege: ${prod.daysUntilDay10Siege}D (${prod.day10RequiredDefense} DEF)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isBlackout || isDeficitShutdown) HazardRed else SolarAmber,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val appetitePct = ((prod.dwellerUpkeepEscalationMultiplier - 1.0) * 100).roundToInt()
+                    Text(
+                        text = "🍖 5-MIN DWELLER FEEDING: ${state.dwellerFeedCycleSecondsRemaining}s left (-${prod.fiveMinDwellerFoodCost.roundToInt()} Food & -${prod.fiveMinDwellerWaterCost.roundToInt()} Water) • 2-Min Appetite Tier ${prod.dwellerUpkeepEscalationTier} (+$appetitePct% Drain)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CryoCyan
+                    )
+                    if (state.dayCounter <= 10) {
+                        Text(
+                            text = if (prod.isEarlyBunkerGraceActive) {
+                                "🛡 EARLY BUNKER GRACE (DAYS 1-3): Resource Deficit Game Over paused while bootstrapping (<2 Rooms) & -45% Early Upkeep!"
+                            } else {
+                                "🛡 DAYS 1-10 EARLY SURVIVAL GRACE: -45% Early Room Upkeep & softer +8%/2m Dweller Appetite curve active!"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SurplusGreen,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // Vault Operational Posture Switcher (ECO_CONSERVATION / STANDARD / OVERCLOCK)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "VAULT OPERATIONAL POSTURE: ${activePosture.title.uppercase()} (Switch to ECO to cut -40% Upkeep & exit Resource Deficit!)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = activePosture.accentColor,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    VaultOperationalPosture.entries.forEach { posture ->
+                        val selected = activePosture == posture
+                        Surface(
+                            color = if (selected) posture.accentColor.copy(alpha = 0.24f) else BunkerCharcoal,
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(
+                                width = if (selected) 1.5.dp else 1.dp,
+                                color = if (selected) posture.accentColor else PanelBorder
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onSetOperationalPosture(posture)
+                                }
+                                .testTag("posture_button_${posture.id.lowercase()}")
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            ) {
+                                Text(
+                                    text = posture.shortLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (selected) posture.accentColor else TextSecondary,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isDeficitShutdown || isBlackout || state.gold >= 25.0) {
+                OutlinedButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onCallEmergencyReliefDrop()
+                    },
+                    enabled = state.gold >= 25.0,
+                    border = BorderStroke(1.dp, if (state.gold >= 25.0) XpGold else PanelBorder),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("call_emergency_airdrop_button")
+                ) {
+                    Text(
+                        text = "🚁 CALL EMERGENCY AIR-DROP (25 GOLD -> +45S, +50F, +50W, +40 FUEL & -2 APPETITE)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (state.gold >= 25.0) XpGold else TextMuted,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -1626,6 +1758,8 @@ private fun BuildingStructureCard(
         BuildingType.BIO_SLUDGE_REFINERY -> Icons.Default.Bolt
         BuildingType.SIGNAL_RESEARCH_ARRAY -> Icons.Default.Radar
         BuildingType.NOCTURNAL_EXTRACTION_RIG -> Icons.Default.Science
+        BuildingType.GEOTHERMAL_TAP -> Icons.Default.Bolt
+        BuildingType.CRYO_STASIS_VAULT -> Icons.Default.Shield
     }
     val isConstructingThis = activeConstruction?.buildingType == type
     val isAnotherConstructing = activeConstruction != null && !isConstructingThis

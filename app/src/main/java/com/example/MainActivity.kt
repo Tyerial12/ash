@@ -376,9 +376,45 @@ fun AshfallOutpostApp(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var currentTab by rememberSaveable { mutableStateOf(OutpostDestination.OUTPOST) }
+    var showRestartDialog by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = currentTab != OutpostDestination.OUTPOST) {
         currentTab = OutpostDestination.OUTPOST
+    }
+
+    val state = uiState.state
+    val prod = uiState.production
+
+    if (state.isGameOver) {
+        VaultGameOverDialog(
+            dayReached = state.dayCounter,
+            commandLevel = state.commandLevel,
+            prestigeCores = state.prestigeCores,
+            reason = state.gameOverReason,
+            onFullReset = {
+                showRestartDialog = false
+                viewModel.restartGame(keepPrestige = false)
+            },
+            onLegacyReset = {
+                showRestartDialog = false
+                viewModel.restartGame(keepPrestige = true)
+            }
+        )
+    } else if (showRestartDialog) {
+        RestartGameConfirmDialog(
+            dayCounter = state.dayCounter,
+            commandLevel = state.commandLevel,
+            prestigeCores = state.prestigeCores,
+            onDismiss = { showRestartDialog = false },
+            onFullReset = {
+                showRestartDialog = false
+                viewModel.restartGame(keepPrestige = false)
+            },
+            onLegacyReset = {
+                showRestartDialog = false
+                viewModel.restartGame(keepPrestige = true)
+            }
+        )
     }
 
     uiState.offlineReport?.let { report ->
@@ -388,8 +424,6 @@ fun AshfallOutpostApp(
         )
     }
 
-    val state = uiState.state
-    val prod = uiState.production
     val idleSurvivors = (state.totalSurvivors - prod.totalAssignedWorkers).coerceAtLeast(0)
     val canHireCandidate = state.totalSurvivors < prod.maxWorkerCapacity &&
         uiState.hireableCandidates.any { state.gold >= it.goldSigningFee }
@@ -412,26 +446,28 @@ fun AshfallOutpostApp(
                         icon = {
                             BadgedBox(
                                 badge = {
-                                    if (dest == OutpostDestination.OUTPOST && (prod.isVaultBlackout || prod.isWorkersStarvingOrDehydrated || state.rawSalvageCaches > 0)) {
+                                    if (dest == OutpostDestination.OUTPOST && (prod.isVaultBlackout || prod.isVaultResourceDeficit || prod.isWorkersStarvingOrDehydrated || state.rawSalvageCaches > 0)) {
                                         Badge(
-                                            containerColor = if (prod.isVaultBlackout || prod.isWorkersStarvingOrDehydrated) HazardRed else SolarAmber,
-                                            contentColor = if (prod.isVaultBlackout || prod.isWorkersStarvingOrDehydrated) TextPrimary else BunkerCharcoal
+                                            containerColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit || prod.isWorkersStarvingOrDehydrated) HazardRed else SolarAmber,
+                                            contentColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit || prod.isWorkersStarvingOrDehydrated) TextPrimary else BunkerCharcoal
                                         ) {
                                             Text(
                                                 when {
+                                                    prod.isVaultResourceDeficit -> "DEF!"
                                                     prod.isVaultBlackout -> "MW!"
                                                     prod.isWorkersStarvingOrDehydrated -> "FOOD!"
                                                     else -> "${state.rawSalvageCaches}"
                                                 }
                                             )
                                         }
-                                    } else if (dest == OutpostDestination.ARMORY && (uiState.activeRaidThreat != null || state.needsDefenseRepair || uiState.activeDoorUpgrade != null)) {
+                                    } else if (dest == OutpostDestination.ARMORY && (uiState.activeRaidThreat != null || state.needsDefenseRepair || uiState.activeDoorUpgrade != null || prod.isDefenseShutDownByDeficit)) {
                                         Badge(
-                                            containerColor = if (uiState.activeRaidThreat != null) HazardRed else WarningOrange,
+                                            containerColor = if (uiState.activeRaidThreat != null || prod.isDefenseShutDownByDeficit) HazardRed else WarningOrange,
                                             contentColor = TextPrimary
                                         ) {
                                             Text(
                                                 when {
+                                                    prod.isDefenseShutDownByDeficit -> "0 DEF"
                                                     uiState.activeRaidThreat != null -> "!"
                                                     uiState.activeDoorUpgrade != null -> "${uiState.activeDoorUpgrade?.remainingSeconds ?: 0}s"
                                                     else -> "FIX"
@@ -501,7 +537,8 @@ fun AshfallOutpostApp(
                     activeConstruction = uiState.activeConstruction,
                     activeCrafting = uiState.activeCrafting,
                     activeDoorUpgrade = uiState.activeDoorUpgrade,
-                    activeExpedition = uiState.activeExpedition
+                    activeExpedition = uiState.activeExpedition,
+                    onRequestRestartGame = { showRestartDialog = true }
                 )
 
                 AnimatedVisibility(
@@ -538,7 +575,10 @@ fun AshfallOutpostApp(
                             onClaimAnomaly = viewModel::claimRareAnomaly,
                             onWalkToStation = viewModel::walkOverseerToStation,
                             onFishSpot = viewModel::executeFishing,
-                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations
+                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
+                            onSetOperationalPosture = viewModel::setOperationalPosture,
+                            onCallEmergencyReliefDrop = viewModel::callEmergencyReliefDrop,
+                            onRequestRestartGame = { showRestartDialog = true }
                         )
                         OutpostDestination.ARMORY -> CraftHuntDefenseTabScreen(
                             uiState = uiState,
@@ -548,6 +588,7 @@ fun AshfallOutpostApp(
                             onExecuteHunt = viewModel::executeHunt,
                             onExecuteFishing = viewModel::executeFishing,
                             onRepelRaid = viewModel::repelRaiderSiege,
+                            onExecuteCountermeasure = viewModel::executeSiegeCountermeasure,
                             onRepairDefenses = viewModel::repairVaultDefenses,
                             onUpgradeBlastDoor = viewModel::upgradeBlastDoor,
                             onAccelerateDoorUpgrade = viewModel::accelerateBlastDoorUpgrade,
@@ -605,6 +646,175 @@ fun AshfallOutpostApp(
             }
         }
     }
+}
+
+@Composable
+private fun RestartGameConfirmDialog(
+    dayCounter: Int,
+    commandLevel: Int,
+    prestigeCores: Int,
+    onDismiss: () -> Unit,
+    onFullReset: () -> Unit,
+    onLegacyReset: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SteelPanel,
+        title = {
+            Text(
+                text = "RESTART VAULT SURVIVAL?",
+                style = MaterialTheme.typography.titleLarge,
+                color = WarningOrange,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "You are currently on Day $dayCounter (Vault Command Lv.$commandLevel). Choose how you want to restart your bunker:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+                Button(
+                    onClick = onFullReset,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = HazardRed,
+                        contentColor = TextPrimary
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("confirm_restart_full_button")
+                ) {
+                    Text(
+                        text = "FULL FRESH RESET (DAY 1 • WIPE ALL)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Button(
+                    onClick = onLegacyReset,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SolarAmber,
+                        contentColor = BunkerCharcoal
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("confirm_restart_legacy_button")
+                ) {
+                    Text(
+                        text = "KEEP PRESTIGE RESET ($prestigeCores CORES & LEGACY)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ElevatedSlate,
+                    contentColor = TextPrimary
+                ),
+                modifier = Modifier
+                    .height(48.dp)
+                    .testTag("cancel_restart_button")
+            ) {
+                Text("CANCEL", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+private fun VaultGameOverDialog(
+    dayReached: Int,
+    commandLevel: Int,
+    prestigeCores: Int,
+    reason: String,
+    onFullReset: () -> Unit,
+    onLegacyReset: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { /* Mandatory Game Over choice */ },
+        containerColor = SteelPanel,
+        title = {
+            Text(
+                text = "☠️ VAULT FALLEN — GAME OVER (DAY $dayReached)",
+                style = MaterialTheme.typography.titleLarge,
+                color = HazardRed,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    color = HazardRed.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, HazardRed),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("game_over_reason_card")
+                ) {
+                    Text(
+                        text = reason.ifEmpty {
+                            "Your Vault succumbed to the nuclear wasteland on Day $dayReached (Vault Command Lv.$commandLevel)."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+                Text(
+                    text = "Launch a new Vault expedition from Day 1 with your pickaxe:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                Button(
+                    onClick = onLegacyReset,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SolarAmber,
+                        contentColor = BunkerCharcoal
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("game_over_restart_legacy_button")
+                ) {
+                    Text(
+                        text = "NEW VAULT (KEEP $prestigeCores PRESTIGE CORES)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Button(
+                    onClick = onFullReset,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = HazardRed,
+                        contentColor = TextPrimary
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("game_over_restart_full_button")
+                ) {
+                    Text(
+                        text = "HARDCORE WIPE (FRESH DAY 1 RESET)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        },
+        confirmButton = {}
+    )
 }
 
 @Composable

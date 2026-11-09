@@ -1,144 +1,82 @@
-# Vault City — Public Multi-User Network, Prestige Skill Tree, Daily Worker Rations & Mobile Telemetry Tabs Plan
+# Vault City — Next-Phase Evolution Plan (From Current Game State)
 
-This plan makes **Vault City** a **public multi-user survival game** backed by **Firebase Firestore & Google Sign-In**, introduces an **Overseer Ascension Prestige System** tightly integrated with a **Legacy Skill Tree Branch**, enforces **Mandatory Daily Food & Water Rations for Workers**, and redesigns the mobile interface with a **Collapsible Top Telemetry Drawer** featuring dedicated tabs for **Resources Gathered** and **Current Systems Online**.
+## 1. Current Game State Assessment & Rebalance Goals
 
----
+**Vault City** currently features:
+- **6-Day Power Outage (`OUTAGE X/6D`) Game Over** and **2-Day Resource Deficit (`DEFICIT X/2D`) Defense Shutdown + Game Over**
+- **Major Nuclear Warlord Mega-Sieges every 10 Days (`Day 10, 20, 30...`)** and accelerating daily attacks
+- **5-Minute Dweller Feeding (`300s`)** and **2-Minute Dweller Appetite Escalation (`120s`)**
+- **Vault Command Level & Room Level super-linear resource upkeep**
+- **Anytime Restart / Game Over Reset** (Full Fresh Reset vs. Keep Prestige Reset) and **4-Button CRT Sub-Tab Switcher**
 
-## User Review & Critical Decisions
-
-> [!IMPORTANT]
-> **Confirmed Design & Gameplay Decisions**
-> - **Public Multi-User Wasteland Network (Firebase Firestore & Google Sign-In)**:
->   - Players sign in with **Google Sign-In** (via Jetpack `CredentialManager`) to publish their Vault to the live **Public Wasteland Vault Directory & Global Overseer Leaderboard** (`public_vaults` collection), send and claim **Public Supply Drops / Caravan Aid Packages** (`public_supply_drops` collection) with other real players, and automatically **Cloud-Sync** their personal Vault progress (`users/{userId}/vault_state`).
-> - **Overseer Ascension Prestige & Skill Tree Synergy**: Resetting the Vault (available once Command Level $\ge 5$ or key rooms are restored) converts current Vault progress into **Permanent Prestige Cores** and increments your **Overseer Prestige Rank** (displayed publicly on the Global Vault Leaderboard). Prestige Cores are spent in a **4th Skill Tree Branch (`OVERSEER LEGACY`)** whose upgrades permanently persist across all future Vault resets.
-> - **Mobile-Friendly Telemetry Drawer (`Resources Gathered` & `Current Systems Online` Tabs)**: The top HUD features a compact status bar that expands into a two-tab mobile telemetry drawer:
->   1. **Resources Gathered Tab**: Complete breakdown of primary resources, net `/s` production rates, storage capacity bars, tactical survival gear, Prestige Cores, and the **Daily Worker Food & Water Ration Ledger**.
->   2. **Current Systems Online Tab**: Real-time diagnostics for **(1) Power Grid MW Load, Generator Wear & Blackout Status**, **(2) Automated Defense Grid (Built + Workers + Power checklist), Turret Readiness & Door Integrity**, **(3) Life Support $\text{O}_2$ Scrubbers, Radiation & Room Automation**, and **(4) Active Timers for Room Construction, Item Crafting & Expeditions**.
-> - **Daily Food & Water Needed for Workers**: Hired and assigned workers require **Daily Food & Water Rations** every Vault Day (`2.0 Food` and `2.0 Water` base per worker/day, plus active shift exertion, reduced by Living Quarters and Legacy Skills). If Food or Water runs dry (`0` stock when rations are needed), **workers become famished/dehydrated**—halting worker room automation and automated defense manning until emergency Food & Water are secured.
-> - **Crafting Timers, Room-Level Build Scaling, Dangerous Night & Strict Auto-Defense**: Preserves item crafting timers (with Forge Faster `-3s` and Gold Rush), steeper room-level construction timers, dangerous Night Time (`RAD_NIGHT`) mutant swarms, and the strict rule that **Automated Defenses must be built, staffed by fed workers, and powered**.
+Based on your feedback, we will evolve the current game state across **five major pillars** while making **Days 1–10 more forgiving** so players can smoothly bootstrap their bunker before the hardcore mid/late-game ramp kicks in.
 
 ---
 
-## 1. Overview & Core Concept
+## 2. Core New Mechanics & Rebalancing
 
-- **What It Does**: **Vault City** is a realistic post-nuclear shelter survival, automation, and multiplayer community game. You begin alone in a broken, unpowered Vault and manually scavenge, purify water, and repair rooms until you recruit Vault Dwellers (with an **8% base chance** for **Unique Vault Dwellers** granting **+40% production**). Workers require **daily Food and Water rations** to stay healthy and keep rooms and automated defenses online. Through the **Public Wasteland Network**, your Vault is visible to other players around the world: you can climb the **Public Overseer Leaderboard** (ranked by Prestige Level, Command Level, and Days Survived), broadcast **Public Supply Drops** to help other Vaults, claim shared wasteland crates, and ascend via the **Prestige System** to unlock permanent **Legacy Skill Tree** masteries.
-- **Target Audience / Persona**: Mobile strategy and survival players who want deep resource interdependence (Power MW, Daily Worker Food/Water Rations, $\text{O}_2$, Radiation, Ammo, and Prestige meta-progression) connected to a live public community of fellow Vault Overseers.
-- **Key Value**: Combines tactile survival management and long-term Prestige progression with a live **Public Multi-User Wasteland Network** and a streamlined mobile telemetry drawer.
+### Pillar 1: Forgiving Early Days (Days 1–10) & Dynamic Economy Rebalance
+1. **Days 1–10 Early Bunker Grace Window**:
+   - **Resource Deficit Grace**: During Days 1–3 (or while fewer than 2 Vault rooms are built), the **2-Day Resource Deficit Game Over counter is paused** (`EARLY BUNKER GRACE`), giving players time to mine Scrap/Gold, hire their first Dwellers, and bring basic rooms online.
+   - **Softer Early Upkeep Curve**: During Days 1–10, Vault Command Level and Room Level resource upkeep is reduced by **50%**, and the **2-Minute Dweller Appetite Escalation** scales at **`+6%` per 2 minutes** (capped at `+60%` in Days 1–10) instead of `+14%`. Completing a **5-Minute Dweller Feeding Cycle with full rations & water** or running a **Decontamination / Medbay cycle** trims `-1` appetite escalation tier so active Overseers can manage Dweller hunger.
+   - **Smooth Days 1–9 Attack Ramp**: Daily raid required defense starts at a manageable **`14 DEF` on Day 1** (easily covered by the starter Lv.1 Blast Door once repaired) and scales smoothly through Day 9 before the first **Day 10 Nuclear Warlord Boss Siege (`115 DEF`)**.
+2. **Vault Operational Posture Toggle (Eco-Conservation vs. Balanced vs. Overclock)**:
+   - Add an instant 3-way **Vault Operational Posture** switch in the Vault Power & Clocks panel and Armory:
+     - **ECO-CONSERVATION (`-40% Vault & Room Upkeep, -15% Output`)**: Lets players immediately slash resource drain per second to **exit a Resource Deficit and bring Vault Defenses back online** during an emergency!
+     - **STANDARD (`100% Output, 100% Upkeep`)**: Default balanced bunker operation.
+     - **OVERCLOCK (`+30% Resource & XP Output, +25% Upkeep & MW`)**: High-yield push mode when power and stockpiles are thriving.
 
----
+### Pillar 2: Deeper 10-Day Boss Siege Combat & Tactical Countermeasures
+1. **Named 10-Day Boss Sieges**:
+   - Every 10th Day (`Day 10, 20, 30, 40...`) spawns a named **Nuclear Warlord Boss Siege** with distinct lore, boss armor rating, and high-value victory spoils (`Mutagen Cores`, `Thorium Rods`, `Aether Cells`, and `Gold Sovereigns`):
+     - **Day 10**: *Ironclad Goliath Siege Tank*
+     - **Day 20**: *Rad-Behemoth Siegebreaker Herd*
+     - **Day 30**: *Enclave Orbital Dreadnought Strike*
+     - **Day 40+**: *Apex Warlord Titan Division (Tier IV+)*
+2. **3 Active Tactical Siege Countermeasures** (usable during any active Daily Raid or Day 10 Boss Siege in the Armory & Defense tab):
+   - **BALLISTIC FLAK VOLLEY (`10 Ammo Rds`)**: Fires concentrated turret & rifle salvos to weaken the attacking force (`-25% Required Siege DEF` for the current attack and `+15s` timer extension).
+   - **EMP OVERCHARGE PULSE (`25 Bio-Fuel` or `2 Aether Cells`)**: Detonates an electromagnetic shockwave across the blast perimeter (`-35% Required Siege DEF` against mechanized raiders/bosses).
+   - **EMERGENCY BLAST WELD (`35 Scrap Metal`)**: Welds structural plates onto the Blast Door mid-siege (`+25% Defense Integrity` immediately, restoring lost DEF rating before impact).
 
-## 2. User Experience & Visual Design
+### Pillar 3: More Vault Rooms (#9 & #10) on Deep-Core Floor B5
+Expand `BuildingType` and `VaultMapStation` from 8 rooms to **10 buildable rooms across 5 Underground Decks (B1–B5)**:
+- **Room #9: Deep-Core Geothermal Tap (Floor B5, unlocks at Command Lv.4)**
+  - Harnesses subterranean magma vents to generate **`+6.0 MW/Lv` continuous baseline power** (unaffected by nightfall or surface eclipses) and reduces generator wear accumulation by `-10%/Lv`.
+- **Room #10: Cryo-Stasis & Ration Vault (Floor B5, unlocks at Command Lv.5)**
+  - Preserves hydroponic harvests and slows Dweller metabolic drain, reducing **5-Minute & Daily Dweller Food/Water consumption by `-8%/Lv`** (up to `-40%`) and increasing maximum Vault storage capacity by `+350/Lv`.
 
-### Key User Flows
+### Pillar 4: Expanded Wasteland Expeditions, Factions & Apex Boss Hunts
+- **New Apex Hunting Target**: *Glowing Leviathan Wyrm* (requires Aether Crossbow Lv.2 + 2 Spears; rewards massive Food, Water, Gold, and Mutagen Cores).
+- **New High-Tier Wasteland Expedition**: *Sunken Nuclear Submarine Vault* (rewards Thorium Fuel Rods, Aether Cells, and Scrap caches).
+- **Emergency Faction Relief Drop**: In the Trade & Power tab (and Power/Deficit emergency panel), players can spend Gold Sovereigns to call an **Emergency Bunker Air-Drop** (`+60 Food, +60 Water, +50 Bio-Fuel, +50 Scrap`) to save a dying Vault from Blackout or Deficit collapse.
 
-1. **Google Sign-In & Public Wasteland Network (`Grid & Trade / Public Network`)**:
-   - **Authentication Gate**: Uses Jetpack `CredentialManager` (`GetSignInWithGoogleOption`) so every player has a verified Overseer identity (`displayName`, `userId`) for cloud saves and public multi-user interactions.
-   - **Public Wasteland Vault Directory & Leaderboard**:
-     - Real-time Firestore feed (`public_vaults`) displaying other players' active Vaults: Overseer Name, Vault Title, **Prestige Rank**, **Command Level**, **Days Survived**, **Defense Rating**, and **Total Survivors** (including Unique Dwellers).
-     - Players can tap **Publish / Sync My Vault** (also synced automatically on key milestones and Prestige Ascensions) to update their public standing.
-   - **Public Caravan Supply Drops (`public_supply_drops`)**:
-     - Players can post a **Public Supply Drop** (packaging surplus Scrap, Food, Water, or Bio-Fuel into the shared Wasteland Network for Gold & XP rewards) and claim unclaimed supply drops posted by other Overseers.
-
-2. **Top Mobile Telemetry Drawer (`Resources Gathered` | `Current Systems Online`)**:
-   - **Always-Visible Compact Strip**: Displays Command Level, Prestige Rank badge, Day/Night Phase, Power MW, $\text{O}_2\%$, Rads, Door Integrity, and a quick-toggle pill switching between **Compact View**, **Resources Gathered Tab**, and **Systems Online Tab**.
-   - **Tab 1 — `RESOURCES GATHERED`**:
-     - **Primary Stockpiles & Storage Cap**: Clean 2-column grid of `Scrap`, `Water`, `Food (Rations)`, and `Bio-Fuel` with live `+X.X/s` net rates and visual fill bars against `Storage Capacity`.
-     - **Daily Worker Ration Forecast Banner**: Shows exact **Daily Food Needed (`X.X/day`)** and **Daily Water Needed (`X.X/day`)** for your current workforce, how many days of rations remain at current stockpiles, and an instant warning if workers are starving/dehydrated.
-     - **Tactical & Prestige Vault Reserves**: Displays `Gold`, `Ammo Rounds`, `RadAway`, `Medkits`, `Gas Masks`, `Hazmat Suits`, `Mutagen Cores`, and `Prestige Cores`.
-   - **Tab 2 — `SYSTEMS ONLINE`**:
-     - **Power Grid & Generator Telemetry**: Live `Generated MW vs. Required MW`, Grid Efficiency multiplier, Generator Wear `%`, and `ONLINE / BROWNOUT / BLACKOUT` status badge.
-     - **Automated Defense Grid Telemetry**: Shows whether Automated Defense is `ACTIVE` or `OFFLINE` alongside its 3 mandatory operational checks (**Built Turrets/Plasma**, **Fed Workers Assigned**, **Power MW Online**), Blast Door Integrity `%`, and Night Swarm Alert status.
-     - **Life Support & Room Automation Status**: Shows $\text{O}_2$ Scrubber net rate, Radiation scrubbing rate, Worker Ration status (`FED & HYDRATED` vs `STARVING / DEHYDRATED — WORK HALTED`), and count of active vs. unpowered/unstaffed Vault Rooms.
-     - **Active Operations Timers**: Live countdown progress bars for active **Room Construction**, **Armory Item Crafting**, **Trade Convoy**, and **Wasteland Expedition** right in one unified dashboard.
-
-3. **Daily Worker Food & Water Ration Loop**:
-   - Each hired survivor requires base daily rations (`2.0 Food/day` + `2.0 Water/day`, plus `+0.5 Food/Water` per actively assigned specialist shift, discounted by Living Quarters and Legacy Skills).
-   - Every new Vault Day (and continuously via per-second upkeep), rations are deducted from the Vault's `Food` and `Water` stores.
-   - If a day starts with insufficient Food or Water—or if `Food == 0` or `Water == 0` while workers are assigned—**Worker Starvation/Dehydration** triggers:
-     - Unfed/dehydrated workers cannot run automated rooms or automated turrets until `Food > 0` and `Water > 0` are restored (or the player taps **Issue Emergency Rations / Purify Water**).
-     - Full daily rations grant a **Well-Fed Crew Morale Bonus (`+15%` output)** and steady Dweller HP recovery.
-
-4. **Overseer Ascension (Prestige System) & Skill Tree Integration**:
-   - Inside the **Tech (`SkillTreeTabScreen`)** screen, a prominent **Overseer Ascension Prestige Card** sits above the Skill Branch tabs, showing:
-     - Current **Prestige Rank**, owned **Prestige Cores**, and the permanent **Prestige Production & Build Speed Multiplier**.
-     - **Claimable Prestige Cores** calculated from current Command Level, total room levels built, and days survived (unlocks at **Command Level 5+** or **Total Room Levels $\ge 6$**).
-     - An **ASCEND VAULT (PRESTIGE RESET)** button with a confirmation dialog explaining what resets (Rooms, basic resources, day counter, standard skills) and what is permanently kept (**Prestige Rank**, **Prestige Cores**, **Overseer Legacy Skill Branch ranks**, and **Public Leaderboard Prestige Standing**).
-   - **4th Skill Tree Branch — `OVERSEER LEGACY` (`SkillBranch.OVERSEER_LEGACY`)**:
-     - Purchased exclusively with **Prestige Cores** (never resets on Ascension):
-       1. **Cryo-Supply Drop (Tier 1)**: Start every Prestige Vault with `+40 Scrap, +25 Food, +25 Water, +15 Bio-Fuel` per rank and `+20% Global Resource Output` per rank.
-       2. **Nano-Fabrication Schematics (Tier 2)**: Reduces **Room Construction Time** and **Armory Item Crafting Time** by `-12%` per rank (up to `-60%`).
-       3. **Hydro-Ration Recycling (Tier 3)**: Reduces **Daily Worker Food & Water Consumption** by `-10%` per rank and increases **Unique Dweller Spawn Chance** by `+3%` per rank (from `8%` up to `23%`).
-       4. **Overseer Fusion Core (Tier 4)**: Grants `+10 Base Vault MW` (preventing early blackouts) and `+25% All Defense & Turret Rating` per rank.
-
-### Visual Identity & Theme
-
-- **Aesthetic Direction**: Rugged **Vault-Tec Industrial Telemetry UI** with high-contrast dark slate surfaces (`#10151C`), armored steel cards (`#18202C`), and color-coded status pills.
-- **Color Palette & Mood**:
-  - `SurplusGreen` (`#2CE69B`) for online systems, fed workforce, and positive resource rates.
-  - `SolarAmber` (`#FFBE0B`) and `XpGold` (`#FFD166`) for Prestige Cores, Overseer Ascension badges, and power load warnings.
-  - `CryoCyan` (`#00E5FF`) for $\text{O}_2$, water hydration, and telemetry tabs.
-  - `HazardRed` (`#FF3864`) for Blackout, Starvation/Dehydration alerts, and Night Mutant Swarms.
+### Pillar 5: Enhanced 2D Vault Cutaway Visuals, CRT Animations & Haptic Alerts
+- **Floor B5 Deep-Core Visuals**: Update `VaultCutawayMapCard` to render **Floor B5 (Geothermal magma glow & Cryo-Stasis frost chambers)** with interactive tap-to-walk Overseer stations.
+- **CRT Radar Sweep & Hazard Pulse**: Add an animated phosphor radar scanline and pulsing red alert border when a Day 10 Boss Siege, Power Blackout, or Resource Deficit is active, paired with tactile `LocalHapticFeedback` on mining, countermeasure strikes, and level-ups.
 
 ---
 
-## 3. Key Product Decisions & Trade-Offs
+## 3. Planned File Changes
 
-- **Decision 1: Public Multi-User Wasteland Network via Firebase Firestore + Google Sign-In**
-  - *Chosen Approach*: Provision Firebase Firestore & Auth (`CredentialManager` Google Sign-In) with hardened `firestore.rules` so authenticated players can view all public Vaults on the Global Overseer Leaderboard (`public_vaults/{userId}`), post/claim shared Supply Drops (`public_supply_drops/{dropId}`), and back up their own Vault state (`users/{userId}/vault_backups/latest`).
-  - *Why*: Makes the game genuinely public and interactive for multiple users while enforcing strict per-user write ownership and schema validation in Firestore security rules.
-- **Decision 2: Collapsible Top Telemetry Drawer with `Resources Gathered` & `Systems Online` Tabs**
-  - *Chosen Approach*: Integrate a 2-tab expandable drawer directly into `WastelandSkyHeader` that can be switched or collapsed with a single tap from any screen.
-  - *Why*: Gives players immediate access to all resource rates, daily worker food/water demands, online systems, and active build/craft timers without crowding the bottom navigation bar.
-- **Decision 3: Strict Daily Worker Food & Water Requirement & Permanent `OVERSEER LEGACY` Skill Branch**
-  - *Chosen Approach*: Workers consume daily Food & Water rations and pause room/turret operation if rations hit `0`; Prestige resets award Prestige Cores spent in the permanent `OVERSEER LEGACY` skill branch.
-  - *Why*: Connects daily survival pressure directly to long-term Prestige progression.
-
----
-
-## 4. Technical Architecture & Data Strategy *(Technical Reference)*
-
-### Architecture & Component Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                  MainActivity (Auth Gate + Scaffold Shell)                  │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │        WastelandSkyHeader (Collapsible Mobile Telemetry Drawer)       │  │
-│  │  ┌─────────────────────────────────┬───────────────────────────────┐  │  │
-│  │  │   Tab 1: RESOURCES GATHERED     │   Tab 2: SYSTEMS ONLINE       │  │  │
-│  │  │ • Primary Stockpiles & Rates/s  │ • Power MW, Wear & Blackout   │  │  │
-│  │  │ • Storage Cap Progress Bars     │ • Auto-Defense 3-Check Status │  │  │
-│  │  │ • Daily Worker Food/Water Need  │ • O2, Rads, Ration & Rooms    │  │  │
-│  │  │ • Tactical Gear & Prestige Core │ • Build/Craft/Exp Timers      │  │  │
-│  │  └─────────────────────────────────┴───────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                      │
-│  ┌───────────┬───────────────┬───────┴───────┬───────────────┬───────────┐  │
-│  │ 1. Vault  │ 2. Armory     │ 3. Crew       │ 4. Grid/Public│ 5. Tech   │  │
-│  │ Rooms &   │ Timed Crafts, │ Hire Dwellers │ Power, Trade  │ 4-Branch  │  │
-│  │ Salvage   │ Night Swarms  │ (8% Unique) & │ & Public      │ SkillTree │  │
-│  │ Yard      │ & Auto-Def    │ Daily Rations │ Vault Network │ +Prestige │  │
-│  └───────────┴───────────────┴───────────────┴───────────────┴───────────┘  │
-└───────────────────┬─────────────────────────────────────┬───────────────────┘
-                    ▼                                     ▼
-┌─────────────────────────────────────────┐ ┌─────────────────────────────────┐
-│     Local Simulation & Persistence      │ │ Public Cloud Network (Firebase) │
-│ • OutpostViewModel & OutpostCalculator  │ │ • Google Sign-In (CredentialMgr)│
-│ • Daily Worker Food/Water Ration Gate   │ │ • public_vaults/{userId}        │
-│ • Prestige Reset & LEG_* Skill Branch   │ │   (Live Public Leaderboard)     │
-│ • Room SQLite (OutpostDatabase v9)      │ │ • public_supply_drops/{dropId}  │
-└─────────────────────────────────────────┘ └─────────────────────────────────┘
-```
-
-### Data Model & State Updates
-
-1. **Public Cloud Collections (`firebase-blueprint.json` & `firestore.rules`)**:
-   - `public_vaults/{userId}`: Readable by any authenticated user (`request.auth != null`), writable only by the owner (`request.auth.uid == userId`). Stores `userId`, `overseerName`, `vaultName`, `prestigeLevel`, `prestigeCores`, `commandLevel`, `dayCounter`, `totalSurvivors`, `uniqueDwellersCount`, `totalDefenseRating`, `updatedAt`.
-   - `public_supply_drops/{dropId}`: Readable by any authenticated user; creatable by any authenticated user (`senderUid == request.auth.uid`); updatable to mark claimed or deleted by sender. Stores `senderUid`, `senderName`, `resourceType`, `amount`, `message`, `claimedByUid`, `claimedByName`, `createdAt`, `updatedAt`.
-2. **Local Persistence (`OutpostStateEntity` & `OutpostRepository`)**:
-   - Add `val prestigeLevel: Int = 0`, `val prestigeCores: Int = 0`, `val totalPrestigeCoresEarned: Int = 0`, and `val autoDefenseEnabled: Boolean = true` to `OutpostStateEntity`.
-   - Add `suspend fun performPrestigeReset(newState: OutpostStateEntity)` in `OutpostRepository` that resets `BuildingProgressEntity` levels to `0`, resets `WorkerClassEntity` assigned counts to `0`, deletes non-Legacy skill nodes (`!nodeId.startsWith("LEG_")`), and saves the ascended `OutpostStateEntity`.
-3. **Skill Tree & Prestige Calculations (`SkillBranch`, `SkillTreeCatalog`, `OutpostCalculator`)**:
-   - Add `OVERSEER_LEGACY("Overseer Legacy", "Permanent Prestige Core upgrades that persist through Vault Ascension", XpGold)` to `SkillBranch`.
-   - Add 4 Legacy Skill Nodes (`LEG_CRYO_AWAKENING`, `LEG_NANO_SCHEMATICS`, `LEG_HYDRO_RECYCLING`, `LEG_FUSION_OVERCLOCK`) to `SkillTreeCatalog`.
-   - Update `computeProductionSnapshot(...)` to enforce **Daily Worker Food & Water Rations** (`isWorkersStarvingOrDehydrated: Boolean`), **Strict 3-Part Auto-Defense** (`isAutoDefenseActive: Boolean`), and apply Legacy Skill bonuses.
+1. **`/app/src/main/java/com/example/model/OutpostModels.kt`**:
+   - Add `BuildingType.GEOTHERMAL_TAP` (Room #9) and `BuildingType.CRYO_STASIS_VAULT` (Room #10).
+   - Add `VaultMapStation.ROOM_GEOTHERMAL` and `VaultMapStation.ROOM_CRYO_VAULT` on Floor B5.
+   - Add `VaultOperationalPosture` enum (`ECO_CONSERVATION`, `STANDARD`, `OVERCLOCK`).
+   - Add `SiegeCountermeasureType` enum (`FLAK_VOLLEY`, `EMP_PULSE`, `EMERGENCY_WELD`).
+   - Add new `HuntingTarget.GLOWING_LEVIATHAN_WYRM` and `WastelandExpeditionType.SUNKEN_SUBMARINE_REACTOR`.
+2. **`/app/src/main/java/com/example/data/local/OutpostEntities.kt` & `OutpostDatabase.kt`**:
+   - Add `operationalPostureId: String = "STANDARD"` and `activeRaidWeakenedPercent: Int = 0` to `OutpostStateEntity`; bump Room schema version with destructive migration fallback.
+3. **`/app/src/main/java/com/example/domain/OutpostCalculator.kt`**:
+   - Implement the **Days 1–10 Early Bunker Grace Window** (50% lower room/vault upkeep in Days 1–10, `+6%/2m` softer dweller appetite escalation in Days 1–10, and Deficit Game Over grace in Days 1–3).
+   - Apply `VaultOperationalPosture` multipliers (`ECO_CONSERVATION` cuts Vault & Room resource drain by `-40%` so players can immediately recover from resource deficit).
+   - Integrate Room #9 (`GEOTHERMAL_TAP` `+6.0 MW/Lv`) and Room #10 (`CRYO_STASIS_VAULT` `-8%/Lv` dweller food/water upkeep & `+350/Lv` storage).
+   - Compute named Day 10/20/30/40+ Boss Siege profiles and tactical countermeasure reductions.
+4. **`/app/src/main/java/com/example/viewmodel/OutpostViewModel.kt`**:
+   - Add actions: `setOperationalPosture(posture)`, `executeSiegeCountermeasure(type)`, and `callEmergencyReliefDrop()`.
+   - Reduce `dwellerAppetiteEscalationSeconds` by 1 tier (`-120s`) whenever a 5-minute feeding cycle completes with sufficient food & water.
+5. **`/app/src/main/java/com/example/ui/components/VaultCutawayMapCard.kt`**, **`OutpostTabScreen.kt`**, & **`CraftHuntDefenseTabScreen.kt`**:
+   - Render Floor B5 rooms in the 2D Vault Cutaway Map with animated geothermal/cryo effects and haptic feedback.
+   - Add the **Vault Operational Posture Switcher (`ECO / STD / OVERCLOCK`)** and **Emergency Supply Air-Drop** button to `OutpostTabScreen`.
+   - Add the **3 Tactical Siege Countermeasure buttons (`FLAK VOLLEY`, `EMP PULSE`, `DOOR WELD`)** to active raid/boss cards in `CraftHuntDefenseTabScreen`.
+6. **`/app/src/test/java/com/example/ExampleUnitTest.kt`**:
+   - Add unit tests covering the Days 1–10 forgiving grace window, `ECO_CONSERVATION` posture deficit recovery, Rooms #9 & #10 benefits, and Tactical Siege Countermeasures.

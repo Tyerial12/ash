@@ -73,8 +73,12 @@ class OutpostRepository(private val dao: OutpostDao) {
         dao.upsertSkillNodes(resetSkills)
     }
 
-    suspend fun resetEntireGame(): OutpostStateEntity {
+    suspend fun resetEntireGame(keepPrestige: Boolean = false): OutpostStateEntity {
+        val current = dao.getOutpostStateOnce()
         val freshState = OutpostStateEntity(
+            prestigeLevel = if (keepPrestige) (current?.prestigeLevel ?: 0) else 0,
+            prestigeCores = if (keepPrestige) (current?.prestigeCores ?: 0) else 0,
+            totalPrestigeCoresEarned = if (keepPrestige) (current?.totalPrestigeCoresEarned ?: 0) else 0,
             lastSavedTimestampMillis = System.currentTimeMillis()
         )
         dao.upsertOutpostState(freshState)
@@ -91,14 +95,24 @@ class OutpostRepository(private val dao: OutpostDao) {
             )
         }
         dao.upsertWorkerClasses(resetWorkers)
+        val existingSkills = dao.getSkillNodesOnce().associateBy { it.nodeId }
         val resetSkills = SkillTreeCatalog.nodes.map { node ->
-            SkillNodeEntity(nodeId = node.id, currentRank = 0)
+            val rank = if (keepPrestige && node.id.startsWith("LEG_")) {
+                existingSkills[node.id]?.currentRank ?: 0
+            } else {
+                0
+            }
+            SkillNodeEntity(nodeId = node.id, currentRank = rank)
         }
         dao.upsertSkillNodes(resetSkills)
         dao.insertLog(
             EventLogEntity(
                 category = "RESTART",
-                message = "Game Restarted! Day 1: You start fresh in an empty broken Vault with your Rusty Pickaxe."
+                message = if (keepPrestige) {
+                    "Legacy Restart! Day 1: Vault reset while preserving Prestige Rank ${freshState.prestigeLevel} & ${freshState.prestigeCores} Prestige Cores."
+                } else {
+                    "Full Fresh Restart! Day 1: You start fresh in an empty broken Vault with your Rusty Pickaxe."
+                }
             )
         )
         return freshState
