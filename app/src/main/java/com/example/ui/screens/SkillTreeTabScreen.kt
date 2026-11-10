@@ -71,6 +71,8 @@ fun SkillTreeTabScreen(
     uiState: OutpostUiState,
     onUnlockSkill: (SkillNodeDefinition) -> Unit,
     onPerformPrestige: () -> Unit = {},
+    isGoogleSignedIn: Boolean = true,
+    onRequestGoogleSignIn: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedBranch by remember { mutableStateOf(SkillBranch.INDUSTRIAL_SALVAGE) }
@@ -79,8 +81,8 @@ fun SkillTreeTabScreen(
             .filter { it.branch == selectedBranch }
             .sortedBy { it.tier }
     }
-    val prestigePreview = remember(uiState.state, uiState.buildingsMap) {
-        OutpostCalculator.computePrestigePreview(uiState.state, uiState.buildingsMap)
+    val prestigePreview = remember(uiState.state, uiState.buildingsMap, uiState.skillsMap) {
+        OutpostCalculator.computePrestigePreview(uiState.state, uiState.buildingsMap, uiState.skillsMap)
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -196,6 +198,8 @@ fun SkillTreeTabScreen(
                     coresToEarn = prestigePreview.coresToEarn,
                     nextAllYieldBonusPercent = ((prestigePreview.nextPrestigeMultiplier - 1.0) * 100.0).toInt(),
                     requirementText = prestigePreview.requirementSummary,
+                    isGoogleSignedIn = isGoogleSignedIn,
+                    onRequestGoogleSignIn = onRequestGoogleSignIn,
                     onPerformPrestige = onPerformPrestige
                 )
             }
@@ -242,12 +246,14 @@ private fun OverseerAscensionPrestigeCard(
     coresToEarn: Int,
     nextAllYieldBonusPercent: Int,
     requirementText: String,
+    isGoogleSignedIn: Boolean = true,
+    onRequestGoogleSignIn: () -> Unit = {},
     onPerformPrestige: () -> Unit
 ) {
     Surface(
         color = SteelPanel,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.5.dp, if (canPrestige) XpGold else PanelBorder),
+        border = BorderStroke(1.5.dp, if (canPrestige && isGoogleSignedIn) XpGold else PanelBorder),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("prestige_ascend_card")
@@ -267,9 +273,9 @@ private fun OverseerAscensionPrestigeCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.AutoAwesome,
+                        imageVector = if (isGoogleSignedIn) Icons.Default.AutoAwesome else Icons.Default.Lock,
                         contentDescription = "Overseer Ascension Prestige",
-                        tint = XpGold,
+                        tint = if (isGoogleSignedIn) XpGold else SolarAmber,
                         modifier = Modifier.size(22.dp)
                     )
                     Column {
@@ -280,9 +286,13 @@ private fun OverseerAscensionPrestigeCard(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Reset Vault Rooms & Day Counter to earn Permanent Prestige Cores & +25% Global Yield/Tier. All Skill Tree Ranks & Unique Dwellers persist!",
+                            text = if (isGoogleSignedIn) {
+                                "Reset Vault Rooms & Day Counter to earn Permanent Prestige Cores & +25% Global Yield/Tier. All Skill Tree Ranks & Unique Dwellers persist!"
+                            } else {
+                                "GOOGLE SIGN-IN REQUIRED FOR PRESTIGE: You can play offline without logging in, but Google Sign-In is required to Prestige, Save Progress to Cloud & use Multiplayer!"
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
+                            color = if (isGoogleSignedIn) TextSecondary else SolarAmber
                         )
                     }
                 }
@@ -297,35 +307,55 @@ private fun OverseerAscensionPrestigeCard(
                     Text(
                         text = "Reward: +$coresToEarn Prestige Cores • Next Global Bonus: +$nextAllYieldBonusPercent% All Yields",
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (canPrestige) SurplusGreen else SolarAmber,
+                        color = if (canPrestige && isGoogleSignedIn) SurplusGreen else SolarAmber,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = requirementText,
+                        text = if (isGoogleSignedIn) requirementText else "Sign in with Google to unlock Overseer Ascension Prestige & Cloud Sync",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextMuted
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onPerformPrestige,
-                    enabled = canPrestige,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = XpGold,
-                        contentColor = BunkerCharcoal,
-                        disabledContainerColor = ElevatedSlate,
-                        disabledContentColor = TextMuted
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .height(48.dp)
-                        .testTag("prestige_ascend_button")
-                ) {
-                    Text(
-                        text = if (canPrestige) "ASCEND (+$coresToEarn ★)" else "LOCKED",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                if (!isGoogleSignedIn) {
+                    Button(
+                        onClick = onRequestGoogleSignIn,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SolarAmber,
+                            contentColor = BunkerCharcoal
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .height(48.dp)
+                            .testTag("prestige_google_sign_in_button")
+                    ) {
+                        Text(
+                            text = "GOOGLE SIGN-IN",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onPerformPrestige,
+                        enabled = canPrestige,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = XpGold,
+                            contentColor = BunkerCharcoal,
+                            disabledContainerColor = ElevatedSlate,
+                            disabledContentColor = TextMuted
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .height(48.dp)
+                            .testTag("prestige_ascend_button")
+                    ) {
+                        Text(
+                            text = if (canPrestige) "ASCEND (+$coresToEarn ★)" else "LOCKED",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

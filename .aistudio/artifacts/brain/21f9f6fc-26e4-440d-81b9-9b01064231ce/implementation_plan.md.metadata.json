@@ -1,6 +1,6 @@
 {
-  "summary":  "Updated implementation plan built on the current Vault City game state: (1) Forgiving Days 1-10 Early-Game Grace & Rebalanced Resource/Dweller Upkeep with Eco-Conservation Mode to escape Resource Deficits, (2) Deeper 10-Day Boss Siege Combat with 3 Tactical Countermeasures (EMP Pulse, Flak Volley, Emergency Door Seal), (3) 2 New Deep-Core B5 Vault Rooms (#9 Geothermal Tap & #10 Cryo-Stasis Vault) + Room Specialization Modes, (4) Expanded Wasteland Expeditions & Apex Boss Hunts, and (5) Enhanced 2D Vault B5 Cutaway Visuals, CRT Radar Sweep Animations & Haptic Alerts.",
-  "updatedAt":  "2026-11-09T14:11:10.582629857Z",
+  "summary":  "Comprehensive replan of Vault City around a 6-tab hardcore survival architecture (Mining, Building, Hunting, Vault Stats, Resources, and Crew & Power), gradual Level 0-to-10+ room progression, hardcore mining/building/hunting hazards, and background phone notifications when the game is not loaded.",
+  "updatedAt":  "2026-11-09T20:36:51.036527442Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

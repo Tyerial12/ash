@@ -85,6 +85,11 @@ fun TradePowerTabScreen(
     onPublishVault: () -> Unit = {},
     onBroadcastSupplyDrop: () -> Unit = {},
     onClaimSupplyDrop: (PublicSupplyDrop) -> Unit = {},
+    isGoogleSignedIn: Boolean = true,
+    userEmail: String? = null,
+    authErrorMessage: String? = null,
+    onRequestGoogleSignIn: () -> Unit = {},
+    onSignOutGoogle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
@@ -240,71 +245,78 @@ fun TradePowerTabScreen(
             item(key = "public_network_header_card") {
                 PublicWastelandNetworkCard(
                     uiState = uiState,
+                    isGoogleSignedIn = isGoogleSignedIn,
+                    userEmail = userEmail,
+                    authErrorMessage = authErrorMessage,
+                    onRequestGoogleSignIn = onRequestGoogleSignIn,
+                    onSignOutGoogle = onSignOutGoogle,
                     onPublishVault = onPublishVault,
                     onBroadcastSupplyDrop = onBroadcastSupplyDrop
                 )
             }
 
-            item(key = "public_supply_drops_header") {
-                Text(
-                    text = "LIVE PUBLIC SUPPLY DROPS (${uiState.publicSupplyDrops.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = SurplusGreen,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            if (uiState.publicSupplyDrops.isEmpty()) {
-                item(key = "no_supply_drops") {
-                    Surface(
-                        color = BunkerSlate,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "No unclaimed supply drops in orbit. Broadcast a care package above to aid fellow Overseers!",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMutedAsh,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-            } else {
-                items(uiState.publicSupplyDrops, key = { "drop_${it.id}" }) { drop ->
-                    PublicSupplyDropCard(
-                        drop = drop,
-                        onClaim = { onClaimSupplyDrop(drop) }
+            if (isGoogleSignedIn) {
+                item(key = "public_supply_drops_header") {
+                    Text(
+                        text = "LIVE MULTIPLAYER SUPPLY DROPS (${uiState.publicSupplyDrops.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = SurplusGreen,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            }
 
-            item(key = "public_leaderboard_header") {
-                Text(
-                    text = "GLOBAL OVERSEER VAULT LEADERBOARD (${uiState.publicVaults.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = XpGold,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            if (uiState.publicVaults.isEmpty()) {
-                item(key = "no_public_vaults") {
-                    Surface(
-                        color = BunkerSlate,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "No Vaults published yet. Click PUBLISH VAULT above to broadcast your shelter to the global Wasteland!",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMutedAsh,
-                            modifier = Modifier.padding(12.dp)
+                if (uiState.publicSupplyDrops.isEmpty()) {
+                    item(key = "no_supply_drops") {
+                        Surface(
+                            color = BunkerSlate,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "No unclaimed supply drops in orbit. Broadcast a care package above to aid fellow Overseers!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMutedAsh,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                } else {
+                    items(uiState.publicSupplyDrops, key = { "drop_${it.id}" }) { drop ->
+                        PublicSupplyDropCard(
+                            drop = drop,
+                            onClaim = { onClaimSupplyDrop(drop) }
                         )
                     }
                 }
-            } else {
-                itemsIndexed(uiState.publicVaults, key = { _, v -> "vault_${v.id.ifBlank { v.userId }}" }) { index, entry ->
-                    PublicLeaderboardEntryCard(rank = index + 1, entry = entry)
+
+                item(key = "public_leaderboard_header") {
+                    Text(
+                        text = "GLOBAL MULTIPLAYER VAULT LEADERBOARD (${uiState.publicVaults.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = XpGold,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (uiState.publicVaults.isEmpty()) {
+                    item(key = "no_public_vaults") {
+                        Surface(
+                            color = BunkerSlate,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "No Vaults published yet. Click SAVE VAULT TO CLOUD above to broadcast your shelter to the global Wasteland!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMutedAsh,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                } else {
+                    itemsIndexed(uiState.publicVaults, key = { _, v -> "vault_${v.id.ifBlank { v.userId }}" }) { index, entry ->
+                        PublicLeaderboardEntryCard(rank = index + 1, entry = entry)
+                    }
                 }
             }
         }
@@ -314,6 +326,11 @@ fun TradePowerTabScreen(
 @Composable
 private fun PublicWastelandNetworkCard(
     uiState: OutpostUiState,
+    isGoogleSignedIn: Boolean = true,
+    userEmail: String? = null,
+    authErrorMessage: String? = null,
+    onRequestGoogleSignIn: () -> Unit = {},
+    onSignOutGoogle: () -> Unit = {},
     onPublishVault: () -> Unit,
     onBroadcastSupplyDrop: () -> Unit
 ) {
@@ -321,75 +338,136 @@ private fun PublicWastelandNetworkCard(
     val canBroadcastDrop = state.scrap >= 30.0 && state.rations >= 15.0 && state.water >= 15.0
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("cloud_multiplayer_network_card"),
         shape = RoundedCornerShape(14.dp),
         color = ElevatedSteel
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, RadTeal.copy(alpha = 0.65f), RoundedCornerShape(14.dp))
+                .border(1.dp, if (isGoogleSignedIn) RadTeal.copy(alpha = 0.65f) else SolarAmber, RoundedCornerShape(14.dp))
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "PUBLIC WASTELAND SATELLITE UPLINK",
-                style = MaterialTheme.typography.titleSmall,
-                color = RadTeal,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Sync your Vault City stats to the live global leaderboard or launch a supply drop care package (+30 Scrap, +15 Food, +15 Water) for other players (+35 XP & +10 Gold reward).",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextMutedAsh
-            )
-
-            uiState.publicNetworkFeedback?.let { msg ->
-                Text(
-                    text = msg,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SurplusGreen,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(
+                    text = if (isGoogleSignedIn) {
+                        "CLOUD SAVE & MULTIPLAYER SATELLITE UPLINK (ONLINE)"
+                    } else {
+                        "GOOGLE SIGN-IN REQUIRED FOR CLOUD SAVE, PRESTIGE & MULTIPLAYER"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (isGoogleSignedIn) RadTeal else SolarAmber,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isGoogleSignedIn) {
+                    OutlinedButton(
+                        onClick = onSignOutGoogle,
+                        modifier = Modifier
+                            .height(48.dp)
+                            .testTag("google_sign_out_button"),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("SIGN OUT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            if (!isGoogleSignedIn) {
+                Text(
+                    text = "You are playing in Local Offline Mode. Without logging into Google, you cannot Prestige, Save Progress to the Cloud, or use Multiplayer (Supply Drops & Global Leaderboard).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMutedAsh
+                )
+                authErrorMessage?.let { err ->
+                    Text(
+                        text = err,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HazardRed,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Button(
-                    onClick = onPublishVault,
+                    onClick = onRequestGoogleSignIn,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = RadTeal,
+                        containerColor = SolarAmber,
                         contentColor = ObsidianCharcoal
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .height(48.dp)
-                        .testTag("publish_vault_button")
+                        .testTag("google_sign_in_button")
                 ) {
-                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("PUBLISH VAULT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "SIGN IN WITH GOOGLE (UNLOCK PRESTIGE, CLOUD SAVE & MULTIPLAYER)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Text(
+                    text = "Signed in as ${userEmail ?: "Google Overseer"} • Save your Vault progress to the Cloud, Prestige, or trade Multiplayer Supply Drops!",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMutedAsh
+                )
+
+                uiState.publicNetworkFeedback?.let { msg ->
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SurplusGreen,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
-                Button(
-                    onClick = onBroadcastSupplyDrop,
-                    enabled = canBroadcastDrop,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = SurplusGreen,
-                        contentColor = ObsidianCharcoal
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .testTag("broadcast_supply_drop_button")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.CardGiftcard, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("SEND DROP (30S/15F/15W)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = onPublishVault,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = RadTeal,
+                            contentColor = ObsidianCharcoal
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("publish_vault_button")
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("SAVE VAULT TO CLOUD", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = onBroadcastSupplyDrop,
+                        enabled = canBroadcastDrop,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SurplusGreen,
+                            contentColor = ObsidianCharcoal
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("broadcast_supply_drop_button")
+                    ) {
+                        Icon(Icons.Default.CardGiftcard, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("SEND DROP (30S/15F/15W)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -962,6 +1040,12 @@ private fun PowerStationCard(
                         text = "+${station.baseMegawattsPerLevel.toInt()} MW/Lv • ${station.description}",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextMutedAsh
+                    )
+                    Text(
+                        text = "🔥 Reactor Fuel Burn: -${cost.currentFuelUpkeepPerSec}/s Fuel -> Lv.${cost.currentLevel + 1}: -${cost.nextLevelFuelUpkeepPerSec}/s Fuel (Higher reactor levels burn more fuel!)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WarningOrange,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
                 Surface(

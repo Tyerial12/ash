@@ -1,11 +1,16 @@
 package com.example
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -29,24 +34,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MilitaryTech
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Apartment
+import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Groups
-import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +69,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,14 +79,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.credentials.Credential
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.NoCredentialException
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.OutpostRepository
@@ -88,13 +97,14 @@ import com.example.data.remote.PublicVaultRepository
 import com.example.model.LevelUpBannerState
 import com.example.model.OfflineReport
 import com.example.model.ResourceType
+import com.example.notifications.VaultNotificationHelper
 import com.example.ui.components.WastelandSkyHeader
 import com.example.ui.components.formatCompact
 import com.example.ui.screens.CraftHuntDefenseTabScreen
+import com.example.ui.screens.CrewAndPowerTabScreen
+import com.example.ui.screens.CurrentResourcesTabScreen
 import com.example.ui.screens.OutpostTabScreen
-import com.example.ui.screens.SkillTreeTabScreen
-import com.example.ui.screens.SurvivorsTabScreen
-import com.example.ui.screens.TradePowerTabScreen
+import com.example.ui.screens.VaultStatsTabScreen
 import com.example.ui.theme.BioluminescentViolet
 import com.example.ui.theme.BunkerCharcoal
 import com.example.ui.theme.ElevatedSlate
@@ -110,7 +120,6 @@ import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WarningOrange
 import com.example.ui.theme.XpGold
 import com.example.viewmodel.OutpostViewModel
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
@@ -127,17 +136,19 @@ enum class OutpostDestination(
     val unselectedIcon: ImageVector,
     val tag: String
 ) {
-    OUTPOST(R.string.tab_outpost, Icons.Filled.Apartment, Icons.Outlined.Apartment, "nav_tab_outpost"),
-    ARMORY(R.string.tab_craft_hunt, Icons.Filled.Security, Icons.Outlined.Security, "nav_tab_armory"),
-    SURVIVORS(R.string.tab_survivors, Icons.Filled.Groups, Icons.Outlined.Groups, "nav_tab_survivors"),
-    NETWORK(R.string.tab_network, Icons.Filled.Public, Icons.Outlined.Public, "nav_tab_network"),
-    SKILL_TREE(R.string.tab_skill_tree, Icons.Filled.AccountTree, Icons.Outlined.AccountTree, "nav_tab_skills")
+    MINING(R.string.tab_mining, Icons.Filled.Gavel, Icons.Outlined.Gavel, "nav_tab_mining"),
+    BUILDING(R.string.tab_building, Icons.Filled.Apartment, Icons.Outlined.Apartment, "nav_tab_building"),
+    HUNTING(R.string.tab_hunting, Icons.Filled.Security, Icons.Outlined.Security, "nav_tab_hunting"),
+    VAULT_STATS(R.string.tab_vault_stats, Icons.Filled.Assessment, Icons.Outlined.Assessment, "nav_tab_vault_stats"),
+    RESOURCES(R.string.tab_resources, Icons.Filled.Inventory2, Icons.Outlined.Inventory2, "nav_tab_resources"),
+    CREW_POWER(R.string.tab_crew_power, Icons.Filled.Groups, Icons.Outlined.Groups, "nav_tab_crew_power")
 }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        VaultNotificationHelper.ensureNotificationChannel(applicationContext)
 
         val database = OutpostDatabase.getDatabase(applicationContext)
         val repository = OutpostRepository(database.outpostDao())
@@ -160,10 +171,20 @@ class MainActivity : ComponentActivity() {
 fun VaultAuthGate(
     viewModel: OutpostViewModel
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val auth = remember {
         runCatching { FirebaseAuth.getInstance() }.getOrNull()
     }
     var currentUser by remember { mutableStateOf<FirebaseUser?>(auth?.currentUser) }
+    var authErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    val credentialManager = remember {
+        runCatching { CredentialManager.create(context) }.getOrNull()
+    }
+    val webClientId = remember {
+        runCatching { context.getString(R.string.default_web_client_id) }.getOrDefault("")
+    }
 
     DisposableEffect(auth) {
         if (auth == null) {
@@ -177,6 +198,7 @@ fun VaultAuthGate(
         }
     }
 
+    // Only start Firestore Cloud Sync & Multiplayer listeners when signed into Google!
     LaunchedEffect(currentUser) {
         val user = currentUser
         if (user != null) {
@@ -187,199 +209,130 @@ fun VaultAuthGate(
         }
     }
 
-    if (auth != null && currentUser == null) {
-        GoogleSignInScreen(
-            auth = auth,
-            onSignedIn = { user ->
-                currentUser = user
-                viewModel.startPublicNetworkSync(
-                    userId = user.uid,
-                    overseerName = user.displayName ?: "Overseer"
-                )
-            }
-        )
-    } else {
-        AshfallOutpostApp(
-            viewModel = viewModel,
-            overseerName = currentUser?.displayName ?: "Overseer",
-            userId = currentUser?.uid ?: "local"
-        )
-    }
-}
-
-@Composable
-fun GoogleSignInScreen(
-    auth: FirebaseAuth,
-    onSignedIn: (FirebaseUser) -> Unit
-) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val credentialManager = remember { CredentialManager.create(context) }
-    val webClientId = remember { context.getString(R.string.default_web_client_id) }
-
     suspend fun handleSignInResult(credential: Credential) {
+        if (auth == null) {
+            authErrorMessage = "Cloud authentication is unavailable on this device."
+            return
+        }
         if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
             val firebaseCredential = GoogleAuthProvider.getCredential(googleIdTokenCredential.idToken, null)
             val authResult = auth.signInWithCredential(firebaseCredential).await()
-            authResult.user?.let(onSignedIn)
+            currentUser = authResult.user
+            authErrorMessage = null
         } else {
-            errorMessage = "Unexpected credential type."
+            authErrorMessage = "Unexpected credential type."
         }
     }
 
-    suspend fun launchBottomSheetSignIn(activityContext: Context) {
-        try {
-            val googleIdOption = GetGoogleIdOption.Builder()
-                .setServerClientId(webClientId)
-                .setFilterByAuthorizedAccounts(false)
-                .setAutoSelectEnabled(true)
-                .build()
-            val request = GetCredentialRequest.Builder()
-                .addCredentialOption(googleIdOption)
-                .build()
-            val result = credentialManager.getCredential(activityContext, request)
-            handleSignInResult(result.credential)
-        } catch (_: NoCredentialException) {
-            // Silent check found no saved credentials; user can tap button
-        } catch (_: GetCredentialCancellationException) {
-            // User dismissed bottom sheet
-        } catch (e: Exception) {
-            errorMessage = e.localizedMessage
+    fun launchGoogleSignIn(activityContext: Context) {
+        if (credentialManager == null || webClientId.isBlank()) {
+            authErrorMessage = "Google Sign-In client not configured."
+            return
         }
-    }
-
-    suspend fun launchButtonSignIn(activityContext: Context) {
-        isLoading = true
-        errorMessage = null
-        try {
-            val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(
-                serverClientId = webClientId
-            ).build()
-            val request = GetCredentialRequest.Builder()
-                .addCredentialOption(signInWithGoogleOption)
-                .build()
-            val result = credentialManager.getCredential(activityContext, request)
-            handleSignInResult(result.credential)
-        } catch (_: GetCredentialCancellationException) {
-            // User cancelled
-        } catch (e: Exception) {
-            errorMessage = e.localizedMessage ?: "Google Sign-In failed."
-        } finally {
-            isLoading = false
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        launchBottomSheetSignIn(context)
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = BunkerCharcoal
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                color = SteelPanel,
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.5.dp, SolarAmber),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 420.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Public,
-                        contentDescription = "Vault City Satellite Network",
-                        tint = SolarAmber,
-                        modifier = Modifier.size(44.dp)
-                    )
-                    Text(
-                        text = "VAULT CITY PUBLIC OVERSEER NETWORK",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = SolarAmber,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "Sign in with Google to connect your underground shelter to the live Global Wasteland Leaderboard, broadcast public supply drops, and sync Overseer Ascension.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center
-                    )
-
-                    errorMessage?.let { msg ->
-                        Text(
-                            text = msg,
-                            color = HazardRed,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                launchButtonSignIn(context)
-                            }
-                        },
-                        enabled = !isLoading,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SolarAmber,
-                            contentColor = BunkerCharcoal
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("google_sign_in_button")
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = BunkerCharcoal
-                            )
-                        } else {
-                            Text(
-                                text = "Sign in with Google",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
+        coroutineScope.launch {
+            authErrorMessage = null
+            try {
+                val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(
+                    serverClientId = webClientId
+                ).build()
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(signInWithGoogleOption)
+                    .build()
+                val result = credentialManager.getCredential(activityContext, request)
+                handleSignInResult(result.credential)
+            } catch (_: GetCredentialCancellationException) {
+                // User cancelled Google Sign-In dialog
+            } catch (e: Exception) {
+                authErrorMessage = e.localizedMessage ?: "Google Sign-In failed."
             }
         }
     }
+
+    // You do NOT have to log into Google to play the game!
+    // Without Google Sign-In, Prestige, Cloud Save, and Multiplayer are gated.
+    AshfallOutpostApp(
+        viewModel = viewModel,
+        isGoogleSignedIn = currentUser != null,
+        overseerName = currentUser?.displayName ?: "Overseer",
+        userEmail = currentUser?.email ?: currentUser?.displayName,
+        userId = currentUser?.uid ?: "local",
+        authErrorMessage = authErrorMessage,
+        onRequestGoogleSignIn = { launchGoogleSignIn(context) },
+        onSignOutGoogle = {
+            auth?.signOut()
+            currentUser = null
+            viewModel.stopPublicNetworkSync()
+        }
+    )
 }
 
 @Composable
 fun AshfallOutpostApp(
     viewModel: OutpostViewModel,
+    isGoogleSignedIn: Boolean = false,
     overseerName: String = "Overseer",
-    userId: String = "local"
+    userEmail: String? = null,
+    userId: String = "local",
+    authErrorMessage: String? = null,
+    onRequestGoogleSignIn: () -> Unit = {},
+    onSignOutGoogle: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var currentTab by rememberSaveable { mutableStateOf(OutpostDestination.OUTPOST) }
+    val latestUiState by rememberUpdatedState(uiState)
+
+    var currentTab by rememberSaveable { mutableStateOf(OutpostDestination.MINING) }
     var showRestartDialog by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler(enabled = currentTab != OutpostDestination.OUTPOST) {
-        currentTab = OutpostDestination.OUTPOST
+    // Request POST_NOTIFICATIONS runtime permission on Android 13+ so offline phone alerts can post
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                runCatching {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        }
+    }
+
+    // Schedule offline phone notifications when the game leaves foreground (ON_STOP)
+    // and cancel pending alarms when the game is loaded (ON_START)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    VaultNotificationHelper.cancelScheduledOfflineNotifications(context)
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    val snapshotState = latestUiState
+                    VaultNotificationHelper.scheduleOfflineNotifications(
+                        context = context,
+                        state = snapshotState.state,
+                        production = snapshotState.production,
+                        activeConstruction = snapshotState.activeConstruction
+                    )
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    BackHandler(enabled = currentTab != OutpostDestination.MINING) {
+        currentTab = OutpostDestination.MINING
     }
 
     val state = uiState.state
@@ -391,13 +344,19 @@ fun AshfallOutpostApp(
             commandLevel = state.commandLevel,
             prestigeCores = state.prestigeCores,
             reason = state.gameOverReason,
+            isGoogleSignedIn = isGoogleSignedIn,
+            onRequestGoogleSignIn = onRequestGoogleSignIn,
             onFullReset = {
                 showRestartDialog = false
                 viewModel.restartGame(keepPrestige = false)
             },
             onLegacyReset = {
-                showRestartDialog = false
-                viewModel.restartGame(keepPrestige = true)
+                if (isGoogleSignedIn) {
+                    showRestartDialog = false
+                    viewModel.restartGame(keepPrestige = true)
+                } else {
+                    onRequestGoogleSignIn()
+                }
             }
         )
     } else if (showRestartDialog) {
@@ -405,14 +364,20 @@ fun AshfallOutpostApp(
             dayCounter = state.dayCounter,
             commandLevel = state.commandLevel,
             prestigeCores = state.prestigeCores,
+            isGoogleSignedIn = isGoogleSignedIn,
+            onRequestGoogleSignIn = onRequestGoogleSignIn,
             onDismiss = { showRestartDialog = false },
             onFullReset = {
                 showRestartDialog = false
                 viewModel.restartGame(keepPrestige = false)
             },
             onLegacyReset = {
-                showRestartDialog = false
-                viewModel.restartGame(keepPrestige = true)
+                if (isGoogleSignedIn) {
+                    showRestartDialog = false
+                    viewModel.restartGame(keepPrestige = true)
+                } else {
+                    onRequestGoogleSignIn()
+                }
             }
         )
     }
@@ -446,51 +411,81 @@ fun AshfallOutpostApp(
                         icon = {
                             BadgedBox(
                                 badge = {
-                                    if (dest == OutpostDestination.OUTPOST && (prod.isVaultBlackout || prod.isVaultResourceDeficit || prod.isWorkersStarvingOrDehydrated || state.rawSalvageCaches > 0)) {
-                                        Badge(
-                                            containerColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit || prod.isWorkersStarvingOrDehydrated) HazardRed else SolarAmber,
-                                            contentColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit || prod.isWorkersStarvingOrDehydrated) TextPrimary else BunkerCharcoal
-                                        ) {
-                                            Text(
-                                                when {
-                                                    prod.isVaultResourceDeficit -> "DEF!"
-                                                    prod.isVaultBlackout -> "MW!"
-                                                    prod.isWorkersStarvingOrDehydrated -> "FOOD!"
-                                                    else -> "${state.rawSalvageCaches}"
+                                    when (dest) {
+                                        OutpostDestination.MINING -> {
+                                            if (state.activeCaveInHazard || state.pickaxeDurabilityPercent <= 25) {
+                                                Badge(containerColor = HazardRed, contentColor = TextPrimary) {
+                                                    Text(if (state.activeCaveInHazard) "CAVE!" else "DULL")
                                                 }
-                                            )
+                                            }
                                         }
-                                    } else if (dest == OutpostDestination.ARMORY && (uiState.activeRaidThreat != null || state.needsDefenseRepair || uiState.activeDoorUpgrade != null || prod.isDefenseShutDownByDeficit)) {
-                                        Badge(
-                                            containerColor = if (uiState.activeRaidThreat != null || prod.isDefenseShutDownByDeficit) HazardRed else WarningOrange,
-                                            contentColor = TextPrimary
-                                        ) {
-                                            Text(
-                                                when {
-                                                    prod.isDefenseShutDownByDeficit -> "0 DEF"
-                                                    uiState.activeRaidThreat != null -> "!"
-                                                    uiState.activeDoorUpgrade != null -> "${uiState.activeDoorUpgrade?.remainingSeconds ?: 0}s"
-                                                    else -> "FIX"
+                                        OutpostDestination.BUILDING -> {
+                                            if (state.activePipeLeaksCount > 0 || uiState.activeConstruction != null) {
+                                                Badge(
+                                                    containerColor = if (state.activePipeLeaksCount > 0) HazardRed else SolarAmber,
+                                                    contentColor = if (state.activePipeLeaksCount > 0) TextPrimary else BunkerCharcoal
+                                                ) {
+                                                    Text(
+                                                        if (state.activePipeLeaksCount > 0) {
+                                                            "LEAK"
+                                                        } else {
+                                                            "${uiState.activeConstruction?.remainingSeconds ?: 0}s"
+                                                        }
+                                                    )
                                                 }
-                                            )
+                                            }
                                         }
-                                    } else if (dest == OutpostDestination.SURVIVORS && (idleSurvivors > 0 || canHireCandidate || uiState.activeExpedition != null)) {
-                                        Badge(containerColor = SurplusGreen, contentColor = BunkerCharcoal) {
-                                            Text(
-                                                when {
-                                                    uiState.activeExpedition != null -> "${uiState.activeExpedition?.remainingSeconds ?: 0}s"
-                                                    idleSurvivors > 0 -> "$idleSurvivors"
-                                                    else -> "!"
+                                        OutpostDestination.HUNTING -> {
+                                            if (uiState.activeRaidThreat != null || state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 || state.needsDefenseRepair) {
+                                                Badge(containerColor = HazardRed, contentColor = TextPrimary) {
+                                                    Text(
+                                                        when {
+                                                            uiState.activeRaidThreat != null -> "RAID"
+                                                            state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 -> "BLEED"
+                                                            else -> "FIX"
+                                                        }
+                                                    )
                                                 }
-                                            )
+                                            }
                                         }
-                                    } else if (dest == OutpostDestination.NETWORK && uiState.publicSupplyDrops.isNotEmpty()) {
-                                        Badge(containerColor = SurplusGreen, contentColor = BunkerCharcoal) {
-                                            Text("${uiState.publicSupplyDrops.size}")
+                                        OutpostDestination.VAULT_STATS -> {
+                                            if (prod.isVaultBlackout || prod.isVaultResourceDeficit || state.availableSkillPoints > 0) {
+                                                Badge(
+                                                    containerColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit) HazardRed else RadTeal,
+                                                    contentColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit) TextPrimary else BunkerCharcoal
+                                                ) {
+                                                    Text(
+                                                        when {
+                                                            prod.isVaultBlackout -> "MW!"
+                                                            prod.isVaultResourceDeficit -> "DEF!"
+                                                            else -> "${state.availableSkillPoints}SP"
+                                                        }
+                                                    )
+                                                }
+                                            }
                                         }
-                                    } else if (dest == OutpostDestination.SKILL_TREE && (state.availableSkillPoints > 0 || state.prestigeCores > 0)) {
-                                        Badge(containerColor = RadTeal, contentColor = BunkerCharcoal) {
-                                            Text("${state.availableSkillPoints + state.prestigeCores}")
+                                        OutpostDestination.RESOURCES -> {
+                                            if (!prod.isMakingPositiveResources || state.rawSalvageCaches > 0) {
+                                                Badge(
+                                                    containerColor = if (!prod.isMakingPositiveResources) WarningOrange else SurplusGreen,
+                                                    contentColor = BunkerCharcoal
+                                                ) {
+                                                    Text(if (!prod.isMakingPositiveResources) "-/s" else "${state.rawSalvageCaches}")
+                                                }
+                                            }
+                                        }
+                                        OutpostDestination.CREW_POWER -> {
+                                            if (idleSurvivors > 0 || canHireCandidate || uiState.activeExpedition != null) {
+                                                Badge(containerColor = SurplusGreen, contentColor = BunkerCharcoal) {
+                                                    Text(
+                                                        when {
+                                                            uiState.activeExpedition != null -> "${uiState.activeExpedition?.remainingSeconds ?: 0}s"
+                                                            idleSurvivors > 0 -> "$idleSurvivors"
+                                                            else -> "!"
+                                                        }
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -505,7 +500,8 @@ fun AshfallOutpostApp(
                             Text(
                                 text = stringResource(dest.labelRes),
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -556,7 +552,7 @@ fun AshfallOutpostApp(
 
                 Box(modifier = Modifier.weight(1f)) {
                     when (currentTab) {
-                        OutpostDestination.OUTPOST -> OutpostTabScreen(
+                        OutpostDestination.MINING -> OutpostTabScreen(
                             uiState = uiState,
                             onHarvestNode = viewModel::harvestSalvageNode,
                             onDismantleCaches = viewModel::dismantleSalvageCache,
@@ -578,9 +574,43 @@ fun AshfallOutpostApp(
                             onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
                             onSetOperationalPosture = viewModel::setOperationalPosture,
                             onCallEmergencyReliefDrop = viewModel::callEmergencyReliefDrop,
-                            onRequestRestartGame = { showRestartDialog = true }
+                            onRequestRestartGame = { showRestartDialog = true },
+                            onSharpenPickaxe = viewModel::sharpenPickaxe,
+                            onCoolMiningShaft = viewModel::coolMiningShaft,
+                            onClearCaveIn = viewModel::clearCaveInHazard,
+                            onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
+                            initialSubViewName = "MINE"
                         )
-                        OutpostDestination.ARMORY -> CraftHuntDefenseTabScreen(
+                        OutpostDestination.BUILDING -> OutpostTabScreen(
+                            uiState = uiState,
+                            onHarvestNode = viewModel::harvestSalvageNode,
+                            onDismantleCaches = viewModel::dismantleSalvageCache,
+                            onSmeltSalvageForGold = viewModel::smeltSalvageForGold,
+                            onProspectRichVein = viewModel::prospectRichVein,
+                            onUpgradeSalvageRig = viewModel::upgradeSalvageRig,
+                            onUpgradeBuilding = viewModel::upgradeBuilding,
+                            onAccelerateConstruction = viewModel::accelerateBuildingConstruction,
+                            onRushConstruction = viewModel::rushBuildingConstructionWithGold,
+                            onUpgradePowerStation = viewModel::upgradePowerStation,
+                            onCrankDynamo = viewModel::crankEmergencyDynamo,
+                            onMaintainGenerators = viewModel::maintainGenerators,
+                            onScrubAir = viewModel::scrubVaultAirManual,
+                            onFlushRadiation = viewModel::useRadAway,
+                            onAdvanceDay = viewModel::advanceDayManually,
+                            onClaimAnomaly = viewModel::claimRareAnomaly,
+                            onWalkToStation = viewModel::walkOverseerToStation,
+                            onFishSpot = viewModel::executeFishing,
+                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
+                            onSetOperationalPosture = viewModel::setOperationalPosture,
+                            onCallEmergencyReliefDrop = viewModel::callEmergencyReliefDrop,
+                            onRequestRestartGame = { showRestartDialog = true },
+                            onSharpenPickaxe = viewModel::sharpenPickaxe,
+                            onCoolMiningShaft = viewModel::coolMiningShaft,
+                            onClearCaveIn = viewModel::clearCaveInHazard,
+                            onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
+                            initialSubViewName = "ROOMS"
+                        )
+                        OutpostDestination.HUNTING -> CraftHuntDefenseTabScreen(
                             uiState = uiState,
                             onCraftItem = viewModel::craftItem,
                             onAccelerateCrafting = viewModel::accelerateItemCrafting,
@@ -595,19 +625,54 @@ fun AshfallOutpostApp(
                             onRushDoorUpgrade = viewModel::rushBlastDoorUpgradeWithGold,
                             onToggleAutoDefense = viewModel::toggleAutoDefense,
                             onUseMedkit = viewModel::useMedkit,
-                            onUseRadAway = viewModel::useRadAway
+                            onUseRadAway = viewModel::useRadAway,
+                            onTreatHuntingInjuries = viewModel::treatHuntingInjuries
                         )
-                        OutpostDestination.SURVIVORS -> SurvivorsTabScreen(
+                        OutpostDestination.VAULT_STATS -> VaultStatsTabScreen(
                             uiState = uiState,
+                            onSetPosture = viewModel::setOperationalPosture,
+                            onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
+                            onTreatHuntingInjuries = viewModel::treatHuntingInjuries,
+                            onUseMedkit = viewModel::useMedkit,
+                            onUseRadAway = viewModel::useRadAway,
+                            onEmergencyManualCrank = viewModel::crankEmergencyDynamo,
+                            onUnlockOrUpgradeSkill = viewModel::unlockOrUpgradeSkill,
+                            onPerformPrestige = {
+                                if (isGoogleSignedIn) {
+                                    viewModel.performOverseerPrestige()
+                                } else {
+                                    onRequestGoogleSignIn()
+                                }
+                            },
+                            isGoogleSignedIn = isGoogleSignedIn,
+                            onRequestGoogleSignIn = onRequestGoogleSignIn,
+                            onPublishVault = {
+                                if (isGoogleSignedIn) {
+                                    viewModel.publishMyVaultToNetwork(
+                                        overseerName = overseerName,
+                                        vaultName = "Vault City #${userId.take(4).uppercase()}"
+                                    )
+                                } else {
+                                    onRequestGoogleSignIn()
+                                }
+                            }
+                        )
+                        OutpostDestination.RESOURCES -> CurrentResourcesTabScreen(
+                            uiState = uiState,
+                            onDismantleCache = viewModel::dismantleSalvageCache,
+                            onSmeltGold = viewModel::smeltSalvageForGold,
+                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
+                            onSellResourceToTown = { town, res, amt -> viewModel.sellResourceToTown(town, res, amt) },
+                            onBuyRareSyndicateItem = viewModel::buyRareSyndicateItem
+                        )
+                        OutpostDestination.CREW_POWER -> CrewAndPowerTabScreen(
+                            uiState = uiState,
+                            onAssignWorker = viewModel::assignWorker,
                             onHireCandidate = viewModel::hireCandidate,
                             onRefreshBoard = viewModel::refreshHiringBoard,
                             onSendExpedition = viewModel::sendDwellerExpedition,
-                            onAdjustWorker = viewModel::assignWorker,
                             onToggleAutoShift = viewModel::toggleAutoShift,
-                            onOptimizeCrew = viewModel::optimizeCrewForCurrentPhase
-                        )
-                        OutpostDestination.NETWORK -> TradePowerTabScreen(
-                            uiState = uiState,
+                            onOptimizeCrewNow = viewModel::optimizeCrewForCurrentPhase,
                             onSellToTown = { town, res -> viewModel.sellResourceToTown(town, res) },
                             onBuyRareItem = viewModel::buyRareSyndicateItem,
                             onDispatchConvoy = viewModel::dispatchConvoy,
@@ -616,30 +681,42 @@ fun AshfallOutpostApp(
                             onInjectThoriumOverdrive = viewModel::injectThoriumRodOverdrive,
                             onTriggerSolarFlare = viewModel::triggerSolarFlare,
                             onTriggerEclipseShroud = viewModel::triggerEclipseShroud,
+                            isAuthenticated = isGoogleSignedIn,
+                            userEmail = userEmail,
+                            authErrorMessage = authErrorMessage,
+                            onSignInClick = onRequestGoogleSignIn,
+                            onSignOutClick = onSignOutGoogle,
                             onPublishVault = {
-                                viewModel.publishMyVaultToNetwork(
-                                    overseerName = overseerName,
-                                    vaultName = "Vault City #${userId.take(4).uppercase()}"
-                                )
+                                if (isGoogleSignedIn) {
+                                    viewModel.publishMyVaultToNetwork(
+                                        overseerName = overseerName,
+                                        vaultName = "Vault City #${userId.take(4).uppercase()}"
+                                    )
+                                } else {
+                                    onRequestGoogleSignIn()
+                                }
                             },
                             onBroadcastSupplyDrop = {
-                                viewModel.broadcastSupplyDrop(
-                                    senderName = overseerName,
-                                    resourceType = ResourceType.SCRAP,
-                                    amount = 30
-                                )
+                                if (isGoogleSignedIn) {
+                                    viewModel.broadcastSupplyDrop(
+                                        senderName = overseerName,
+                                        resourceType = ResourceType.SCRAP,
+                                        amount = 30
+                                    )
+                                } else {
+                                    onRequestGoogleSignIn()
+                                }
                             },
                             onClaimSupplyDrop = { drop ->
-                                viewModel.claimPublicSupplyDrop(
-                                    drop = drop,
-                                    claimerName = overseerName
-                                )
+                                if (isGoogleSignedIn) {
+                                    viewModel.claimPublicSupplyDrop(
+                                        drop = drop,
+                                        claimerName = overseerName
+                                    )
+                                } else {
+                                    onRequestGoogleSignIn()
+                                }
                             }
-                        )
-                        OutpostDestination.SKILL_TREE -> SkillTreeTabScreen(
-                            uiState = uiState,
-                            onUnlockSkill = viewModel::unlockOrUpgradeSkill,
-                            onPerformPrestige = viewModel::performOverseerPrestige
                         )
                     }
                 }
@@ -653,6 +730,8 @@ private fun RestartGameConfirmDialog(
     dayCounter: Int,
     commandLevel: Int,
     prestigeCores: Int,
+    isGoogleSignedIn: Boolean = false,
+    onRequestGoogleSignIn: () -> Unit = {},
     onDismiss: () -> Unit,
     onFullReset: () -> Unit,
     onLegacyReset: () -> Unit
@@ -694,7 +773,7 @@ private fun RestartGameConfirmDialog(
                     )
                 }
                 Button(
-                    onClick = onLegacyReset,
+                    onClick = if (isGoogleSignedIn) onLegacyReset else onRequestGoogleSignIn,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SolarAmber,
                         contentColor = BunkerCharcoal
@@ -706,7 +785,11 @@ private fun RestartGameConfirmDialog(
                         .testTag("confirm_restart_legacy_button")
                 ) {
                     Text(
-                        text = "KEEP PRESTIGE RESET ($prestigeCores CORES & LEGACY)",
+                        text = if (isGoogleSignedIn) {
+                            "KEEP PRESTIGE RESET ($prestigeCores CORES & LEGACY)"
+                        } else {
+                            "SIGN IN WITH GOOGLE TO PRESTIGE RESET"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -737,6 +820,8 @@ private fun VaultGameOverDialog(
     commandLevel: Int,
     prestigeCores: Int,
     reason: String,
+    isGoogleSignedIn: Boolean = false,
+    onRequestGoogleSignIn: () -> Unit = {},
     onFullReset: () -> Unit,
     onLegacyReset: () -> Unit
 ) {
@@ -776,7 +861,7 @@ private fun VaultGameOverDialog(
                     color = TextSecondary
                 )
                 Button(
-                    onClick = onLegacyReset,
+                    onClick = if (isGoogleSignedIn) onLegacyReset else onRequestGoogleSignIn,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SolarAmber,
                         contentColor = BunkerCharcoal
@@ -788,7 +873,11 @@ private fun VaultGameOverDialog(
                         .testTag("game_over_restart_legacy_button")
                 ) {
                     Text(
-                        text = "NEW VAULT (KEEP $prestigeCores PRESTIGE CORES)",
+                        text = if (isGoogleSignedIn) {
+                            "NEW VAULT (KEEP $prestigeCores PRESTIGE CORES)"
+                        } else {
+                            "SIGN IN WITH GOOGLE TO KEEP PRESTIGE CORES"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )

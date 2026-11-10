@@ -305,9 +305,47 @@ fun WastelandSkyHeader(
                 )
                 val appetitePct = ((production.dwellerUpkeepEscalationMultiplier - 1.0) * 100).roundToInt()
                 StatusMiniText(
-                    text = "🍖 5M FEED: ${state.dwellerFeedCycleSecondsRemaining}s (+$appetitePct%/2m)",
-                    color = if (state.dwellerFeedCycleSecondsRemaining <= 45 && state.totalSurvivors > 0) WarningOrange else CryoCyan
+                    text = "🍖 60S FEED: ${state.dwellerFeedCycleSecondsRemaining}s (+$appetitePct%/2m)",
+                    color = if (state.dwellerFeedCycleSecondsRemaining <= 15 && state.totalSurvivors > 0) WarningOrange else CryoCyan
                 )
+            }
+
+            // Always-Visible Net Resource Balance Readout (Positive Surplus vs Taking More Than Making)
+            val isPositiveBalance = production.isMakingPositiveResources
+            val netSign = if (production.netResourceBalancePerSec >= 0.0) "+" else ""
+            Surface(
+                color = (if (isPositiveBalance) SurplusGreen else HazardRed).copy(alpha = 0.16f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .testTag("header_net_resource_balance_badge"),
+                shape = RoundedCornerShape(6.dp),
+                border = BorderStroke(1.dp, if (isPositiveBalance) SurplusGreen.copy(alpha = 0.75f) else HazardRed)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isPositiveBalance) {
+                            "🟢 MAKING POSITIVE RESOURCES ($netSign${formatRate(production.netResourceBalancePerSec)}/s NET)"
+                        } else {
+                            "🔴 TAKING MORE THAN MAKING (${formatRate(production.netResourceBalancePerSec)}/s NET)"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isPositiveBalance) SurplusGreen else HazardRed,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s vs Drain -${formatRate(production.totalVaultResourceDrainPerSec)}/s • Cap ${production.storageCap.toInt()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
 
             if (production.isDefenseShutDownByDeficit || isBlackout) {
@@ -461,7 +499,7 @@ private fun ResourcesGatheredDrawerPanel(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Storage Cap: ${production.storageCap.toInt()}",
+                text = "Storage Cap: ${production.storageCap.toInt()} (+${production.storeRoomStorageBonus.toInt()} Store Rm)",
                 style = MaterialTheme.typography.labelSmall,
                 color = RadTeal,
                 fontWeight = FontWeight.Bold
@@ -494,14 +532,14 @@ private fun ResourcesGatheredDrawerPanel(
         }
 
         val upkeepColor = when {
-            production.isWorkersStarvingOrDehydrated || production.isDefenseShutDownByDeficit -> HazardRed
+            production.isWorkersStarvingOrDehydrated || production.isDefenseShutDownByDeficit || !production.isMakingPositiveResources -> HazardRed
             else -> SurplusGreen
         }
         Text(
             text = if (production.isWorkersStarvingOrDehydrated) {
-                "ALERT: Workers need Food & Water daily and every 5 minutes! Stock is 0 — All worker rooms & automated turrets are HALTED until fed!"
+                "ALERT: Workers need Food & Water daily and every 60 seconds! Stock is 0 — All worker rooms & automated turrets are HALTED until fed!"
             } else {
-                "Vault Drain: -${formatRate(production.totalVaultResourceDrainPerSec)}/s vs Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s • 5m Feed (${state.dwellerFeedCycleSecondsRemaining}s): -${production.fiveMinDwellerFoodCost.roundToInt()}F/-${production.fiveMinDwellerWaterCost.roundToInt()}W (2m Escalation Tier ${production.dwellerUpkeepEscalationTier}) • Daily Vault & Room Drain: -${production.dailyRoomScrapUpkeep.roundToInt()}S/-${production.dailyRoomWaterUpkeep.roundToInt()}W/-${production.dailyRoomFuelUpkeep.roundToInt()}Fuel"
+                "Vault Drain: -${formatRate(production.totalVaultResourceDrainPerSec)}/s (Reactors -${formatRate(production.reactorFuelUpkeepPerSec)}/s Fuel) vs Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s • 60s Feed (${state.dwellerFeedCycleSecondsRemaining}s): -${production.fiveMinDwellerFoodCost.roundToInt()}F/-${production.fiveMinDwellerWaterCost.roundToInt()}W (2m Tier ${production.dwellerUpkeepEscalationTier})"
             },
             style = MaterialTheme.typography.labelSmall,
             color = upkeepColor,

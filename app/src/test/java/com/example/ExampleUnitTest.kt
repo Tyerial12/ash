@@ -9,6 +9,7 @@ import com.example.model.CommandLevelProgression
 import com.example.model.CraftableItemType
 import com.example.model.DayNightPhase
 import com.example.model.FishingSpot
+import com.example.model.PowerStationType
 import com.example.model.SalvageNodeType
 import com.example.model.SiegeCountermeasureType
 import com.example.model.SkillBranch
@@ -233,9 +234,9 @@ class ExampleUnitTest {
         assertEquals("Overseer Legacy branch has 4 permanent Prestige Core skills", 4, legacyNodes.size)
         assertTrue("All Legacy skills cost Prestige Cores", legacyNodes.all { it.prestigeCoreCostPerRank > 0 })
 
-        // Verify 2D Vault Cutaway stations cover Surface mining, Crater Lake fishing, and all 10 Vault rooms (Floors B1-B5)
-        assertEquals(12, VaultMapStation.entries.size)
-        assertEquals(10, VaultMapStation.entries.count { it.buildingType != null })
+        // Verify 2D & 3D Vault Cutaway stations cover Surface mining, Crater Lake fishing, and all 11 Vault rooms (Floors B1-B6)
+        assertEquals(13, VaultMapStation.entries.size)
+        assertEquals(11, VaultMapStation.entries.count { it.buildingType != null })
     }
 
     @Test
@@ -668,7 +669,196 @@ class ExampleUnitTest {
         assertTrue(OutpostCalculator.computeDay10BossTitle(20).contains("Behemoth", ignoreCase = true))
         assertEquals(3, SiegeCountermeasureType.entries.size)
     }
+
+    @Test
+    fun sixtySecFeeding_storeRoom_reactorFuelScaling_fourManualCranks_andNetBalance_workAsExpected() {
+        // 1. Dwellers have to eat every 60 seconds
+        assertEquals(60, OutpostCalculator.DWELLER_FEED_INTERVAL_SECONDS)
+        assertEquals(60, OutpostStateEntity().dwellerFeedCycleSecondsRemaining)
+
+        // 2. Upgradable Store Room (VAULT_STORE_ROOM) increases max resources that can be stored
+        val baseState = OutpostStateEntity(commandLevel = 2)
+        val snapNoStore = OutpostCalculator.computeProductionSnapshot(baseState, emptyMap(), emptyMap(), emptyMap(), 1000L)
+        val snapStoreLv1 = OutpostCalculator.computeProductionSnapshot(
+            baseState,
+            mapOf(BuildingType.VAULT_STORE_ROOM.id to 1),
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        val snapStoreLv2 = OutpostCalculator.computeProductionSnapshot(
+            baseState,
+            mapOf(BuildingType.VAULT_STORE_ROOM.id to 2),
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        val snapStoreLv3 = OutpostCalculator.computeProductionSnapshot(
+            baseState,
+            mapOf(BuildingType.VAULT_STORE_ROOM.id to 3),
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        assertTrue(
+            "Upgrading Vault Supply Store Room progressively increases max stored resources (Lv.0 < Lv.1 < Lv.2 < Lv.3)",
+            snapNoStore.storageCap < snapStoreLv1.storageCap &&
+                snapStoreLv1.storageCap < snapStoreLv2.storageCap &&
+                snapStoreLv2.storageCap < snapStoreLv3.storageCap
+        )
+        assertEquals(1000.0, snapStoreLv1.storeRoomStorageBonus, 0.01)
+        assertTrue(snapStoreLv2.storeRoomStorageBonus > snapStoreLv1.storeRoomStorageBonus * 2.0)
+
+        // 3. Higher-level reactors take progressively more Bio-Fuel
+        val reactorFuelLv1 = OutpostCalculator.computeReactorFuelUpkeepForStation(PowerStationType.THORIUM_FISSION_REACTOR, 1)
+        val reactorFuelLv2 = OutpostCalculator.computeReactorFuelUpkeepForStation(PowerStationType.THORIUM_FISSION_REACTOR, 2)
+        val reactorFuelLv3 = OutpostCalculator.computeReactorFuelUpkeepForStation(PowerStationType.THORIUM_FISSION_REACTOR, 3)
+        assertTrue(
+            "Higher-level reactors consume super-linearly more Bio-Fuel (Lv.1 < Lv.2 < Lv.3)",
+            reactorFuelLv1 > 0.0 &&
+                reactorFuelLv1 < reactorFuelLv2 &&
+                reactorFuelLv2 < reactorFuelLv3 &&
+                (reactorFuelLv3 - reactorFuelLv2) > (reactorFuelLv2 - reactorFuelLv1)
+        )
+
+        // 4. Manual crank for power 4 times every time power goes out
+        assertEquals(4, OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT)
+        assertEquals(4, OutpostStateEntity().manualDynamoCranksRemaining)
+        val crank1State = OutpostStateEntity(thoriumOverdriveUntilMillis = 5000L, activeDynamoCrankStack = 1, generatorWearPercent = 0)
+        val crank4State = OutpostStateEntity(thoriumOverdriveUntilMillis = 5000L, activeDynamoCrankStack = 4, generatorWearPercent = 0)
+        val crank1Snap = OutpostCalculator.computeProductionSnapshot(crank1State, emptyMap(), emptyMap(), emptyMap(), 1000L)
+        val crank4Snap = OutpostCalculator.computeProductionSnapshot(crank4State, emptyMap(), emptyMap(), emptyMap(), 1000L)
+        assertTrue("4 stacked manual dynamo cranks generate 4x the MW of 1 crank", crank4Snap.totalMegawattGenerated > crank1Snap.totalMegawattGenerated * 3.5)
+
+        // 5. Positive vs Deficit Net Resource Balance
+        val positiveWorkers = mapOf(
+            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 2, classLevel = 1),
+            WorkerClassType.HYDRO_ENGINEER.id to WorkerClassEntity(WorkerClassType.HYDRO_ENGINEER.id, assignedCount = 2, classLevel = 1)
+        )
+        val positiveState = OutpostStateEntity(
+            commandLevel = 1,
+            totalSurvivors = 4,
+            rations = 50.0,
+            water = 50.0,
+            bioFuel = 50.0,
+            bioTurbineLevel = 2,
+            generatorWearPercent = 0
+        )
+        val positiveBuildings = mapOf(
+            BuildingType.SALVAGE_YARD.id to 1,
+            BuildingType.ATMOSPHERIC_CONDENSER.id to 1
+        )
+        val positiveSnap = OutpostCalculator.computeProductionSnapshot(positiveState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
+        assertTrue("Active powered Vault with workers is making positive resources", positiveSnap.isMakingPositiveResources && positiveSnap.netResourceBalancePerSec > 0.0)
+
+        val negativeState = OutpostStateEntity(
+            commandLevel = 5,
+            totalSurvivors = 0,
+            bioTurbineLevel = 3,
+            thoriumReactorLevel = 2
+        )
+        val negativeSnap = OutpostCalculator.computeProductionSnapshot(negativeState, positiveBuildings, emptyMap(), emptyMap(), 1000L)
+        assertFalse("Unstaffed high-level Vault with running reactors is taking more than it is making", negativeSnap.isMakingPositiveResources)
+        assertTrue(negativeSnap.netResourceBalancePerSec < 0.0)
+
+        // 6. Max Dwellers is 15 & Rooms gradually get better from Level 0 (worst) upward
+        assertEquals(15, OutpostCalculator.MAX_VAULT_DWELLERS)
+        val habLv6Snap = OutpostCalculator.computeProductionSnapshot(
+            baseState,
+            mapOf(BuildingType.SURVIVOR_HAB_BLOCK.id to 6),
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        assertEquals("Max Dwellers is strictly capped at 15 even with high-level Living Quarters", 15, habLv6Snap.maxWorkerCapacity)
+
+        val lv0Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(0)
+        val lv1Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(1)
+        val lv2Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(2)
+        val lv3Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(3)
+        val lv4Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(4)
+        val lv5Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(5)
+        assertTrue(
+            "Rooms gradually get better each level with Level 0 being worst (0.20) -> Lv.1 (0.38) -> Lv.2 (0.56) -> Lv.3 (0.74) -> Lv.4 (0.92) -> Lv.5 (1.10)",
+            lv0Mult == 0.20 && lv0Mult < lv1Mult && lv1Mult < lv2Mult && lv2Mult < lv3Mult && lv3Mult < lv4Mult && lv4Mult < lv5Mult && lv5Mult > 1.0
+        )
+
+        val eff0 = OutpostCalculator.computeRoomEffectiveTotalOutputMultiplier(0)
+        val eff1 = OutpostCalculator.computeRoomEffectiveTotalOutputMultiplier(1)
+        val eff2 = OutpostCalculator.computeRoomEffectiveTotalOutputMultiplier(2)
+        val eff3 = OutpostCalculator.computeRoomEffectiveTotalOutputMultiplier(3)
+        assertTrue(
+            "Effective total room output multiplier is worst at Level 0 (> 0.0) and increases every level",
+            eff0 > 0.0 && eff0 < eff1 && eff1 < eff2 && eff2 < eff3
+        )
+    }
+
+    @Test
+    fun hardcoreMiningBuildingHunting_andOfflineNotificationSchedule_workAsExpected() {
+        // 1. Hardcore Mining: Pickaxe Durability & Cave-In Hazards reduce salvage yield
+        val freshPickaxeState = OutpostStateEntity(
+            pickaxeDurabilityPercent = 100,
+            activeCaveInHazard = false
+        )
+        val wornCaveInState = OutpostStateEntity(
+            pickaxeDurabilityPercent = 10,
+            activeCaveInHazard = true
+        )
+        val freshYield = OutpostCalculator.computeSalvageNodeYield(
+            SalvageNodeType.ARMORED_CONVOY_WRECK, freshPickaxeState, emptyMap(), emptyMap(), emptyMap(), DayNightPhase.SCORCHING_DAY
+        )
+        val wornYield = OutpostCalculator.computeSalvageNodeYield(
+            SalvageNodeType.ARMORED_CONVOY_WRECK, wornCaveInState, emptyMap(), emptyMap(), emptyMap(), DayNightPhase.SCORCHING_DAY
+        )
+        assertTrue("Dull pickaxe + Cave-In significantly reduces mining yield", wornYield.primaryAmount < freshYield.primaryAmount)
+
+        // 2. Hardcore Building: Pipe Leaks drain Water/Scrap & Room Structural Wear reduces room efficiency
+        val intactRoomState = OutpostStateEntity(
+            commandLevel = 2,
+            totalSurvivors = 2,
+            rations = 50.0,
+            water = 50.0,
+            bioFuel = 50.0,
+            bioTurbineLevel = 2,
+            generatorWearPercent = 0,
+            activePipeLeaksCount = 0,
+            roomStructuralWearPercent = 0
+        )
+        val leakingWornState = intactRoomState.copy(
+            activePipeLeaksCount = 3,
+            roomStructuralWearPercent = 50
+        )
+        val workers = mapOf(
+            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 2, classLevel = 1)
+        )
+        val buildings = mapOf(BuildingType.SALVAGE_YARD.id to 2)
+        val intactSnap = OutpostCalculator.computeProductionSnapshot(intactRoomState, buildings, workers, emptyMap(), 1000L)
+        val leakingSnap = OutpostCalculator.computeProductionSnapshot(leakingWornState, buildings, workers, emptyMap(), 1000L)
+        assertTrue("Pipe leaks drain Water and Scrap per second", leakingSnap.pipeLeakWaterDrainPerSec > 0.0 && leakingSnap.pipeLeakScrapDrainPerSec > 0.0)
+        assertTrue("Room structural wear and pipe leaks reduce net Scrap/s", leakingSnap.scrapPerSec < intactSnap.scrapPerSec)
+
+        // 3. Hardcore Hunting: Ammo Scarcity & Beast Counter-Attack Injury Chance
+        val stockedHunterState = OutpostStateEntity(craftedSpears = 2, craftedSnareTraps = 2, ammoRounds = 20)
+        val emptyAmmoState = stockedHunterState.copy(ammoRounds = 0)
+        val stockedHunt = OutpostCalculator.computeHuntPreview(
+            com.example.model.HuntingTarget.CANYON_PACK_STALKER, stockedHunterState, emptyMap(), emptyMap(), DayNightPhase.SCORCHING_DAY
+        )
+        val lowAmmoHunt = OutpostCalculator.computeHuntPreview(
+            com.example.model.HuntingTarget.CANYON_PACK_STALKER, emptyAmmoState, emptyMap(), emptyMap(), DayNightPhase.SCORCHING_DAY
+        )
+        assertTrue("Hunting without recommended Ballistic Ammo reduces food reward", lowAmmoHunt.foodReward < stockedHunt.foodReward)
+        assertTrue("Beast counter-attack injury chance is higher without sufficient ammo", lowAmmoHunt.counterAttackInjuryChancePercent > stockedHunt.counterAttackInjuryChancePercent)
+
+        // 4. Offline Phone Notification Schedule (Room Upgrade Complete, Max Resources, Out of Power)
+        val schedule = OutpostCalculator.computeOfflineNotificationSchedule(
+            state = intactRoomState.copy(scrap = 100.0, bioFuel = 10.0),
+            production = intactSnap,
+            activeConstructionBuildingId = BuildingType.SALVAGE_YARD.id,
+            activeConstructionTargetLevel = 3,
+            activeConstructionRemainingSeconds = 42
+        )
+        assertEquals(42L, schedule.secondsUntilRoomUpgradeComplete)
+        assertTrue("Positive net Scrap/s schedules a Max Resources ETA", (schedule.secondsUntilResourcesAtMax ?: 0L) > 0L)
+        assertTrue("Fuel consumption schedules an Out of Power ETA", (schedule.secondsUntilPowerOutage ?: 0L) > 0L)
+    }
 }
-
-
-

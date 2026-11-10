@@ -83,9 +83,25 @@ data class OutpostStateEntity(
     val blackoutSecondsAccumulated: Int = 0,
     val deficitDaysCount: Int = 0, // Consecutive days where Vault takes more resources to run than it gains (2 days = Game Over!)
     val deficitSecondsAccumulated: Int = 0,
-    val dwellerFeedCycleSecondsRemaining: Int = 300, // 5-minute (300s) real-time Food & Water feeding cycle for Vault Dwellers!
+    val dwellerFeedCycleSecondsRemaining: Int = 60, // 60-second real-time Food & Water feeding cycle for Vault Dwellers!
     val dwellerAppetiteEscalationSeconds: Int = 0, // Every 2 minutes (120s) Dwellers take more resources!
     val operationalPostureId: String = "STANDARD", // ECO_CONSERVATION (-40% upkeep), STANDARD (100%), or OVERCLOCK (+30% output)
+    val manualDynamoCranksRemaining: Int = 4, // Can manual crank for power 4 times every time power goes out!
+    val activeDynamoCrankStack: Int = 0, // Stacked manual dynamo cranks during active boost (+16 MW per crank)
+    // Hardcore Mining, Building & Hunting Mechanics
+    val pickaxeDurabilityPercent: Int = 100, // 0..100% — Wears down per swing; sharpen with Scrap to restore full yield
+    val miningShaftHeatPercent: Int = 0, // 0..100% — Builds up during rapid deep-core mining; cool with Water or risk cave-in
+    val activeCaveInHazard: Boolean = false, // Tunnel collapse hazard requiring Scrap shoring beams to clear
+    val activePipeLeaksCount: Int = 0, // 0..5 — Coolant & water pipe leaks in Vault rooms draining extra Water/Scrap
+    val roomStructuralWearPercent: Int = 0, // 0..80% — Room machinery wear reducing room output until welded
+    val bleedingDwellersCount: Int = 0, // Beast counter-attack bleeding trauma from Wasteland Hunts
+    val venomInfectedDwellersCount: Int = 0, // Mutant rad-venom infection from Wasteland Hunts
+    // Persisted Active Room Construction for Offline Completion & Phone Notifications
+    val activeConstructionBuildingId: String = "",
+    val activeConstructionTargetLevel: Int = 0,
+    val activeConstructionRemainingSeconds: Int = 0,
+    val activeConstructionTotalSeconds: Int = 0,
+    val activeConstructionRushGoldCost: Double = 0.0,
     val isGameOver: Boolean = false,
     val gameOverReason: String = "",
     val lastSavedTimestampMillis: Long = System.currentTimeMillis()

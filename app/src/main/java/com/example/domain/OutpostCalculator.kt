@@ -75,6 +75,10 @@ data class ProductionSnapshot(
     val vaultLevelResourceUpkeep: RoomResourceUpkeep = RoomResourceUpkeep(),
     val totalGrossResourceGainPerSec: Double = 0.0,
     val totalVaultResourceDrainPerSec: Double = 0.0,
+    val netResourceBalancePerSec: Double = 0.0,
+    val isMakingPositiveResources: Boolean = false,
+    val reactorFuelUpkeepPerSec: Double = 0.0,
+    val storeRoomStorageBonus: Double = 0.0,
     val isVaultResourceDeficit: Boolean = false,
     val isDefenseShutDownByDeficit: Boolean = false,
     val isEarlyBunkerGraceActive: Boolean = false,
@@ -84,7 +88,21 @@ data class ProductionSnapshot(
     val dwellerUpkeepEscalationTier: Int = 0,
     val dwellerUpkeepEscalationMultiplier: Double = 1.0,
     val fiveMinDwellerFoodCost: Double = 0.0,
-    val fiveMinDwellerWaterCost: Double = 0.0
+    val fiveMinDwellerWaterCost: Double = 0.0,
+    val pipeLeakWaterDrainPerSec: Double = 0.0,
+    val pipeLeakScrapDrainPerSec: Double = 0.0,
+    val roomWearPenaltyMultiplier: Double = 1.0,
+    val pickaxeDurabilityMultiplier: Double = 1.0
+)
+
+data class OfflineNotificationSchedule(
+    val secondsUntilRoomUpgradeComplete: Long? = null,
+    val upgradingRoomTitle: String = "",
+    val upgradingRoomTargetLevel: Int = 0,
+    val secondsUntilResourcesAtMax: Long? = null,
+    val maxResourceSummary: String = "",
+    val secondsUntilPowerOutage: Long? = null,
+    val powerOutageReasonSummary: String = ""
 )
 
 data class RoomResourceUpkeep(
@@ -179,6 +197,8 @@ data class PowerStationUpgradeCost(
     val thoriumCost: Double,
     val aetherCost: Double,
     val coresCost: Double,
+    val currentFuelUpkeepPerSec: Double = 0.0,
+    val nextLevelFuelUpkeepPerSec: Double = 0.0,
     val canAfford: Boolean
 )
 
@@ -210,6 +230,8 @@ data class HuntPreview(
     val goldReward: Double,
     val coresReward: Double,
     val xpReward: Double,
+    val counterAttackInjuryChancePercent: Int = 12,
+    val ammoRecommended: Int = 2,
     val canExecute: Boolean
 )
 
@@ -240,10 +262,73 @@ object OutpostCalculator {
 
     private const val BASE_STORAGE_CAP = 500.0
     private const val BASE_MAX_CITIZENS = 3
-    const val DWELLER_FEED_INTERVAL_SECONDS = 300 // 5 minutes real-time feeding cycle
+    const val MAX_VAULT_DWELLERS = 15 // Maximum Dwellers allowed in the Vault
+    const val DWELLER_FEED_INTERVAL_SECONDS = 60 // Every 60 seconds real-time feeding cycle
     const val DWELLER_ESCALATION_INTERVAL_SECONDS = 120 // Every 2 minutes Dwellers consume more resources
     const val MAX_DEFICIT_DAYS_BEFORE_GAME_OVER = 2
     const val MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER = 6
+    const val MAX_DYNAMO_CRANKS_PER_BLACKOUT = 4 // Can manually crank for power 4 times every time power goes out!
+
+    /**
+     * Rooms gradually get better as you level them, with Level 0 being the worst (20% makeshift efficiency)
+     * and getting a little better each time (+18% efficiency per level: Lv.0 = 0.20, Lv.1 = 0.38, Lv.2 = 0.56,
+     * Lv.3 = 0.74, Lv.4 = 0.92, Lv.5 = 1.10, Lv.6 = 1.28, Lv.10 = 2.00, etc.)!
+     */
+    fun computeRoomLevelOutputMultiplier(level: Int): Double {
+        val safeLevel = level.coerceAtLeast(0)
+        return ((0.20 + safeLevel * 0.18) * 100.0).roundToInt() / 100.0
+    }
+
+    /**
+     * Workers assigned to a facility also scale gradually from Level 0 (worst: 45% pace)
+     * to a little better each time you level their room (+13% per level: Lv.0 = 0.45, Lv.1 = 0.58,
+     * Lv.2 = 0.71, Lv.3 = 0.84, Lv.4 = 0.97, Lv.5 = 1.10, etc.)!
+     */
+    fun computeWorkerLowRoomPacingMultiplier(primaryRoomLevel: Int): Double {
+        val safeLevel = primaryRoomLevel.coerceAtLeast(0)
+        return ((0.45 + safeLevel * 0.13) * 100.0).roundToInt() / 100.0
+    }
+
+    /**
+     * Effective total output multiplier for a room at [level], starting at Level 0 (worst makeshift trickle)
+     * and gradually improving with each upgrade level!
+     */
+    fun computeRoomEffectiveTotalOutputMultiplier(level: Int): Double {
+        val safeLevel = level.coerceAtLeast(0)
+        val effectiveUnits = if (safeLevel == 0) 0.35 else safeLevel.toDouble()
+        return ((effectiveUnits * computeRoomLevelOutputMultiplier(safeLevel)) * 1000.0).roundToInt() / 1000.0
+    }
+
+    /**
+     * Higher-level reactors take progressively (super-linearly) more Bio-Fuel per second to run!
+     * Lv.1 = 1.0x base fuel, Lv.2 = 3.05x base fuel, Lv.3 = 6.3x base fuel, Lv.4 = 10.75x base fuel, etc.
+     */
+    fun computeReactorFuelUpkeepForStation(station: PowerStationType, level: Int): Double {
+        if (level <= 0 || station.fuelUpkeepPerLevel <= 0.0) return 0.0
+        val extraLevels = level - 1
+        val escalation = level * (1.0 + extraLevels * 0.45) + extraLevels * extraLevels * 0.15
+        return ((station.fuelUpkeepPerLevel * escalation) * 100.0).roundToInt() / 100.0
+    }
+
+    fun computeTotalReactorFuelUpkeepPerSec(
+        state: OutpostStateEntity,
+        operationalPosture: VaultOperationalPosture = VaultOperationalPosture.fromId(state.operationalPostureId)
+    ): Double {
+        val rawFuel = computeReactorFuelUpkeepForStation(PowerStationType.BIO_SLUDGE_TURBINE, state.bioTurbineLevel) +
+            computeReactorFuelUpkeepForStation(PowerStationType.SOLAR_HELIOSTAT_TOWER, state.solarTowerLevel) +
+            computeReactorFuelUpkeepForStation(PowerStationType.THORIUM_FISSION_REACTOR, state.thoriumReactorLevel) +
+            computeReactorFuelUpkeepForStation(PowerStationType.AETHER_RESONANCE_SUBSTATION, state.aetherSubstationLevel)
+        return ((rawFuel * operationalPosture.upkeepMultiplier) * 100.0).roundToInt() / 100.0
+    }
+
+    /**
+     * Vault Supply Store Room storage bonus that scales upward with each Store Room upgrade level.
+     */
+    fun computeStoreRoomStorageBonus(storeRoomLevel: Int): Double {
+        if (storeRoomLevel <= 0) return 0.0
+        val extraLevels = storeRoomLevel - 1
+        return storeRoomLevel * BuildingType.VAULT_STORE_ROOM.storageBonusPerLevel * (1.0 + extraLevels * 0.25)
+    }
 
     /**
      * Higher Vault Command Level increases the Vault's overall resource appetite!
@@ -496,7 +581,10 @@ object OutpostCalculator {
         val geothermalBaselineMw = geothermalLevel * 7.5 // Room #9 Deep-Core Geothermal Tap: +7.5 MW/Lv 24/7 clean power!
         val mutagenLabLevel = buildingsMap[BuildingType.NOCTURNAL_EXTRACTION_RIG.id] ?: 0
         val reactorEngineerMw = savantCount * 5.0
-        val emergencyDynamoBoostMw = if (thoriumOverdriveActive) 16.0 else 0.0
+        val activeCrankStack = if (thoriumOverdriveActive) {
+            state.activeDynamoCrankStack.coerceIn(1, MAX_DYNAMO_CRANKS_PER_BLACKOUT)
+        } else 0
+        val emergencyDynamoBoostMw = if (thoriumOverdriveActive) (16.0 * activeCrankStack) else 0.0
 
         // Generator Wear reduces MW output by up to -32% until tuned up (mitigated by Room #9 Geothermal Tap -10%/Lv)
         val effectiveWearPercent = (state.generatorWearPercent - geothermalLevel * 8).coerceIn(0, 80)
@@ -530,6 +618,8 @@ object OutpostCalculator {
         val farmLevel = buildingsMap[BuildingType.HYDROPONIC_GREENHOUSE.id] ?: 0
         val habLevel = buildingsMap[BuildingType.SURVIVOR_HAB_BLOCK.id] ?: 0
         val cryoVaultLevel = buildingsMap[BuildingType.CRYO_STASIS_VAULT.id] ?: 0
+        val storeRoomLevel = buildingsMap[BuildingType.VAULT_STORE_ROOM.id] ?: 0
+        val storeRoomStorageBonus = computeStoreRoomStorageBonus(storeRoomLevel)
 
         // Realistic Oxygen & Radiation Life-Support Drift Rates
         val oxygenScrubberSupply = if (isVaultBlackout) {
@@ -594,16 +684,31 @@ object OutpostCalculator {
             BASE_STORAGE_CAP +
                 siloLevel * BuildingType.REINFORCED_SILO.storageBonusPerLevel +
                 cryoVaultLevel * BuildingType.CRYO_STASIS_VAULT.storageBonusPerLevel +
+                storeRoomStorageBonus +
                 state.commandLevel * 140.0
             ) * (1.0 + rankForgeOverdrive * 0.25) * hydroStorageBonus
 
-        val maxWorkerCapacity = BASE_MAX_CITIZENS + habLevel * BuildingType.SURVIVOR_HAB_BLOCK.populationBonusPerLevel
+        val maxWorkerCapacity = (BASE_MAX_CITIZENS + habLevel * BuildingType.SURVIVOR_HAB_BLOCK.populationBonusPerLevel)
+            .coerceAtMost(MAX_VAULT_DWELLERS)
         val maxPickaxeLevelAllowed = computeMaxPickaxeLevel(buildingsMap)
 
-        // Daily Powered Room Supply Bonuses (granted each new day when Vault is powered!)
-        val dailyRoomFoodBonus = if (isVaultBlackout) 0.0 else (farmLevel * 8.0 + cryoVaultLevel * 5.0)
-        val dailyRoomWaterBonus = if (isVaultBlackout) 0.0 else condenserLevel * 6.0
-        val dailyRoomScrapBonus = if (isVaultBlackout) 0.0 else smelteryLevel * 10.0
+        // Daily Powered Room Supply Bonuses (granted each new day when Vault is powered; low-level rooms grant slower supplies!)
+        val dailyRoomFoodBonus = if (isVaultBlackout) {
+            0.0
+        } else {
+            ((farmLevel * 8.0 * computeRoomLevelOutputMultiplier(farmLevel) +
+                cryoVaultLevel * 5.0 * computeRoomLevelOutputMultiplier(cryoVaultLevel)) * 10.0).roundToInt() / 10.0
+        }
+        val dailyRoomWaterBonus = if (isVaultBlackout) {
+            0.0
+        } else {
+            ((condenserLevel * 6.0 * computeRoomLevelOutputMultiplier(condenserLevel)) * 10.0).roundToInt() / 10.0
+        }
+        val dailyRoomScrapBonus = if (isVaultBlackout) {
+            0.0
+        } else {
+            ((smelteryLevel * 10.0 * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
+        }
 
         // 3. Daily & 5-Minute Food/Water Upkeep per Worker + Forgiving Days 1-10 2-Minute Appetite Escalation
         val isEarlyDaysWindow = currentDay <= 10
@@ -672,10 +777,22 @@ object OutpostCalculator {
             totalDailyRoomFuelUpkeep += roomUpkeep.dailyFuel * postureAndGraceUpkeepMult
         }
 
-        val bioTurbineFuelUpkeep = state.bioTurbineLevel * PowerStationType.BIO_SLUDGE_TURBINE.fuelUpkeepPerLevel * operationalPosture.upkeepMultiplier
+        // Hardcore Building Hazards: Coolant Pipe Leaks & Room Structural Wear
+        val pipeLeakWaterDrainPerSec = ((state.activePipeLeaksCount.coerceAtLeast(0) * 0.35) * 100.0).roundToInt() / 100.0
+        val pipeLeakScrapDrainPerSec = ((state.activePipeLeaksCount.coerceAtLeast(0) * 0.25) * 100.0).roundToInt() / 100.0
+        totalRoomWaterUpkeepPerSec += pipeLeakWaterDrainPerSec
+        totalRoomScrapUpkeepPerSec += pipeLeakScrapDrainPerSec
+        val roomWearPenaltyMult = (1.0 - state.roomStructuralWearPercent.coerceIn(0, 80) * 0.004).coerceIn(0.68, 1.0)
+        val pickaxeDurabilityMult = when {
+            state.pickaxeDurabilityPercent <= 0 -> 0.35
+            state.pickaxeDurabilityPercent < 30 -> 0.68
+            else -> 1.0
+        }
+
+        val reactorFuelUpkeep = computeTotalReactorFuelUpkeepPerSec(state, operationalPosture)
         val totalVaultResourceDrainPerSec =
             ((totalRoomScrapUpkeepPerSec + totalRoomWaterUpkeepPerSec + totalRoomFuelUpkeepPerSec +
-                citizenFoodUpkeep + citizenWaterUpkeep + bioTurbineFuelUpkeep) * 100.0).roundToInt() / 100.0
+                citizenFoodUpkeep + citizenWaterUpkeep + reactorFuelUpkeep) * 100.0).roundToInt() / 100.0
         val deficitDaysRemaining = (MAX_DEFICIT_DAYS_BEFORE_GAME_OVER - state.deficitDaysCount).coerceIn(0, MAX_DEFICIT_DAYS_BEFORE_GAME_OVER)
         val blackoutDaysRemaining = (MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER - state.blackoutDaysCount).coerceIn(0, MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER)
 
@@ -683,11 +800,12 @@ object OutpostCalculator {
         if (state.totalSurvivors <= 0 || totalAssigned <= 0 || isVaultBlackout || isWorkersStarvingOrDehydrated) {
             val haltedDeficit = totalVaultResourceDrainPerSec > 0.05 && !isEarlyBunkerGraceActive
             val haltedDefenseRating = if (haltedDeficit) 0 else totalDefenseRating
+            val haltedNetBalance = ((-totalVaultResourceDrainPerSec) * 100.0).roundToInt() / 100.0
             return ProductionSnapshot(
                 scrapPerSec = 0.0,
                 waterPerSec = if (state.totalSurvivors > 0 && state.water > 0.0) -citizenWaterUpkeep else 0.0,
                 rationsPerSec = if (state.totalSurvivors > 0 && state.rations > 0.0) -citizenFoodUpkeep else 0.0,
-                bioFuelPerSec = 0.0,
+                bioFuelPerSec = if (state.bioFuel > 0.0 && reactorFuelUpkeep > 0.0) -reactorFuelUpkeep else 0.0,
                 researchPerSec = 0.0,
                 mutagenCoresPerSec = 0.0,
                 xpPerSec = 0.0,
@@ -738,6 +856,10 @@ object OutpostCalculator {
                 vaultLevelResourceUpkeep = vaultLevelUpkeep,
                 totalGrossResourceGainPerSec = 0.0,
                 totalVaultResourceDrainPerSec = totalVaultResourceDrainPerSec,
+                netResourceBalancePerSec = haltedNetBalance,
+                isMakingPositiveResources = haltedNetBalance >= 0.0 && totalVaultResourceDrainPerSec <= 0.05,
+                reactorFuelUpkeepPerSec = reactorFuelUpkeep,
+                storeRoomStorageBonus = storeRoomStorageBonus,
                 isVaultResourceDeficit = haltedDeficit,
                 isDefenseShutDownByDeficit = haltedDeficit,
                 isEarlyBunkerGraceActive = isEarlyBunkerGraceActive,
@@ -747,7 +869,11 @@ object OutpostCalculator {
                 dwellerUpkeepEscalationTier = dwellerUpkeepEscalationTier,
                 dwellerUpkeepEscalationMultiplier = dwellerUpkeepEscalationMultiplier,
                 fiveMinDwellerFoodCost = fiveMinDwellerFoodCost,
-                fiveMinDwellerWaterCost = fiveMinDwellerWaterCost
+                fiveMinDwellerWaterCost = fiveMinDwellerWaterCost,
+                pipeLeakWaterDrainPerSec = pipeLeakWaterDrainPerSec,
+                pipeLeakScrapDrainPerSec = pipeLeakScrapDrainPerSec,
+                roomWearPenaltyMultiplier = roomWearPenaltyMult,
+                pickaxeDurabilityMultiplier = pickaxeDurabilityMult
             )
         }
 
@@ -810,12 +936,13 @@ object OutpostCalculator {
 
         for (bType in BuildingType.entries) {
             val level = buildingsMap[bType.id] ?: 0
-            if (level <= 0) continue
-
             val favoredWorker = bType.favoredWorkerClass
             val assignedFavored = if (favoredWorker != null) {
                 workersMap[favoredWorker.id]?.assignedCount ?: 0
             } else 0
+
+            // At Level 0 (worst makeshift state), a room only trickles if its favored worker is actively assigned
+            if (level <= 0 && assignedFavored <= 0) continue
 
             val staffingFactor = when {
                 favoredWorker == null -> 0.45
@@ -823,9 +950,9 @@ object OutpostCalculator {
                 else -> 0.75 + assignedFavored * 0.65
             }
 
-            // Higher room levels also output more per level (+18% compounding efficiency per room level)
-            val highLevelRoomOutputBoost = 1.0 + (level - 1) * 0.18
-            val rawOut = level * bType.baseOutputPerLevel * highLevelRoomOutputBoost * staffingFactor
+            // Rooms gradually get better from Level 0 (worst: 20% eff) upward (+18% eff each level), modified by room wear!
+            val effectiveRoomUnits = computeRoomEffectiveTotalOutputMultiplier(level)
+            val rawOut = effectiveRoomUnits * bType.baseOutputPerLevel * staffingFactor * roomWearPenaltyMult
             when (bType.primaryResource) {
                 ResourceType.SCRAP -> scrapBase += rawOut
                 ResourceType.WATER -> waterBase += rawOut
@@ -836,7 +963,7 @@ object OutpostCalculator {
                 else -> {}
             }
 
-            if (bType.waterUpkeepPerLevel > 0.0 && assignedFavored > 0) {
+            if (level > 0 && bType.waterUpkeepPerLevel > 0.0 && assignedFavored > 0) {
                 val upkeepDiscount = if (bType == BuildingType.HYDROPONIC_GREENHOUSE && hydroCount > 0 && hydroLv >= 15) 0.5 else 1.0
                 buildingWaterUpkeep += level * bType.waterUpkeepPerLevel * upkeepDiscount
             }
@@ -845,6 +972,8 @@ object OutpostCalculator {
         val rankGuildDrills = skillsMap["WRK_GUILD_DRILLS"] ?: 0
         val rankCircadian = skillsMap["WRK_CIRCADIAN_AUTO_SHIFT"] ?: 0
         val autoShiftBonus = if (state.autoShiftEnabled) 1.15 + rankCircadian * 0.10 else 1.0
+        val radarRoomLv = buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0
+        val refineryRoomLv = buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0
 
         for (wType in WorkerClassType.entries) {
             val entity = workersMap[wType.id] ?: WorkerClassEntity(wType.id, 0, 1, 0.0)
@@ -870,21 +999,30 @@ object OutpostCalculator {
                 phaseFactor = (phaseFactor + rankCircadian * 0.15).coerceAtMost(1.05)
             }
 
+            // Workers operating in low-level rooms gather resources slower until their primary room is upgraded
+            val primaryFacilityLevel = when (wType) {
+                WorkerClassType.SCRAPPER -> maxOf(smelteryLevel, siloLevel)
+                WorkerClassType.HYDRO_ENGINEER -> maxOf(condenserLevel, farmLevel, refineryRoomLv)
+                WorkerClassType.NIGHT_STALKER -> mutagenLabLevel
+                WorkerClassType.TECH_SAVANT -> maxOf(radarRoomLv, geothermalLevel)
+            }
+            val lowRoomPacingMult = computeWorkerLowRoomPacingMultiplier(primaryFacilityLevel)
+
             var workerOut = count * wType.baseOutputPerSecond * classLevelMult * phaseFactor *
-                (1.0 + rankGuildDrills * 0.15) * autoShiftBonus
+                (1.0 + rankGuildDrills * 0.15) * autoShiftBonus * lowRoomPacingMult
 
             when (wType) {
                 WorkerClassType.SCRAPPER -> {
                     if (cLevel >= 5) workerOut *= 1.25
                     if (cLevel >= 20) workerOut *= 1.45
                     scrapBase += workerOut
-                    if (cLevel >= 10) bioFuelBase += count * 0.40 * classLevelMult
+                    if (cLevel >= 10) bioFuelBase += count * 0.40 * classLevelMult * lowRoomPacingMult
                 }
                 WorkerClassType.HYDRO_ENGINEER -> {
                     if (cLevel >= 5) workerOut *= 1.25
                     waterBase += workerOut
                     rationsBase += workerOut * 0.55
-                    if (cLevel >= 10) bioFuelBase += count * 0.65 * classLevelMult
+                    if (cLevel >= 10) bioFuelBase += count * 0.65 * classLevelMult * lowRoomPacingMult
                 }
                 WorkerClassType.NIGHT_STALKER -> {
                     if (cLevel >= 5) workerOut *= 1.30
@@ -893,8 +1031,8 @@ object OutpostCalculator {
                     }
                     mutagenBase += workerOut
                     if (cLevel >= 15 && (!isDaylight || eclipseShroudActive)) {
-                        scrapBase += count * 1.8 * classLevelMult
-                        bioFuelBase += count * 0.8 * classLevelMult
+                        scrapBase += count * 1.8 * classLevelMult * lowRoomPacingMult
+                        bioFuelBase += count * 0.8 * classLevelMult * lowRoomPacingMult
                     }
                 }
                 WorkerClassType.TECH_SAVANT -> {
@@ -923,13 +1061,16 @@ object OutpostCalculator {
         val rationsPerSec = (grossRationsPerSec - citizenFoodUpkeep).coerceAtLeast(-2.5)
 
         val grossFuelPerSec = bioFuelBase * (1.0 + rankHighOctane * 0.25) * daylightSkillMult * nightSkillMult * globalMult
-        val bioFuelPerSec = if (bioFuelBase > 0.0 || totalRoomFuelUpkeepPerSec > 0.0 || bioTurbineFuelUpkeep > 0.0) {
-            (grossFuelPerSec - bioTurbineFuelUpkeep - totalRoomFuelUpkeepPerSec)
-                .coerceAtLeast(-2.0)
+        val bioFuelPerSec = if (bioFuelBase > 0.0 || totalRoomFuelUpkeepPerSec > 0.0 || reactorFuelUpkeep > 0.0) {
+            (grossFuelPerSec - reactorFuelUpkeep - totalRoomFuelUpkeepPerSec)
+                .coerceAtLeast(-4.0)
         } else 0.0
 
         val totalGrossResourceGainPerSec =
             ((grossScrapPerSec + grossWaterPerSec + grossRationsPerSec + grossFuelPerSec) * 100.0).roundToInt() / 100.0
+        val netResourceBalancePerSec =
+            ((totalGrossResourceGainPerSec - totalVaultResourceDrainPerSec) * 100.0).roundToInt() / 100.0
+        val isMakingPositiveResources = totalGrossResourceGainPerSec >= totalVaultResourceDrainPerSec
         val isVaultResourceDeficit = !isEarlyBunkerGraceActive &&
             totalVaultResourceDrainPerSec > 0.05 &&
             totalVaultResourceDrainPerSec > totalGrossResourceGainPerSec
@@ -1006,6 +1147,10 @@ object OutpostCalculator {
             vaultLevelResourceUpkeep = vaultLevelUpkeep,
             totalGrossResourceGainPerSec = totalGrossResourceGainPerSec,
             totalVaultResourceDrainPerSec = totalVaultResourceDrainPerSec,
+            netResourceBalancePerSec = netResourceBalancePerSec,
+            isMakingPositiveResources = isMakingPositiveResources,
+            reactorFuelUpkeepPerSec = reactorFuelUpkeep,
+            storeRoomStorageBonus = storeRoomStorageBonus,
             isVaultResourceDeficit = isVaultResourceDeficit,
             isDefenseShutDownByDeficit = isDefenseShutDownByDeficit,
             isEarlyBunkerGraceActive = isEarlyBunkerGraceActive,
@@ -1015,7 +1160,11 @@ object OutpostCalculator {
             dwellerUpkeepEscalationTier = dwellerUpkeepEscalationTier,
             dwellerUpkeepEscalationMultiplier = dwellerUpkeepEscalationMultiplier,
             fiveMinDwellerFoodCost = fiveMinDwellerFoodCost,
-            fiveMinDwellerWaterCost = fiveMinDwellerWaterCost
+            fiveMinDwellerWaterCost = fiveMinDwellerWaterCost,
+            pipeLeakWaterDrainPerSec = pipeLeakWaterDrainPerSec,
+            pipeLeakScrapDrainPerSec = pipeLeakScrapDrainPerSec,
+            roomWearPenaltyMultiplier = roomWearPenaltyMult,
+            pickaxeDurabilityMultiplier = pickaxeDurabilityMult
         )
     }
 
@@ -1185,7 +1334,8 @@ object OutpostCalculator {
         val fuelCost = (10.0 * scale).roundToInt().toDouble().coerceAtLeast(6.0)
         val rationsCost = (16.0 * scale).roundToInt().toDouble().coerceAtLeast(10.0)
         val waterCost = (12.0 * scale).roundToInt().toDouble().coerceAtLeast(8.0)
-        val hasSpace = state.totalSurvivors < maxWorkerCapacity
+        val effectiveCap = maxWorkerCapacity.coerceAtMost(MAX_VAULT_DWELLERS)
+        val hasSpace = state.totalSurvivors < effectiveCap
         val canAfford = hasSpace &&
             state.bioFuel >= fuelCost &&
             state.rations >= rationsCost &&
@@ -1266,11 +1416,28 @@ object OutpostCalculator {
         }
         val totalHuntMult = (1.0 + rankRotary * 0.25) * (1.0 + farmLv * 0.25) * (1.0 + stalkerCount * 0.15) * uniqueMult * crossbowMult * phaseBonus
 
-        val food = (target.baseFoodReward * totalHuntMult).roundToInt().toDouble()
-        val water = (target.baseWaterReward * totalHuntMult).roundToInt().toDouble()
+        val ammoRec = when (target) {
+            HuntingTarget.DUNE_RAZORBACK -> 2
+            HuntingTarget.CANYON_PACK_STALKER -> 3
+            HuntingTarget.APEX_RAD_BEHEMOTH -> 5
+            HuntingTarget.GLOWING_LEVIATHAN_WYRM -> 8
+        }
+        val ammoYieldMult = if (state.ammoRounds >= ammoRec) 1.0 else 0.60
+        val food = (target.baseFoodReward * totalHuntMult * ammoYieldMult).roundToInt().toDouble()
+        val water = (target.baseWaterReward * totalHuntMult * ammoYieldMult).roundToInt().toDouble()
         val gold = (target.baseGoldReward * uniqueMult * (1.0 + state.commandLevel * 0.08)).roundToInt().toDouble()
         val cores = target.baseCoresReward
         val xp = (target.baseXpReward * (1.0 + state.commandLevel * 0.10)).roundToInt().toDouble()
+
+        val baseInjuryRisk = when (target) {
+            HuntingTarget.DUNE_RAZORBACK -> 14
+            HuntingTarget.CANYON_PACK_STALKER -> 22
+            HuntingTarget.APEX_RAD_BEHEMOTH -> 30
+            HuntingTarget.GLOWING_LEVIATHAN_WYRM -> 38
+        }
+        val ammoScarcityPenalty = if (state.ammoRounds < ammoRec) 14 else 0
+        val gearProtection = state.aetherCrossbowLevel * 4 + stalkerCount * 3 + (if (state.hazmatSuitsCount > 0) 6 else 0)
+        val effectiveInjuryRisk = (baseInjuryRisk + ammoScarcityPenalty - gearProtection).coerceIn(4, 65)
 
         val canExecute = state.craftedSpears >= target.spearsRequired &&
             state.craftedSnareTraps >= target.trapsRequired &&
@@ -1283,6 +1450,8 @@ object OutpostCalculator {
             goldReward = gold,
             coresReward = cores,
             xpReward = xp,
+            counterAttackInjuryChancePercent = effectiveInjuryRisk,
+            ammoRecommended = ammoRec,
             canExecute = canExecute
         )
     }
@@ -1342,6 +1511,9 @@ object OutpostCalculator {
         val aetherCost = if (station.baseAetherCost > 0) (station.baseAetherCost + currentLevel).toDouble() else 0.0
         val coresCost = if (station.baseCoresCost > 0) (station.baseCoresCost + currentLevel).toDouble() else 0.0
 
+        val currentFuelUpkeep = computeReactorFuelUpkeepForStation(station, currentLevel)
+        val nextLevelFuelUpkeep = computeReactorFuelUpkeepForStation(station, currentLevel + 1)
+
         val canAfford = state.scrap >= scrapCost &&
             state.gold >= goldCost &&
             state.thoriumRods >= thoriumCost &&
@@ -1355,6 +1527,8 @@ object OutpostCalculator {
             thoriumCost = thoriumCost,
             aetherCost = aetherCost,
             coresCost = coresCost,
+            currentFuelUpkeepPerSec = currentFuelUpkeep,
+            nextLevelFuelUpkeepPerSec = nextLevelFuelUpkeep,
             canAfford = canAfford
         )
     }
@@ -1419,11 +1593,19 @@ object OutpostCalculator {
             else -> 1.0
         }
 
-        val primaryAmount = (nodeType.basePrimaryYield * rigMult * skillMult * bonusForResource(nodeType.primaryResource))
+        val pickaxeDurabilityMult = when {
+            state.pickaxeDurabilityPercent <= 0 -> 0.35
+            state.pickaxeDurabilityPercent < 30 -> 0.68
+            else -> 1.0
+        }
+        val caveInMult = if (state.activeCaveInHazard) 0.45 else 1.0
+        val hardcoreMiningConditionMult = pickaxeDurabilityMult * caveInMult
+
+        val primaryAmount = (nodeType.basePrimaryYield * rigMult * skillMult * bonusForResource(nodeType.primaryResource) * hardcoreMiningConditionMult)
             .roundToInt().toDouble().coerceAtLeast(1.0)
-        val secondaryAmount = (nodeType.baseSecondaryYield * rigMult * skillMult * bonusForResource(nodeType.secondaryResource))
+        val secondaryAmount = (nodeType.baseSecondaryYield * rigMult * skillMult * bonusForResource(nodeType.secondaryResource) * hardcoreMiningConditionMult)
             .roundToInt().toDouble().coerceAtLeast(1.0)
-        val goldAmount = (nodeType.baseGoldYield * rigMult * goldSkillMult * (1.0 + (state.commandLevel - 1) * 0.12))
+        val goldAmount = (nodeType.baseGoldYield * rigMult * goldSkillMult * (1.0 + (state.commandLevel - 1) * 0.12) * hardcoreMiningConditionMult)
             .roundToInt().toDouble().coerceAtLeast(6.0)
 
         val tapPrimaryAmount = (primaryAmount * 0.28).roundToInt().toDouble().coerceAtLeast(2.0)
@@ -1667,6 +1849,112 @@ object OutpostCalculator {
             nextDeficitDaysCount = nextDeficitDays,
             isGameOver = isGameOver,
             gameOverReason = reason
+        )
+    }
+
+    /**
+     * Computes background phone notification ETAs when the game is not loaded:
+     * 1) When a Vault Room is done upgrading
+     * 2) When Vault Resources reach max capacity
+     * 3) When the Vault runs out of power (Blackout)
+     */
+    fun computeOfflineNotificationSchedule(
+        state: OutpostStateEntity,
+        production: ProductionSnapshot,
+        activeConstructionBuildingId: String = state.activeConstructionBuildingId,
+        activeConstructionTargetLevel: Int = state.activeConstructionTargetLevel,
+        activeConstructionRemainingSeconds: Int = state.activeConstructionRemainingSeconds,
+        nowMillis: Long = System.currentTimeMillis()
+    ): OfflineNotificationSchedule {
+        // 1. Room Upgrade Complete ETA
+        val bType = BuildingType.entries.firstOrNull { it.id == activeConstructionBuildingId }
+        val secondsUntilRoomDone = if (bType != null && activeConstructionRemainingSeconds > 0) {
+            activeConstructionRemainingSeconds.coerceAtLeast(1).toLong()
+        } else {
+            null
+        }
+        val roomTitle = bType?.displayName ?: ""
+
+        // 2. Resources At Max Capacity ETA
+        val cap = production.storageCap
+        val alreadyAtMaxResources = buildList {
+            if (state.scrap >= cap - 0.5) add("Scrap")
+            if (state.water >= cap - 0.5) add("Water")
+            if (state.rations >= cap - 0.5) add("Food Rations")
+            if (state.bioFuel >= cap - 0.5) add("Bio-Fuel")
+        }
+        var secondsUntilMax: Long? = null
+        var maxResourceLabel = ""
+        if (alreadyAtMaxResources.isNotEmpty()) {
+            secondsUntilMax = 3L
+            maxResourceLabel = "${alreadyAtMaxResources.joinToString(", ")} at Max (${cap.toInt()})"
+        } else {
+            val candidates = mutableListOf<Pair<Long, String>>()
+            if (production.scrapPerSec > 0.02 && state.scrap < cap) {
+                val secs = ((cap - state.scrap) / production.scrapPerSec).roundToInt().toLong().coerceAtLeast(2L)
+                candidates.add(secs to "Scrap Metal (${cap.toInt()} Cap)")
+            }
+            if (production.waterPerSec > 0.02 && state.water < cap) {
+                val secs = ((cap - state.water) / production.waterPerSec).roundToInt().toLong().coerceAtLeast(2L)
+                candidates.add(secs to "Purified Water (${cap.toInt()} Cap)")
+            }
+            if (production.rationsPerSec > 0.02 && state.rations < cap) {
+                val secs = ((cap - state.rations) / production.rationsPerSec).roundToInt().toLong().coerceAtLeast(2L)
+                candidates.add(secs to "Food Rations (${cap.toInt()} Cap)")
+            }
+            if (production.bioFuelPerSec > 0.02 && state.bioFuel < cap) {
+                val secs = ((cap - state.bioFuel) / production.bioFuelPerSec).roundToInt().toLong().coerceAtLeast(2L)
+                candidates.add(secs to "Bio-Fuel (${cap.toInt()} Cap)")
+            }
+            val earliest = candidates.minByOrNull { it.first }
+            if (earliest != null) {
+                secondsUntilMax = earliest.first
+                maxResourceLabel = earliest.second
+            }
+        }
+
+        // 3. Vault Ran Out Of Power ETA
+        var secondsUntilPowerOut: Long? = null
+        var powerOutReason = ""
+        if (production.isVaultBlackout) {
+            secondsUntilPowerOut = 3L
+            powerOutReason = "Vault Power Blackout (${production.totalMegawattGenerated.roundToInt()}/${production.totalMegawattDemand.roundToInt()} MW)!"
+        } else {
+            val powerOutCandidates = mutableListOf<Pair<Long, String>>()
+            if (state.thoriumOverdriveUntilMillis > nowMillis) {
+                val overdriveLeftSecs = ((state.thoriumOverdriveUntilMillis - nowMillis) / 1000L).coerceAtLeast(2L)
+                val crankStack = state.activeDynamoCrankStack.coerceIn(1, MAX_DYNAMO_CRANKS_PER_BLACKOUT)
+                val approxMwWithoutDynamo = (production.totalMegawattGenerated / 1.40) - (16.0 * crankStack)
+                if (approxMwWithoutDynamo < production.totalMegawattDemand) {
+                    powerOutCandidates.add(
+                        overdriveLeftSecs to "Emergency Dynamo Crank expired — Vault dropped below ${production.totalMegawattDemand.roundToInt()} MW!"
+                    )
+                }
+            }
+            if (production.bioFuelPerSec < -0.02 && state.bioFuel > 0.0 && state.bioTurbineLevel > 0) {
+                val fuelDrySecs = (state.bioFuel / (-production.bioFuelPerSec)).roundToInt().toLong().coerceAtLeast(2L)
+                val turbineLossMw = state.bioTurbineLevel * PowerStationType.BIO_SLUDGE_TURBINE.baseMegawattsPerLevel * 0.55
+                if (production.totalMegawattGenerated - turbineLossMw < production.totalMegawattDemand) {
+                    powerOutCandidates.add(
+                        fuelDrySecs to "Reactor Bio-Fuel depleted — Vault Power dropped below ${production.totalMegawattDemand.roundToInt()} MW!"
+                    )
+                }
+            }
+            val earliestOutage = powerOutCandidates.minByOrNull { it.first }
+            if (earliestOutage != null) {
+                secondsUntilPowerOut = earliestOutage.first
+                powerOutReason = earliestOutage.second
+            }
+        }
+
+        return OfflineNotificationSchedule(
+            secondsUntilRoomUpgradeComplete = secondsUntilRoomDone,
+            upgradingRoomTitle = roomTitle,
+            upgradingRoomTargetLevel = activeConstructionTargetLevel,
+            secondsUntilResourcesAtMax = secondsUntilMax,
+            maxResourceSummary = maxResourceLabel,
+            secondsUntilPowerOutage = secondsUntilPowerOut,
+            powerOutageReasonSummary = powerOutReason
         )
     }
 }

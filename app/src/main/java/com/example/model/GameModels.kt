@@ -684,7 +684,7 @@ enum class PowerStationType(
     BIO_SLUDGE_TURBINE(
         id = "BIO_SLUDGE_TURBINE",
         displayName = "Bio-Sludge Combustion Turbine",
-        description = "Burns Bio-Fuel to provide steady baseline Megawatts (MW) day and night.",
+        description = "Burns Bio-Fuel to provide steady baseline Megawatts (MW). Higher reactor levels consume progressively more Bio-Fuel/s.",
         baseMegawattsPerLevel = 12.0,
         fuelUpkeepPerLevel = 0.30,
         baseScrapCost = 35.0,
@@ -694,8 +694,9 @@ enum class PowerStationType(
     SOLAR_HELIOSTAT_TOWER(
         id = "SOLAR_HELIOSTAT_TOWER",
         displayName = "Heliostat Solar Power Tower",
-        description = "Built with Aether Capacitors. Generates massive MW during Scorching Day (+50%), drops at Night.",
+        description = "Built with Aether Capacitors. Generates massive MW during Scorching Day (+50%); higher levels burn Bio-Fuel for thermal salt backup.",
         baseMegawattsPerLevel = 22.0,
+        fuelUpkeepPerLevel = 0.12,
         baseScrapCost = 60.0,
         baseGoldCost = 35.0,
         baseAetherCost = 1.0,
@@ -705,8 +706,9 @@ enum class PowerStationType(
     THORIUM_FISSION_REACTOR(
         id = "THORIUM_FISSION_REACTOR",
         displayName = "Thorium Fission Power Plant",
-        description = "Powered by rare Thorium Rods bought with Gold. Generates immense 24/7 MW & +8% global output/lv.",
+        description = "Powered by rare Thorium Rods. Generates immense 24/7 MW & +8% output/lv, but higher reactor levels take much more Bio-Fuel!",
         baseMegawattsPerLevel = 45.0,
+        fuelUpkeepPerLevel = 0.45,
         baseScrapCost = 110.0,
         baseGoldCost = 65.0,
         baseThoriumCost = 2.0,
@@ -716,8 +718,9 @@ enum class PowerStationType(
     AETHER_RESONANCE_SUBSTATION(
         id = "AETHER_RESONANCE_SUBSTATION",
         displayName = "Aether High-Voltage Substation",
-        description = "Uses Aether Capacitors & Mutagen Cores to amplify total Grid MW by +20% per level.",
+        description = "Uses Aether Capacitors & Mutagen Cores to amplify total Grid MW by +20%/lv; higher reactor levels take more Bio-Fuel.",
         baseMegawattsPerLevel = 25.0,
+        fuelUpkeepPerLevel = 0.25,
         baseScrapCost = 150.0,
         baseGoldCost = 90.0,
         baseAetherCost = 2.0,
@@ -1049,13 +1052,13 @@ enum class BuildingType(
         displayName = "Vault Living Quarters",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 1,
-        description = "Radiation-shielded dormitories required to house Dwellers. Higher levels draw more life-support MW.",
-        gameplayNeedSummary = "REQUIRED TO HIRE DWELLERS: +3 Max Dwellers/Lv & -5% Daily Food/Water Upkeep/Lv",
+        description = "Radiation-shielded dormitories required to house Dwellers (up to 15 Max Vault Dwellers). Higher levels draw more life-support MW.",
+        gameplayNeedSummary = "REQUIRED TO HIRE DWELLERS: +3 Max Dwellers/Lv (Up to 15 Max Dwellers) & -5% Daily Food/Water Upkeep/Lv",
         primaryResource = ResourceType.RATIONS,
         baseOutputPerLevel = 0.8,
         megawattDemandPerLevel = 3.0,
         baseBuildTimeSeconds = 12,
-        manualSalvageBonusDesc = "+3 Max Dweller Capacity & +5% Morale per level",
+        manualSalvageBonusDesc = "+3 Max Dweller Capacity (Max 15) & +5% Morale per level",
         baseScrapCost = 28.0,
         baseWaterCost = 10.0,
         favoredWorkerClass = null,
@@ -1197,8 +1200,8 @@ enum class BuildingType(
         displayName = "Cryo-Stasis & Ration Vault",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 4,
-        description = "Deep-freeze preservation vaults on Floor B5 that cut Dweller 5-min & daily Food/Water appetite by -8%/Lv.",
-        gameplayNeedSummary = "CUTS DWELLER HUNGER (FLOOR B5): -8% Dweller 5-Min & Daily Food/Water Drain/Lv & +400 Storage/Lv",
+        description = "Deep-freeze preservation vaults on Floor B5 that cut Dweller 60s & daily Food/Water appetite by -8%/Lv.",
+        gameplayNeedSummary = "CUTS DWELLER HUNGER (FLOOR B5): -8% Dweller 60s & Daily Food/Water Drain/Lv & +400 Storage/Lv",
         primaryResource = ResourceType.RATIONS,
         baseOutputPerLevel = 2.2,
         megawattDemandPerLevel = 5.0,
@@ -1209,6 +1212,23 @@ enum class BuildingType(
         baseFuelCost = 30.0,
         favoredWorkerClass = WorkerClassType.HYDRO_ENGINEER,
         storageBonusPerLevel = 400.0
+    ),
+    VAULT_STORE_ROOM(
+        id = "VAULT_STORE_ROOM",
+        displayName = "Vault Supply Store Room",
+        category = BuildingCategory.INFRASTRUCTURE,
+        requiredCommandLevel = 1,
+        description = "Reinforced subterranean cargo bay with expandable high-density shelving that vastly increases max stored Scrap, Water, Food, Bio-Fuel & Tech when upgraded.",
+        gameplayNeedSummary = "UPGRADABLE RESOURCE STORAGE (FLOOR B6): +1,000+ Escalating Max Resource Storage/Lv & +10% Crate Yield/Lv",
+        primaryResource = ResourceType.SCRAP,
+        baseOutputPerLevel = 1.8,
+        megawattDemandPerLevel = 2.0,
+        baseBuildTimeSeconds = 46,
+        manualSalvageBonusDesc = "+1,000+ Escalating Max Resource Storage & +10% Salvage Crate Yield per level",
+        baseScrapCost = 30.0,
+        baseWaterCost = 8.0,
+        favoredWorkerClass = WorkerClassType.SCRAPPER,
+        storageBonusPerLevel = 1000.0
     );
 }
 
@@ -1632,6 +1652,14 @@ enum class VaultMapStation(
         wingColumn = 1,
         buildingType = BuildingType.CRYO_STASIS_VAULT,
         accentColor = CryoCyan
+    ),
+    ROOM_11_STORE_ROOM(
+        id = "ROOM_11_STORE_ROOM",
+        shortTitle = "#11 Supply Store Room",
+        floorIndex = 6,
+        wingColumn = 0,
+        buildingType = BuildingType.VAULT_STORE_ROOM,
+        accentColor = SolarAmber
     );
 }
 

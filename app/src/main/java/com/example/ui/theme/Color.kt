@@ -32,3 +32,13 @@ val TextPrimary = Color(0xFFF3F4F6)
 val TextSecondary = Color(0xFF9CA3AF)
 val TextMuted = Color(0xFF6B7280)
 val TextMutedAsh = TextSecondary
+
+// Semantic Vault UI Aliases
+val AetherViolet = BioluminescentViolet
+val BioGreen = SurplusGreen
+val CyanHydro = CryoCyan
+val RustOrange = WarningOrange
+val VaultCardBorder = PanelBorder
+val VaultDarkSurface = BunkerCharcoal
+val VaultElevatedCard = SteelPanel
+

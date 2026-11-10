@@ -226,9 +226,42 @@ class OutpostViewModel(
         val now = System.currentTimeMillis()
         val elapsedSeconds = ((now - savedState.lastSavedTimestampMillis) / 1000L).coerceIn(0L, 43_200L)
 
+        // Restore or finish persisted active room construction across app restarts!
+        var baseSavedState = savedState
+        if (savedState.activeConstructionBuildingId.isNotBlank() && savedState.activeConstructionRemainingSeconds > 0) {
+            val bType = BuildingType.entries.find { it.id == savedState.activeConstructionBuildingId } ?: BuildingType.SALVAGE_YARD
+            val remAfterOffline = (savedState.activeConstructionRemainingSeconds - elapsedSeconds.toInt())
+            if (remAfterOffline <= 0) {
+                repository.updateBuildingLevel(bType.id, savedState.activeConstructionTargetLevel)
+                val buildDoneMsg = "OFFLINE BUILD COMPLETE: ${bType.displayName} reached Lv.${savedState.activeConstructionTargetLevel} while away!"
+                repository.logEvent("BUILD COMPLETE", buildDoneMsg)
+                baseSavedState = savedState.copy(
+                    activeConstructionBuildingId = "",
+                    activeConstructionTargetLevel = 0,
+                    activeConstructionRemainingSeconds = 0,
+                    activeConstructionTotalSeconds = 0,
+                    activeConstructionRushGoldCost = 0.0
+                )
+                overlayFlow.update { it.copy(activeConstruction = null, lastSalvageFeedback = buildDoneMsg) }
+            } else {
+                baseSavedState = savedState.copy(activeConstructionRemainingSeconds = remAfterOffline)
+                overlayFlow.update {
+                    it.copy(
+                        activeConstruction = ActiveBuildingConstruction(
+                            buildingType = bType,
+                            targetLevel = savedState.activeConstructionTargetLevel,
+                            remainingSeconds = remAfterOffline,
+                            totalSeconds = savedState.activeConstructionTotalSeconds.coerceAtLeast(remAfterOffline),
+                            rushGoldCost = savedState.activeConstructionRushGoldCost
+                        )
+                    )
+                }
+            }
+        }
+
         val currentUi = uiState.value
         val snap = OutpostCalculator.computeProductionSnapshot(
-            state = savedState,
+            state = baseSavedState,
             buildingsMap = currentUi.buildingsMap,
             workersMap = currentUi.workersMap,
             skillsMap = currentUi.skillsMap,
@@ -236,8 +269,8 @@ class OutpostViewModel(
         )
 
         // If 0 workers are hired/assigned, no automatic offline resources are generated!
-        if (elapsedSeconds < 20L || savedState.totalSurvivors <= 0 || snap.totalAssignedWorkers <= 0) {
-            repository.updateOutpostState(savedState.copy(lastSavedTimestampMillis = now))
+        if (elapsedSeconds < 20L || baseSavedState.totalSurvivors <= 0 || snap.totalAssignedWorkers <= 0) {
+            repository.updateOutpostState(baseSavedState.copy(lastSavedTimestampMillis = now))
             return
         }
 
@@ -255,7 +288,7 @@ class OutpostViewModel(
         val xpGain = snap.xpPerSec * elapsedSeconds * offlineFactor
 
         val updatedState = applyXpAndResourceDelta(
-            baseState = savedState.copy(lastSavedTimestampMillis = now),
+            baseState = baseSavedState.copy(lastSavedTimestampMillis = now),
             scrapDelta = scrapGain,
             waterDelta = waterGain,
             rationsDelta = rationsGain,
@@ -335,21 +368,23 @@ class OutpostViewModel(
                     }
                 }
 
-                // 5-Minute (300s) Dweller Food & Water Feeding Cycle + 2-Minute (120s) Appetite Escalation
+                // 60-Second Dweller Food & Water Feeding Cycle + 2-Minute (120s) Appetite Escalation
                 var fiveMinFoodDeduct = 0.0
                 var fiveMinWaterDeduct = 0.0
-                var nextFeedSeconds = state.dwellerFeedCycleSecondsRemaining
+                val clampedCurrentFeedSecs = state.dwellerFeedCycleSecondsRemaining.coerceIn(1, OutpostCalculator.DWELLER_FEED_INTERVAL_SECONDS)
+                var nextFeedSeconds = clampedCurrentFeedSecs
                 var nextEscalationSeconds = state.dwellerAppetiteEscalationSeconds
                 if (state.totalSurvivors > 0) {
                     nextEscalationSeconds += 1
                     if (nextEscalationSeconds % OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS == 0) {
                         val newTier = nextEscalationSeconds / OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS
+                        val pctStep = if (nextDayCounter <= 10) 8 else 14
                         repository.logEvent(
                             "CREW APPETITE",
-                            "2-Minute Dweller Appetite Escalation (Tier $newTier): Vault Dwellers now require +${newTier * 14}% more Food & Water!"
+                            "2-Minute Dweller Appetite Escalation (Tier $newTier): Vault Dwellers now require +${newTier * pctStep}% more Food & Water!"
                         )
                     }
-                    if (state.dwellerFeedCycleSecondsRemaining <= 1) {
+                    if (clampedCurrentFeedSecs <= 1) {
                         fiveMinFoodDeduct = snap.fiveMinDwellerFoodCost
                         fiveMinWaterDeduct = snap.fiveMinDwellerWaterCost
                         nextFeedSeconds = OutpostCalculator.DWELLER_FEED_INTERVAL_SECONDS
@@ -357,11 +392,11 @@ class OutpostViewModel(
                             nextEscalationSeconds = (nextEscalationSeconds - OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS).coerceAtLeast(0)
                         }
                         repository.logEvent(
-                            "5-MIN FEEDING",
-                            "5-Minute Dweller Feeding Cycle: Crew consumed -${fiveMinFoodDeduct.roundToInt()} Food & -${fiveMinWaterDeduct.roundToInt()} Water!"
+                            "60S FEEDING",
+                            "60-Second Dweller Feeding Cycle: Crew consumed -${fiveMinFoodDeduct.roundToInt()} Food & -${fiveMinWaterDeduct.roundToInt()} Water!"
                         )
                     } else {
-                        nextFeedSeconds = state.dwellerFeedCycleSecondsRemaining - 1
+                        nextFeedSeconds = clampedCurrentFeedSecs - 1
                     }
                 }
 
@@ -398,11 +433,21 @@ class OutpostViewModel(
                 // Tick Active Vault Room Construction Timer
                 val currentBuild = overlayFlow.value.activeConstruction
                 var buildCompleteXpAward = 0.0
+                var nextConstructId = state.activeConstructionBuildingId
+                var nextConstructTargetLv = state.activeConstructionTargetLevel
+                var nextConstructRemSecs = state.activeConstructionRemainingSeconds
+                var nextConstructTotalSecs = state.activeConstructionTotalSeconds
+                var nextConstructRushCost = state.activeConstructionRushGoldCost
                 if (currentBuild != null) {
                     if (currentBuild.remainingSeconds <= 1) {
                         repository.updateBuildingLevel(currentBuild.buildingType.id, currentBuild.targetLevel)
                         buildCompleteXpAward = 26.0 + currentBuild.targetLevel * 14.0
                         val doneMsg = "CONSTRUCTION COMPLETE: ${currentBuild.buildingType.displayName} reached Lv.${currentBuild.targetLevel} (+${buildCompleteXpAward.toInt()} XP)!"
+                        nextConstructId = ""
+                        nextConstructTargetLv = 0
+                        nextConstructRemSecs = 0
+                        nextConstructTotalSecs = 0
+                        nextConstructRushCost = 0.0
                         overlayFlow.update {
                             it.copy(
                                 activeConstruction = null,
@@ -411,10 +456,16 @@ class OutpostViewModel(
                         }
                         repository.logEvent("BUILD COMPLETE", doneMsg)
                     } else {
+                        val nextRem = currentBuild.remainingSeconds - 1
+                        nextConstructId = currentBuild.buildingType.id
+                        nextConstructTargetLv = currentBuild.targetLevel
+                        nextConstructRemSecs = nextRem
+                        nextConstructTotalSecs = currentBuild.totalSeconds
+                        nextConstructRushCost = currentBuild.rushGoldCost
                         overlayFlow.update {
                             it.copy(
                                 activeConstruction = currentBuild.copy(
-                                    remainingSeconds = currentBuild.remainingSeconds - 1
+                                    remainingSeconds = nextRem
                                 )
                             )
                         }
@@ -516,7 +567,8 @@ class OutpostViewModel(
                 if (!snap.isVaultBlackout && hiredScrappers > 0 && state.rawSalvageCaches > 0 && tickCounter % autoDismantleInterval == 0) {
                     cachesBrokenThisTick = minOf(state.rawSalvageCaches, 1 + hiredScrappers / 3)
                     val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
-                    val mult = 1.0 + yardLv * 0.25 + (state.salvageRigLevel - 1) * 0.25
+                    val storeLv = current.buildingsMap[BuildingType.VAULT_STORE_ROOM.id] ?: 0
+                    val mult = (1.0 + yardLv * 0.25 + (state.salvageRigLevel - 1) * 0.25) * (1.0 + storeLv * 0.10)
                     cacheScrapBonus = cachesBrokenThisTick * 5.0 * mult
                     cacheWaterBonus = cachesBrokenThisTick * 3.0 * mult
                     cacheRationsBonus = cachesBrokenThisTick * 3.0 * mult
@@ -748,24 +800,30 @@ class OutpostViewModel(
                     }
                 }
 
-                // Realistic Shelter Life-Support (O2, Radiation, Dweller Health & Generator Wear)
+                // Realistic Shelter Life-Support (O2, Radiation, Dweller Health, Generator Wear & Hardcore Hazards)
                 var nextOxygen = state.oxygenPercent
                 var nextRadiation = (state.radiationMillisieverts + expRadiationDelta + raidRadSpike).coerceIn(0, 1000)
                 var nextHealth = state.dwellerHealthPercent
                 var nextInjured = (state.injuredDwellersCount + raidInjuryIncrement).coerceIn(0, state.totalSurvivors.coerceAtLeast(1))
                 var nextGeneratorWear = state.generatorWearPercent
+                var nextShaftHeat = state.miningShaftHeatPercent
+                var nextRoomWear = state.roomStructuralWearPercent
+                var nextPipeLeaks = state.activePipeLeaksCount
 
                 if (tickCounter % 3 == 0) {
                     nextOxygen = (state.oxygenPercent + snap.oxygenDeltaPerSec.roundToInt()).coerceIn(15, 100)
                     nextRadiation = (nextRadiation + snap.radiationDeltaPerSec.roundToInt()).coerceIn(0, 1000)
+                    nextShaftHeat = (state.miningShaftHeatPercent - 2).coerceAtLeast(0)
 
                     val medbayLv = current.buildingsMap[BuildingType.REINFORCED_SILO.id] ?: 0
                     val hydroCount = current.workersMap[WorkerClassType.HYDRO_ENGINEER.id]?.assignedCount ?: 0
                     val starvingOrDehydrated = state.totalSurvivors > 0 && (state.rations < 1.0 || state.water < 1.0)
                     val hypoxicOrIrradiated = nextOxygen < 40 || nextRadiation > 150
+                    val hasUntreatedBeastTrauma = state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0
 
-                    if (starvingOrDehydrated || hypoxicOrIrradiated) {
-                        nextHealth = (state.dwellerHealthPercent - 2).coerceAtLeast(20)
+                    if (starvingOrDehydrated || hypoxicOrIrradiated || hasUntreatedBeastTrauma) {
+                        val traumaPenalty = (state.bleedingDwellersCount + state.venomInfectedDwellersCount).coerceAtMost(3)
+                        nextHealth = (state.dwellerHealthPercent - 2 - traumaPenalty).coerceAtLeast(15)
                     } else if (!snap.isVaultBlackout && (medbayLv > 0 || hydroCount > 0)) {
                         nextHealth = (state.dwellerHealthPercent + 2 + medbayLv).coerceAtMost(100)
                         if (nextHealth >= 85 && nextInjured > 0) {
@@ -781,6 +839,20 @@ class OutpostViewModel(
                         nextGeneratorWear = (state.generatorWearPercent - hiredScrappers * 2).coerceAtLeast(0)
                     } else if (hasRunningGenerators) {
                         nextGeneratorWear = (state.generatorWearPercent + 1).coerceAtMost(80)
+                    }
+                }
+
+                if (tickCounter % 12 == 0 && snap.totalBuiltRoomsCount > 0) {
+                    if (hiredScrappers >= 2 && !snap.isVaultBlackout) {
+                        nextRoomWear = (state.roomStructuralWearPercent - 1).coerceAtLeast(0)
+                    } else {
+                        nextRoomWear = (state.roomStructuralWearPercent + 1 + (snap.totalBuiltRoomsCount / 4)).coerceAtMost(80)
+                        if (nextRoomWear >= 30 && nextPipeLeaks < 4 && Random.nextInt(100) < 22) {
+                            nextPipeLeaks = (nextPipeLeaks + 1).coerceAtMost(4)
+                            val leakWarn = "PIPE LEAK DETECTED: Vault Room Structural Wear (${nextRoomWear}%) ruptured a coolant pipe ($nextPipeLeaks active leak(s) draining Water & Scrap)!"
+                            overlayFlow.update { it.copy(lastSalvageFeedback = leakWarn) }
+                            repository.logEvent("PIPE LEAK", leakWarn)
+                        }
                     }
                 }
 
@@ -827,6 +899,15 @@ class OutpostViewModel(
                     repository.logEvent("GAME OVER", nextGameOverReason)
                 }
 
+                val isOverdriveStillActive = state.thoriumOverdriveUntilMillis > now
+                val nextActiveCrankStack = if (isOverdriveStillActive) state.activeDynamoCrankStack else 0
+                // Reset manual cranks to 4 whenever permanent (non-crank) Vault Power is online so every new power outage has 4 cranks!
+                val nextManualDynamoCranks = if (!snap.isVaultBlackout && !isOverdriveStillActive) {
+                    OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT
+                } else {
+                    state.manualDynamoCranksRemaining
+                }
+
                 var updatedState = applyXpAndResourceDelta(
                     baseState = state.copy(
                         totalSurvivors = (state.totalSurvivors + expSurvivorDelta).coerceAtLeast(0),
@@ -868,6 +949,16 @@ class OutpostViewModel(
                         deficitSecondsAccumulated = nextDeficitSeconds,
                         dwellerFeedCycleSecondsRemaining = nextFeedSeconds,
                         dwellerAppetiteEscalationSeconds = nextEscalationSeconds,
+                        manualDynamoCranksRemaining = nextManualDynamoCranks,
+                        activeDynamoCrankStack = nextActiveCrankStack,
+                        miningShaftHeatPercent = nextShaftHeat,
+                        roomStructuralWearPercent = nextRoomWear,
+                        activePipeLeaksCount = nextPipeLeaks,
+                        activeConstructionBuildingId = nextConstructId,
+                        activeConstructionTargetLevel = nextConstructTargetLv,
+                        activeConstructionRemainingSeconds = nextConstructRemSecs,
+                        activeConstructionTotalSeconds = nextConstructTotalSecs,
+                        activeConstructionRushGoldCost = nextConstructRushCost,
                         isGameOver = nextIsGameOver,
                         gameOverReason = nextGameOverReason,
                         lastSavedTimestampMillis = now
@@ -1336,12 +1427,22 @@ class OutpostViewModel(
             val rescuedCount = if (canRescueCitizen) 1 else 0
             val rescuedUnique = rescuedCount > 0 && Random.nextInt(100) < CaravanCandidateGenerator.UNIQUE_DWELLER_CHANCE_PERCENT
 
+            // Hardcore Hunting: Ammo consumption & Beast Counter-Attack Injury Roll!
+            val ammoConsumed = minOf(state.ammoRounds, preview.ammoRecommended)
+            val beastCounterAttacked = Random.nextInt(100) < preview.counterAttackInjuryChancePercent
+            val isVenomBeast = target == HuntingTarget.GLOWING_LEVIATHAN_WYRM || target == HuntingTarget.APEX_RAD_BEHEMOTH
+            val bleedDelta = if (beastCounterAttacked && !isVenomBeast) 1 else 0
+            val venomDelta = if (beastCounterAttacked && isVenomBeast) 1 else 0
+
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
                     totalSurvivors = state.totalSurvivors + rescuedCount,
                     uniqueDwellersCount = state.uniqueDwellersCount + (if (rescuedUnique) 1 else 0),
                     craftedSpears = (state.craftedSpears - target.spearsRequired).coerceAtLeast(0),
                     craftedSnareTraps = (state.craftedSnareTraps - target.trapsRequired).coerceAtLeast(0),
+                    ammoRounds = (state.ammoRounds - ammoConsumed).coerceAtLeast(0),
+                    bleedingDwellersCount = (state.bleedingDwellersCount + bleedDelta).coerceAtMost(5),
+                    venomInfectedDwellersCount = (state.venomInfectedDwellersCount + venomDelta).coerceAtMost(5),
                     totalHuntsCompleted = state.totalHuntsCompleted + 1,
                     totalGoldSalvaged = state.totalGoldSalvaged + preview.goldReward
                 ),
@@ -1368,11 +1469,15 @@ class OutpostViewModel(
                 )
             }
 
-            val rescueNote = if (rescuedCount > 0) " Also rescued +1 Citizen from the wasteland!" else ""
-            repository.logEvent(
-                "HUNT",
-                "Hunted ${target.title}: +${preview.foodReward.toInt()} Food, +${preview.waterReward.toInt()} Water & +${preview.goldReward.toInt()} Gold!$rescueNote"
-            )
+            val rescueNote = if (rescuedCount > 0) " Rescued +1 Citizen!" else ""
+            val injuryNote = when {
+                venomDelta > 0 -> " WARNING: Beast Counter-Attack inflicted Rad-Venom on 1 Hunter!"
+                bleedDelta > 0 -> " WARNING: Beast Counter-Attack lacerated 1 Hunter (Bleeding)!"
+                else -> ""
+            }
+            val huntMsg = "Hunted ${target.title} (-$ammoConsumed Ammo): +${preview.foodReward.toInt()} Food, +${preview.waterReward.toInt()} Water & +${preview.goldReward.toInt()} Gold!$rescueNote$injuryNote"
+            overlayFlow.update { it.copy(lastDefenseDamageFeedback = huntMsg) }
+            repository.logEvent("HUNT", huntMsg)
         }
     }
 
@@ -1789,10 +1894,21 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val prod = current.production
+            if (state.manualDynamoCranksRemaining <= 0) {
+                val exhaustedMsg = "OUT OF MANUAL CRANKS (0/${OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT} Left): You can manual crank 4 times per power outage! Build or fuel Reactors to restore permanent power."
+                overlayFlow.update { it.copy(lastSalvageFeedback = exhaustedMsg) }
+                return@launch
+            }
+            val nextCranksLeft = (state.manualDynamoCranksRemaining - 1).coerceAtLeast(0)
+            val currentStack = if (state.thoriumOverdriveUntilMillis > now) state.activeDynamoCrankStack else 0
+            val nextStack = (currentStack + 1).coerceIn(1, OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT)
+            val totalCrankMw = nextStack * 16.0
             val restoresPower = (prod.totalMegawattGenerated + 16.0) >= prod.totalMegawattDemand
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
                     thoriumOverdriveUntilMillis = now + 45_000L,
+                    manualDynamoCranksRemaining = nextCranksLeft,
+                    activeDynamoCrankStack = nextStack,
                     blackoutDaysCount = if (restoresPower) 0 else state.blackoutDaysCount,
                     blackoutSecondsAccumulated = if (restoresPower) 0 else state.blackoutSecondsAccumulated
                 ),
@@ -1800,10 +1916,12 @@ class OutpostViewModel(
                 storageCap = prod.storageCap
             )
             repository.updateOutpostState(updated)
+            val usedCount = OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT - nextCranksLeft
+            val msg = "Emergency Hand-Crank Dynamo ($usedCount/${OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT} Cranks • $nextCranksLeft left): +${totalCrankMw.toInt()} MW Power for 45s!"
             overlayFlow.update {
-                it.copy(lastSalvageFeedback = "Emergency Hand-Crank Dynamo active: +16 MW Vault Power for 45s (Blackout Clock Reset)!")
+                it.copy(lastSalvageFeedback = msg)
             }
-            repository.logEvent("VAULT POWER", "Cranked Emergency Vault Dynamo: +16 MW Power for 45s so Vault rooms & turrets can run!")
+            repository.logEvent("VAULT POWER", msg)
         }
     }
 
@@ -2092,7 +2210,8 @@ class OutpostViewModel(
                 gold = state.gold - cost.goldCost,
                 thoriumRods = state.thoriumRods - cost.thoriumCost,
                 aetherCells = state.aetherCells - cost.aetherCost,
-                mutagenCores = state.mutagenCores - cost.coresCost
+                mutagenCores = state.mutagenCores - cost.coresCost,
+                manualDynamoCranksRemaining = OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT
             )
 
             val updated = applyXpAndResourceDelta(
@@ -2131,7 +2250,17 @@ class OutpostViewModel(
             val snap = current.production
 
             val newCombo = (state.salvageComboCount + 1).coerceAtMost(15)
-            val stateWithCombo = state.copy(salvageComboCount = newCombo)
+            // Hardcore Mining: Pickaxe Durability (-3% per swing), Shaft Heat (+7% per swing), and Cave-In Hazard!
+            val nextDurability = (state.pickaxeDurabilityPercent - 3).coerceAtLeast(0)
+            val nextHeat = (state.miningShaftHeatPercent + 7).coerceAtMost(100)
+            val triggeredCaveIn = state.activeCaveInHazard || (nextHeat >= 80 && Random.nextInt(100) < 25)
+
+            val stateWithCombo = state.copy(
+                salvageComboCount = newCombo,
+                pickaxeDurabilityPercent = nextDurability,
+                miningShaftHeatPercent = nextHeat,
+                activeCaveInHazard = triggeredCaveIn
+            )
 
             val yieldPreview = OutpostCalculator.computeSalvageNodeYield(
                 nodeType = slot.nodeType,
@@ -2161,9 +2290,14 @@ class OutpostViewModel(
                     storageCap = snap.storageCap
                 )
                 repository.updateOutpostState(updatedState)
+                val hazardSuffix = when {
+                    triggeredCaveIn && !state.activeCaveInHazard -> " • CAVE-IN TRIGGERED (80%+ Heat)!"
+                    nextDurability <= 20 -> " • Pickaxe Dull ($nextDurability%)!"
+                    else -> ""
+                }
                 overlayFlow.update { ov ->
                     ov.copy(
-                        lastSalvageFeedback = "Salvaged +${tapPrimary.toInt()} ${slot.nodeType.primaryResource.shortLabel} & +${tapGold.toInt()} GOLD (${nextStep}/${slot.maxProgress})",
+                        lastSalvageFeedback = "Salvaged +${tapPrimary.toInt()} ${slot.nodeType.primaryResource.shortLabel} & +${tapGold.toInt()} GOLD (${nextStep}/${slot.maxProgress})$hazardSuffix",
                         salvageNodes = ov.salvageNodes.map {
                             if (it.slotIndex == slotIndex) it.copy(currentProgress = nextStep) else it
                         }
@@ -2394,7 +2528,8 @@ class OutpostViewModel(
             val state = current.state
             val snap = current.production
 
-            if (state.totalSurvivors >= snap.maxWorkerCapacity) return@launch
+            val effectiveMaxDwellers = minOf(snap.maxWorkerCapacity, OutpostCalculator.MAX_VAULT_DWELLERS)
+            if (state.totalSurvivors >= effectiveMaxDwellers) return@launch
             if (state.rations < candidate.rationsCost ||
                 state.water < candidate.waterCost ||
                 state.scrap < candidate.scrapCost ||
@@ -2406,7 +2541,7 @@ class OutpostViewModel(
                 (Random.nextInt(100) < CaravanCandidateGenerator.UNIQUE_DWELLER_CHANCE_PERCENT)
             val newUniqueCount = state.uniqueDwellersCount + (if (isUniqueDwellerGained) 1 else 0)
 
-            val newTotalSurvivors = state.totalSurvivors + 1
+            val newTotalSurvivors = (state.totalSurvivors + 1).coerceAtMost(OutpostCalculator.MAX_VAULT_DWELLERS)
             val updatedState = applyXpAndResourceDelta(
                 baseState = state.copy(
                     totalSurvivors = newTotalSurvivors,
@@ -2505,16 +2640,18 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val snap = current.production
+            val effectiveMaxDwellers = minOf(snap.maxWorkerCapacity, OutpostCalculator.MAX_VAULT_DWELLERS)
+            if (state.totalSurvivors >= effectiveMaxDwellers) return@launch
             val cost = OutpostCalculator.computeRescueBeaconCost(
                 state = state,
-                maxWorkerCapacity = snap.maxWorkerCapacity,
+                maxWorkerCapacity = effectiveMaxDwellers,
                 skillsMap = current.skillsMap
             )
             if (!cost.canAfford) return@launch
 
             val isUniqueRescued = Random.nextInt(100) < CaravanCandidateGenerator.UNIQUE_DWELLER_CHANCE_PERCENT
             val newUniqueCount = state.uniqueDwellersCount + (if (isUniqueRescued) 1 else 0)
-            val newTotalCitizens = state.totalSurvivors + 1
+            val newTotalCitizens = (state.totalSurvivors + 1).coerceAtMost(OutpostCalculator.MAX_VAULT_DWELLERS)
             val updatedState = applyXpAndResourceDelta(
                 baseState = state.copy(
                     totalSurvivors = newTotalCitizens,
@@ -2602,7 +2739,12 @@ class OutpostViewModel(
                     scrap = state.scrap - cost.scrapCost,
                     water = state.water - cost.waterCost,
                     bioFuel = state.bioFuel - cost.fuelCost,
-                    mutagenCores = state.mutagenCores - cost.coresCost
+                    mutagenCores = state.mutagenCores - cost.coresCost,
+                    activeConstructionBuildingId = buildingType.id,
+                    activeConstructionTargetLevel = newLevel,
+                    activeConstructionRemainingSeconds = cost.buildTimeSeconds,
+                    activeConstructionTotalSeconds = cost.buildTimeSeconds,
+                    activeConstructionRushGoldCost = cost.rushGoldCost
                 ),
                 xpDelta = 10.0,
                 storageCap = current.production.storageCap
@@ -2638,7 +2780,13 @@ class OutpostViewModel(
                 repository.updateBuildingLevel(activeBuild.buildingType.id, activeBuild.targetLevel)
                 val xpGain = 26.0 + activeBuild.targetLevel * 14.0
                 val updated = applyXpAndResourceDelta(
-                    baseState = state,
+                    baseState = state.copy(
+                        activeConstructionBuildingId = "",
+                        activeConstructionTargetLevel = 0,
+                        activeConstructionRemainingSeconds = 0,
+                        activeConstructionTotalSeconds = 0,
+                        activeConstructionRushGoldCost = 0.0
+                    ),
                     xpDelta = xpGain,
                     storageCap = current.production.storageCap
                 )
@@ -2654,7 +2802,9 @@ class OutpostViewModel(
             } else {
                 val nextRemaining = activeBuild.remainingSeconds - shaveSeconds
                 val updated = applyXpAndResourceDelta(
-                    baseState = state,
+                    baseState = state.copy(
+                        activeConstructionRemainingSeconds = nextRemaining
+                    ),
                     xpDelta = 4.0,
                     storageCap = current.production.storageCap
                 )
@@ -2678,7 +2828,14 @@ class OutpostViewModel(
             repository.updateBuildingLevel(activeBuild.buildingType.id, activeBuild.targetLevel)
             val xpGain = 30.0 + activeBuild.targetLevel * 15.0
             val updated = applyXpAndResourceDelta(
-                baseState = state.copy(gold = state.gold - activeBuild.rushGoldCost),
+                baseState = state.copy(
+                    gold = state.gold - activeBuild.rushGoldCost,
+                    activeConstructionBuildingId = "",
+                    activeConstructionTargetLevel = 0,
+                    activeConstructionRemainingSeconds = 0,
+                    activeConstructionTotalSeconds = 0,
+                    activeConstructionRushGoldCost = 0.0
+                ),
                 xpDelta = xpGain,
                 storageCap = current.production.storageCap
             )
@@ -2691,6 +2848,160 @@ class OutpostViewModel(
                 )
             }
             repository.logEvent("BUILD RUSHED", doneMsg)
+        }
+    }
+
+    // --- HARDCORE MINING, BUILDING & HUNTING MAINTENANCE ACTIONS ---
+
+    fun sharpenPickaxe() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            if (state.pickaxeDurabilityPercent >= 100) return@launch
+            val scrapCost = (10.0 + state.salvageRigLevel * 3.0).roundToInt().toDouble()
+            if (state.scrap < scrapCost) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "Need ${scrapCost.toInt()} Scrap to sharpen & re-tip Pickaxe!")
+                }
+                return@launch
+            }
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    scrap = state.scrap - scrapCost,
+                    pickaxeDurabilityPercent = 100
+                ),
+                xpDelta = 12.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "PICKAXE SHARPENED: Restored Pickaxe Durability to 100% (-${scrapCost.toInt()} Scrap, +12 XP)!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("MINING", msg)
+        }
+    }
+
+    fun coolMiningShaft() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            if (state.miningShaftHeatPercent <= 0) return@launch
+            val waterCost = 8.0
+            if (state.water < waterCost) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "Need 8 Water to flush & cool the deep mining shaft!")
+                }
+                return@launch
+            }
+            val newHeat = (state.miningShaftHeatPercent - 55).coerceAtLeast(0)
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    water = state.water - waterCost,
+                    miningShaftHeatPercent = newHeat
+                ),
+                xpDelta = 10.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "SHAFT THERMAL FLUSH: Cooled bedrock shaft heat to $newHeat% (-8 Water, +10 XP)!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("MINING", msg)
+        }
+    }
+
+    fun clearCaveInHazard() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            if (!state.activeCaveInHazard) return@launch
+            val scrapCost = 14.0
+            if (state.scrap < scrapCost) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "Need 14 Scrap for steel shoring beams to clear the Cave-In!")
+                }
+                return@launch
+            }
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    scrap = state.scrap - scrapCost,
+                    activeCaveInHazard = false,
+                    miningShaftHeatPercent = (state.miningShaftHeatPercent - 35).coerceAtLeast(0)
+                ),
+                xpDelta = 18.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "CAVE-IN SHORED UP: Cleared rubble collapse & restored 100% vein mining access (-14 Scrap, +18 XP)!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("MINING", msg)
+        }
+    }
+
+    fun weldRoomPipesAndWear() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            if (state.activePipeLeaksCount <= 0 && state.roomStructuralWearPercent <= 0) return@launch
+            val scrapCost = (12.0 + state.activePipeLeaksCount * 6.0 + state.roomStructuralWearPercent * 0.25).roundToInt().toDouble()
+            if (state.scrap < scrapCost) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "Need ${scrapCost.toInt()} Scrap to weld coolant pipe leaks & reinforce room bulkheads!")
+                }
+                return@launch
+            }
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    scrap = state.scrap - scrapCost,
+                    activePipeLeaksCount = 0,
+                    roomStructuralWearPercent = 0
+                ),
+                xpDelta = 20.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "PIPES WELDED & ROOMS REINFORCED: 0 Pipe Leaks & 0% Room Structural Wear (-${scrapCost.toInt()} Scrap, +20 XP)!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("MAINTENANCE", msg)
+        }
+    }
+
+    fun treatHuntingInjuries() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            if (state.bleedingDwellersCount <= 0 && state.venomInfectedDwellersCount <= 0 && state.injuredDwellersCount <= 0) return@launch
+            val useMedkit = state.medkitsCount > 0
+            val useRadAway = state.radAwayCount > 0
+            val fallbackWater = if (!useMedkit && !useRadAway) 8.0 else 0.0
+            val fallbackRations = if (!useMedkit && !useRadAway) 8.0 else 0.0
+            if (!useMedkit && !useRadAway && (state.water < fallbackWater || state.rations < fallbackRations)) {
+                overlayFlow.update {
+                    it.copy(lastDefenseDamageFeedback = "Need 1 Medkit/RadAway or 8 Water + 8 Food to suture bleeding & purge beast venom!")
+                }
+                return@launch
+            }
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    medkitsCount = (state.medkitsCount - (if (useMedkit) 1 else 0)).coerceAtLeast(0),
+                    radAwayCount = (state.radAwayCount - (if (!useMedkit && useRadAway) 1 else 0)).coerceAtLeast(0),
+                    water = (state.water - fallbackWater).coerceAtLeast(0.0),
+                    rations = (state.rations - fallbackRations).coerceAtLeast(0.0),
+                    bleedingDwellersCount = 0,
+                    venomInfectedDwellersCount = 0,
+                    injuredDwellersCount = 0,
+                    dwellerHealthPercent = (state.dwellerHealthPercent + 25).coerceAtMost(100)
+                ),
+                xpDelta = 16.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "HUNTER TRAUMA TREATED: Sutured all Beast Bleeding & neutralized Rad-Venom (+25% Dweller Health, +16 XP)!"
+            overlayFlow.update {
+                it.copy(
+                    lastDefenseDamageFeedback = msg,
+                    lastSalvageFeedback = msg
+                )
+            }
+            repository.logEvent("MEDBAY", msg)
         }
     }
 
@@ -2867,8 +3178,18 @@ class OutpostViewModel(
         }
     }
 
-    fun performOverseerPrestige() {
+    fun performOverseerPrestige(isGoogleSignedIn: Boolean = true) {
         viewModelScope.launch {
+            if (!isGoogleSignedIn) {
+                val msg = "GOOGLE SIGN-IN REQUIRED: Sign in with Google to Prestige, Save Progress to Cloud & use Multiplayer!"
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = msg,
+                        publicNetworkFeedback = msg
+                    )
+                }
+                return@launch
+            }
             val current = uiState.value
             val state = current.state
             val preview = OutpostCalculator.computePrestigePreview(
@@ -2958,6 +3279,21 @@ class OutpostViewModel(
             repository.logEvent(
                 "PRESTIGE",
                 "★ OVERSEER ASCENSION COMPLETE! Reached Prestige Rank $newPrestigeLevel and earned +${preview.coresToEarn} Permanent Prestige Cores ($newPrestigeCores total)!"
+            )
+        }
+    }
+
+    fun stopPublicNetworkSync() {
+        activeSyncedUserId = null
+        publicVaultsJob?.cancel()
+        publicDropsJob?.cancel()
+        publicVaultsJob = null
+        publicDropsJob = null
+        overlayFlow.update {
+            it.copy(
+                publicVaults = emptyList(),
+                publicSupplyDrops = emptyList(),
+                publicNetworkFeedback = "Signed out of Google. Playing in Local Offline Mode (Cloud Save, Prestige & Multiplayer disabled)."
             )
         }
     }

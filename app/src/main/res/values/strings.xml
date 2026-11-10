@@ -5,6 +5,12 @@
     <string name="tab_survivors">Dwellers</string>
     <string name="tab_network">Net &amp; Trade</string>
     <string name="tab_skill_tree">Skills (Lv.100)</string>
+    <string name="tab_mining">Mining</string>
+    <string name="tab_building">Building</string>
+    <string name="tab_hunting">Hunting</string>
+    <string name="tab_vault_stats">Vault Stats</string>
+    <string name="tab_resources">Resources</string>
+    <string name="tab_crew_power">Crew &amp; Power</string>
     <string name="action_scavenge">Swing Pickaxe</string>
     <string name="action_recruit">Hire with Gold</string>
     <string name="action_train_class">Train Dwellers</string>

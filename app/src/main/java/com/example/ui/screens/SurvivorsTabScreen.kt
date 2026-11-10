@@ -170,7 +170,7 @@ fun SurvivorsTabScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Living Dwellers: ${state.totalSurvivors} / ${prod.maxWorkerCapacity} Quarters Cap • Assigned: ${prod.totalAssignedWorkers} • Injured: ${state.injuredDwellersCount} • Lost: ${state.totalDwellersLost}",
+                                    text = "Living Dwellers: ${state.totalSurvivors} / ${prod.maxWorkerCapacity} Quarters Cap (15 Max Vault Cap) • Assigned: ${prod.totalAssignedWorkers} • Injured: ${state.injuredDwellersCount} • Lost: ${state.totalDwellersLost}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold
@@ -197,9 +197,16 @@ fun SurvivorsTabScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = XpGold
                                     )
+                                } else if (state.totalSurvivors >= OutpostCalculator.MAX_VAULT_DWELLERS) {
+                                    Text(
+                                        text = "Maximum Vault Dweller limit reached (${state.totalSurvivors}/${OutpostCalculator.MAX_VAULT_DWELLERS} Max Vault Cap)!",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = SolarAmber,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 } else if (!hasHousingSpace) {
                                     Text(
-                                        text = "Vault Living Quarters full (${state.totalSurvivors}/${prod.maxWorkerCapacity})! Build or upgrade Vault Living Quarters in the Vault tab to hire more Dwellers.",
+                                        text = "Vault Living Quarters full (${state.totalSurvivors}/${prod.maxWorkerCapacity} • ${OutpostCalculator.MAX_VAULT_DWELLERS} Max Vault Cap)! Upgrade Vault Living Quarters in the Vault tab to hire more Dwellers.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = HazardRed
                                     )

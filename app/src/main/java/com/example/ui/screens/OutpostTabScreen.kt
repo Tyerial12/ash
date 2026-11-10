@@ -78,6 +78,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import com.example.model.FishingSpot
 import com.example.model.VaultMapStation
 import com.example.model.VaultOperationalPosture
+import com.example.ui.components.Vault3dHologramMapCard
 import com.example.ui.components.formatCompact
 import com.example.ui.theme.BioluminescentViolet
 import com.example.ui.theme.BunkerCharcoal
@@ -100,8 +101,9 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private enum class VaultSubView(val label: String, val tag: String) {
-    MAP_AND_MINE("2D Vault & Mine", "vault_subtab_map"),
-    VAULT_ROOMS("Rooms #1-#10", "vault_subtab_rooms"),
+    MAP_AND_MINE("2D & Mine", "vault_subtab_map"),
+    VAULT_3D_MAP("3D Map", "vault_subtab_3d_map"),
+    VAULT_ROOMS("Rooms #1-#11", "vault_subtab_rooms"),
     POWER_AND_CLOCKS("Power & Clocks", "vault_subtab_power"),
     ALL("All Systems", "vault_subtab_all")
 }
@@ -130,9 +132,22 @@ fun OutpostTabScreen(
     onSetOperationalPosture: (VaultOperationalPosture) -> Unit = {},
     onCallEmergencyReliefDrop: () -> Unit = {},
     onRequestRestartGame: () -> Unit = {},
+    onSharpenPickaxe: () -> Unit = {},
+    onCoolMiningShaft: () -> Unit = {},
+    onClearCaveIn: () -> Unit = {},
+    onWeldRoomPipes: () -> Unit = {},
+    initialSubViewName: String? = null,
     modifier: Modifier = Modifier
 ) {
-    var selectedSubView by remember { mutableStateOf(VaultSubView.MAP_AND_MINE) }
+    val defaultSubView = remember(initialSubViewName) {
+        when (initialSubViewName) {
+            "ROOMS" -> VaultSubView.VAULT_ROOMS
+            "3D_MAP" -> VaultSubView.VAULT_3D_MAP
+            "POWER" -> VaultSubView.POWER_AND_CLOCKS
+            else -> VaultSubView.MAP_AND_MINE
+        }
+    }
+    var selectedSubView by remember(initialSubViewName) { mutableStateOf(defaultSubView) }
     var selectedCategory by remember { mutableStateOf<BuildingCategory?>(null) }
     val filteredBuildings = remember(selectedCategory) {
         if (selectedCategory == null) BuildingType.entries
@@ -140,6 +155,7 @@ fun OutpostTabScreen(
     }
 
     val show2dVaultMap = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.MAP_AND_MINE
+    val show3dVaultMap = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.VAULT_3D_MAP || selectedSubView == VaultSubView.VAULT_ROOMS
     val showMineAndFix = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.MAP_AND_MINE
     val showVaultRooms = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.VAULT_ROOMS
     val showPowerGrid = selectedSubView == VaultSubView.ALL || selectedSubView == VaultSubView.POWER_AND_CLOCKS
@@ -217,6 +233,18 @@ fun OutpostTabScreen(
                 }
             }
 
+            if (show3dVaultMap) {
+                item(key = "interactive_3d_vault_hologram_map") {
+                    Vault3dHologramMapCard(
+                        uiState = uiState,
+                        onSelectStation = onWalkToStation,
+                        onUpgradeBuilding = onUpgradeBuilding,
+                        onMineAtSurface = { onHarvestNode(0) },
+                        onFishAtSump = { onFishSpot(FishingSpot.CRATER_SHALLOWS_TROUT) }
+                    )
+                }
+            }
+
             if (show2dVaultMap) {
                 // Interactive 2D Underground Cutaway Vault Map (Walk to click each room to upgrade, mine, or fish!)
                 item(key = "interactive_2d_vault_cutaway_map") {
@@ -243,6 +271,15 @@ fun OutpostTabScreen(
             }
 
             if (showMineAndFix) {
+                item(key = "hardcore_mining_hazards_item") {
+                    HardcoreMiningHazardsCard(
+                        uiState = uiState,
+                        onSharpenPickaxe = onSharpenPickaxe,
+                        onCoolMiningShaft = onCoolMiningShaft,
+                        onClearCaveIn = onClearCaveIn
+                    )
+                }
+
                 // 2. Pickaxe Mining & Bedrock Excavation Deck (Start with nothing but a Pickaxe!)
                 item(key = "salvage_field_deck") {
                     WastelandSalvageFieldDeck(
@@ -275,6 +312,13 @@ fun OutpostTabScreen(
             }
 
             if (showVaultRooms) {
+                item(key = "hardcore_building_maintenance_item") {
+                    HardcoreBuildingMaintenanceCard(
+                        uiState = uiState,
+                        onWeldRoomPipes = onWeldRoomPipes
+                    )
+                }
+
                 // 5. Build & Repair Broken Vault Shelter Rooms Header & Category Filter Row
                 item(key = "town_structures_header") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -640,6 +684,49 @@ private fun Interactive2dVaultCutawayCard(
                             },
                             modifier = Modifier.weight(1f)
                         )
+                    } else {
+                        val totalReactorLv = uiState.state.bioTurbineLevel + uiState.state.solarTowerLevel +
+                            uiState.state.thoriumReactorLevel + uiState.state.aetherSubstationLevel
+                        Surface(
+                            color = ElevatedSlate,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, WarningOrange.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(62.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                verticalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Reactor Fuel Bay",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = WarningOrange,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = "LV.$totalReactorLv",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = XpGold,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "Burn: -${uiState.production.reactorFuelUpkeepPerSec}/s Fuel",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -867,7 +954,40 @@ private fun VaultPowerAndDayControlCard(
                 }
             }
 
-            // Hardcore Apocalypse Survival Clocks Readout (6-Day Blackout, 2-Day Deficit, 10-Day Mega-Siege, 5-Min/2-Min Dweller Feeding)
+            // Clear Positive vs Deficit Net Resource Balance Banner
+            val isMakingPositive = prod.isMakingPositiveResources
+            val netSign = if (prod.netResourceBalancePerSec >= 0.0) "+" else ""
+            Surface(
+                color = (if (isMakingPositive) SurplusGreen else HazardRed).copy(alpha = 0.16f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, if (isMakingPositive) SurplusGreen else HazardRed),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vault_resource_balance_banner")
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = if (isMakingPositive) {
+                            "✅ MAKING POSITIVE RESOURCES: $netSign${String.format(Locale.US, "%.2f", prod.netResourceBalancePerSec)}/s Net Surplus (Making +${String.format(Locale.US, "%.2f", prod.totalGrossResourceGainPerSec)}/s vs Taking -${String.format(Locale.US, "%.2f", prod.totalVaultResourceDrainPerSec)}/s)"
+                        } else {
+                            "🚨 TAKING MORE THAN YOU ARE MAKING: ${String.format(Locale.US, "%.2f", prod.netResourceBalancePerSec)}/s Net Deficit (Making +${String.format(Locale.US, "%.2f", prod.totalGrossResourceGainPerSec)}/s vs Taking -${String.format(Locale.US, "%.2f", prod.totalVaultResourceDrainPerSec)}/s)"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isMakingPositive) SurplusGreen else HazardRed,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Reactor Fuel Burn: -${String.format(Locale.US, "%.2f", prod.reactorFuelUpkeepPerSec)}/s Bio-Fuel • Max Storage Cap: ${prod.storageCap.toInt()} (+${prod.storeRoomStorageBonus.toInt()} from Store Room)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextPrimary
+                    )
+                }
+            }
+
+            // Hardcore Apocalypse Survival Clocks Readout (6-Day Blackout, 2-Day Deficit, 10-Day Mega-Siege, 60s/2-Min Dweller Feeding)
             Surface(
                 color = BunkerCharcoal,
                 shape = RoundedCornerShape(8.dp),
@@ -886,7 +1006,7 @@ private fun VaultPowerAndDayControlCard(
                     )
                     val appetitePct = ((prod.dwellerUpkeepEscalationMultiplier - 1.0) * 100).roundToInt()
                     Text(
-                        text = "🍖 5-MIN DWELLER FEEDING: ${state.dwellerFeedCycleSecondsRemaining}s left (-${prod.fiveMinDwellerFoodCost.roundToInt()} Food & -${prod.fiveMinDwellerWaterCost.roundToInt()} Water) • 2-Min Appetite Tier ${prod.dwellerUpkeepEscalationTier} (+$appetitePct% Drain)",
+                        text = "🍖 60S DWELLER FEEDING: ${state.dwellerFeedCycleSecondsRemaining}s left (-${prod.fiveMinDwellerFoodCost.roundToInt()} Food & -${prod.fiveMinDwellerWaterCost.roundToInt()} Water every 60s) • 2-Min Appetite Tier ${prod.dwellerUpkeepEscalationTier} (+$appetitePct% Drain)",
                         style = MaterialTheme.typography.labelSmall,
                         color = CryoCyan
                     )
@@ -1010,9 +1130,12 @@ private fun VaultPowerAndDayControlCard(
             ) {
                 Button(
                     onClick = onCrankDynamo,
+                    enabled = state.manualDynamoCranksRemaining > 0,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isBlackout) WarningOrange else CryoCyan,
-                        contentColor = BunkerCharcoal
+                        contentColor = BunkerCharcoal,
+                        disabledContainerColor = BunkerCharcoal,
+                        disabledContentColor = TextMuted
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
@@ -1027,7 +1150,11 @@ private fun VaultPowerAndDayControlCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "CRANK DYNAMO (+16 MW)",
+                        text = if (state.manualDynamoCranksRemaining > 0) {
+                            "CRANK (${state.manualDynamoCranksRemaining}/4 • +16 MW)"
+                        } else {
+                            "0/4 CRANKS LEFT"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -1231,6 +1358,12 @@ private fun VaultPowerGeneratorsSectionCard(
                                 text = "Cost: $costText",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = XpGold
+                            )
+                            Text(
+                                text = "🔥 Reactor Fuel Burn: -${cost.currentFuelUpkeepPerSec}/s -> Lv.${level + 1}: -${cost.nextLevelFuelUpkeepPerSec}/s Bio-Fuel",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WarningOrange,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
 
@@ -1760,6 +1893,7 @@ private fun BuildingStructureCard(
         BuildingType.NOCTURNAL_EXTRACTION_RIG -> Icons.Default.Science
         BuildingType.GEOTHERMAL_TAP -> Icons.Default.Bolt
         BuildingType.CRYO_STASIS_VAULT -> Icons.Default.Shield
+        BuildingType.VAULT_STORE_ROOM -> Icons.Default.Inventory2
     }
     val isConstructingThis = activeConstruction?.buildingType == type
     val isAnotherConstructing = activeConstruction != null && !isConstructingThis
@@ -1900,6 +2034,13 @@ private fun BuildingStructureCard(
 
                 val favored = type.favoredWorkerClass
                 if (favored != null) {
+                    val speedPct = (OutpostCalculator.computeRoomLevelOutputMultiplier(level) * 100).roundToInt()
+                    val nextSpeedPct = (OutpostCalculator.computeRoomLevelOutputMultiplier(level + 1) * 100).roundToInt()
+                    val speedNote = when {
+                        level <= 0 -> "Lv.0 Worst Makeshift State ($speedPct% Speed -> $nextSpeedPct% at Lv.1; +18% each level!)"
+                        level <= 3 -> "Gradual Room Scaling ($speedPct% Speed -> $nextSpeedPct% at Lv.${level + 1}; +18% better each level!)"
+                        else -> "High-Level Overdrive ($speedPct% Speed -> $nextSpeedPct% at Lv.${level + 1})"
+                    }
                     if (isVaultBlackout && level > 0 && type != BuildingType.BIO_SLUDGE_REFINERY) {
                         Text(
                             text = "VAULT POWER BLACKOUT — Room Offline (0.0/s) until Power MW is restored!",
@@ -1909,19 +2050,19 @@ private fun BuildingStructureCard(
                         )
                     } else if (assignedSynergyWorkers > 0 && level > 0) {
                         Text(
-                            text = "Staffed by $assignedSynergyWorkers ${favored.displayName}(s) • Powered & Producing (+18%/Lv Compounding)!",
+                            text = "Staffed by $assignedSynergyWorkers ${favored.displayName}(s) • $speedNote",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SurplusGreen
+                            color = if (level <= 2) SolarAmber else SurplusGreen
                         )
                     } else if (level > 0) {
                         Text(
-                            text = "Automated at 35% baseline when Dwellers live in Vault • Assign ${favored.displayName}s for full output!",
+                            text = "Automated at 35% baseline ($speedNote) • Assign ${favored.displayName}s for full output!",
                             style = MaterialTheme.typography.labelSmall,
                             color = RadTeal
                         )
                     } else {
                         Text(
-                            text = "Build this room to unlock its daily survival supplies & ${favored.displayName} automation!",
+                            text = "Lv.0 Worst Makeshift Room ($speedNote) • Upgrade gradually to improve yield!",
                             style = MaterialTheme.typography.labelSmall,
                             color = WarningOrange
                         )

@@ -106,6 +106,7 @@ fun CraftHuntDefenseTabScreen(
     onToggleAutoDefense: (Boolean) -> Unit = {},
     onUseMedkit: () -> Unit = {},
     onUseRadAway: () -> Unit = {},
+    onTreatHuntingInjuries: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedSubView by remember { mutableStateOf(ArmorySubView.ALL) }
@@ -240,6 +241,13 @@ fun CraftHuntDefenseTabScreen(
             }
 
             if (showHuntAndFish) {
+                item(key = "hardcore_hunting_trauma_item") {
+                    HardcoreHuntingTraumaAndAmmoCard(
+                        uiState = uiState,
+                        onTreatHuntingInjuries = onTreatHuntingInjuries
+                    )
+                }
+
                 // 2. Underground Crater Lake Fishing Header & Spots
                 item(key = "crater_lake_fishing_header") {
                     FishingHeaderCard(totalFishCaught = state.totalFishCaught)
@@ -288,6 +296,9 @@ fun CraftHuntDefenseTabScreen(
                         xpReward = preview.xpReward,
                         canExecute = preview.canExecute,
                         crossbowUnlocked = state.aetherCrossbowLevel >= 1,
+                        counterAttackInjuryChancePercent = preview.counterAttackInjuryChancePercent,
+                        ammoRecommended = preview.ammoRecommended,
+                        ammoAvailable = state.ammoRounds,
                         onExecuteHunt = { onExecuteHunt(target) }
                     )
                 }
@@ -1453,6 +1464,9 @@ private fun HuntingTargetCard(
     xpReward: Double,
     canExecute: Boolean,
     crossbowUnlocked: Boolean,
+    counterAttackInjuryChancePercent: Int = 20,
+    ammoRecommended: Int = 2,
+    ammoAvailable: Int = 0,
     onExecuteHunt: () -> Unit
 ) {
     Surface(
@@ -1509,6 +1523,7 @@ private fun HuntingTargetCard(
                     if (target.spearsRequired > 0) add("${target.spearsRequired} Spear(s)")
                     if (target.trapsRequired > 0) add("${target.trapsRequired} Snare Trap(s)")
                     if (target.requiresCrossbow) add("Aether Crossbow")
+                    add("$ammoRecommended Ammo Rds")
                 }.joinToString(" + ")
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -1516,6 +1531,11 @@ private fun HuntingTargetCard(
                         text = "Uses: $reqParts",
                         style = MaterialTheme.typography.labelSmall,
                         color = SolarAmber
+                    )
+                    Text(
+                        text = "Beast Counter-Attack Risk: $counterAttackInjuryChancePercent% (${if (target == HuntingTarget.GLOWING_LEVIATHAN_WYRM || target == HuntingTarget.APEX_RAD_BEHEMOTH) "Rad-Venom" else "Bleeding"}) • ${if (ammoAvailable >= ammoRecommended) "100% Ammo Yield" else "Low Ammo (60% Yield)"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (ammoAvailable < ammoRecommended || counterAttackInjuryChancePercent >= 35) WarningOrange else CryoCyan
                     )
                     val bonusCoreStr = if (coresReward > 0) " • +${coresReward.toInt()} Core" else ""
                     Text(
