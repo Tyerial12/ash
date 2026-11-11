@@ -28,6 +28,19 @@
         <receiver
             android:name=".notifications.VaultNotificationReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".widget.VaultStatusAppWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_vault_status_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.widget.ACTION_REFRESH_VAULT_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/vault_status_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

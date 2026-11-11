@@ -20,6 +20,7 @@ import com.example.model.CommandLevelProgression
 import com.example.model.CraftableItemType
 import com.example.model.DayNightPhase
 import com.example.model.FishingSpot
+import com.example.model.GridLoadBreakerMode
 import com.example.model.HireableCandidate
 import com.example.model.HuntingTarget
 import com.example.model.LevelUpBannerState
@@ -38,7 +39,9 @@ import com.example.data.remote.PublicVaultProfile
 import com.example.data.remote.PublicVaultRepository
 import com.example.model.SkillNodeDefinition
 import com.example.model.SiegeCountermeasureType
+import com.example.model.SubterraneanBossType
 import com.example.model.TradeTown
+import com.example.model.TurretAmmoType
 import com.example.model.VaultMapStation
 import com.example.model.VaultOperationalPosture
 import com.example.model.WastelandExpeditionType
@@ -400,30 +403,41 @@ class OutpostViewModel(
                     }
                 }
 
-                // Daily Upkeep & Powered Vault Room Daily Bonuses + Escalating Room Upkeep on New Day
+                // Daily Upkeep & Powered Vault Room Daily Bonuses + Room-Level Automated System Repair on New Day
                 var newDayFoodDeduct = 0.0
                 var newDayWaterDeduct = snap.dailyRoomWaterUpkeep
-                var newDayScrapDeduct = snap.dailyRoomScrapUpkeep
+                var newDayScrapDeduct = 0.0
                 var newDayFuelDeduct = snap.dailyRoomFuelUpkeep
                 var newDayRoomScrapBonus = 0.0
                 var newDayRoomWaterBonus = 0.0
                 var newDayRoomFoodBonus = 0.0
+                var newDayRoomGoldBonus = 0.0
+                var newDayRoomFuelBonus = 0.0
+                var foodSpoiledThisDay = 0.0
+                var nextConsecutiveDaysStable = state.consecutiveDaysStable
+
                 if (wrapped) {
                     if (!snap.isVaultBlackout) {
                         newDayRoomScrapBonus = snap.dailyRoomScrapBonus
                         newDayRoomWaterBonus = snap.dailyRoomWaterBonus
                         newDayRoomFoodBonus = snap.dailyRoomFoodBonus
+                        newDayRoomGoldBonus = snap.dailyRoomGoldBonus
+                        newDayRoomFuelBonus = snap.dailyRoomFuelBonus
                     }
                     if (state.totalSurvivors > 0) {
                         newDayFoodDeduct = snap.dailyFoodUpkeepPerDay
                         newDayWaterDeduct += snap.dailyWaterUpkeepPerDay
                     }
-                    if (state.totalSurvivors > 0 || snap.totalBuiltRoomsCount > 0) {
-                        repository.logEvent(
-                            "NEW DAY",
-                            "Day $nextDayCounter dawned: Crew & Lv Rooms consumed -${newDayFoodDeduct.roundToInt()} Food, -${newDayWaterDeduct.roundToInt()} Water, -${newDayScrapDeduct.roundToInt()} Scrap & -${newDayFuelDeduct.roundToInt()} Fuel."
-                        )
+
+                    // Food Spoilage calculation: 4.5% base loss, reduced by Cryo-Stasis Vault levels (0% at Lv.5+)
+                    if (state.rations > 1.0 && !snap.isCryoPreservationActive) {
+                        foodSpoiledThisDay = snap.dailyFoodSpoilageLoss
+                        newDayFoodDeduct += foodSpoiledThisDay
                     }
+
+                    // Stability tracking for Self-Sufficiency Certification (Tier V requires 3 consecutive days)
+                    val isDayStable = !snap.isVaultBlackout && snap.isMakingPositiveResources && state.activePipeLeaksCount == 0 && state.sabotagedBuildingId.isEmpty()
+                    nextConsecutiveDaysStable = if (isDayStable) state.consecutiveDaysStable + 1 else 0
                 } else {
                     newDayWaterDeduct = 0.0
                     newDayScrapDeduct = 0.0
@@ -564,14 +578,18 @@ class OutpostViewModel(
                 var cacheScrapBonus = 0.0
                 var cacheWaterBonus = 0.0
                 var cacheRationsBonus = 0.0
+                var cacheGoldBonus = 0.0
+                var cacheFuelBonus = 0.0
                 if (!snap.isVaultBlackout && hiredScrappers > 0 && state.rawSalvageCaches > 0 && tickCounter % autoDismantleInterval == 0) {
                     cachesBrokenThisTick = minOf(state.rawSalvageCaches, 1 + hiredScrappers / 3)
                     val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
                     val storeLv = current.buildingsMap[BuildingType.VAULT_STORE_ROOM.id] ?: 0
-                    val mult = (1.0 + yardLv * 0.25 + (state.salvageRigLevel - 1) * 0.25) * (1.0 + storeLv * 0.10)
-                    cacheScrapBonus = cachesBrokenThisTick * 5.0 * mult
-                    cacheWaterBonus = cachesBrokenThisTick * 3.0 * mult
-                    cacheRationsBonus = cachesBrokenThisTick * 3.0 * mult
+                    val mult = (1.0 + yardLv * 0.20 + (state.salvageRigLevel - 1) * 0.18) * (1.0 + storeLv * 0.08)
+                    cacheScrapBonus = cachesBrokenThisTick * 2.4 * mult
+                    cacheWaterBonus = cachesBrokenThisTick * 1.4 * mult
+                    cacheRationsBonus = cachesBrokenThisTick * 1.4 * mult
+                    cacheGoldBonus = ((cachesBrokenThisTick * (0.8 + yardLv * 0.3) * mult) * 10.0).roundToInt() / 10.0
+                    cacheFuelBonus = cachesBrokenThisTick * (0.3 + yardLv * 0.18)
                 }
 
                 // Tick Active Convoy Run
@@ -615,6 +633,7 @@ class OutpostViewModel(
                 var expSurvivorDelta = 0
                 var expLostIncrement = 0
                 var expCompletedIncrement = 0
+                var expRelicsIncrement = 0
                 var expAmmoUsed = 0
                 var expGasMaskUsed = 0
                 var expHazmatUsed = 0
@@ -658,12 +677,16 @@ class OutpostViewModel(
                             expCoresAward = expType.coresReward
                             expXpAward = (expType.xpReward * radarLootMult).roundToInt().toDouble()
                             expCompletedIncrement = 1
+                            if (Random.nextInt(100) < 22) {
+                                expRelicsIncrement = 1
+                            }
                             val gearNote = when {
                                 expHazmatUsed > 0 -> " [Hazmat Protected]"
                                 expGasMaskUsed > 0 -> " [Gas Mask Protected]"
                                 else -> ""
                             }
-                            val winMsg = "EXPEDITION SURVIVED (${100 - effectiveDeathChance}%)$gearNote: Dweller returned from ${expType.title} with +${expGoldAward.toInt()} Gold, +${expFoodAward.toInt()} Food & +${expWaterAward.toInt()} Water!"
+                            val relicNote = if (expRelicsIncrement > 0) " + ★1 Pre-Fall Relic" else ""
+                            val winMsg = "EXPEDITION SURVIVED (${100 - effectiveDeathChance}%)$gearNote: Dweller returned from ${expType.title} with +${expGoldAward.toInt()} Gold, +${expFoodAward.toInt()} Food, +${expWaterAward.toInt()} Water$relicNote!"
                             overlayFlow.update { it.copy(activeExpedition = null, lastExpeditionFeedback = winMsg) }
                             repository.logEvent("EXPEDITION", winMsg)
                         }
@@ -688,6 +711,10 @@ class OutpostViewModel(
                 var nextNeedsRepair = state.needsDefenseRepair
                 var nextLuckyNoRepair = state.luckyNoRepairCount
                 var nextLastAttackDay = state.lastAttackDayResolved
+                var nextLastAttackSucceeded = state.lastAttackSucceeded
+                var nextLastAttackSummary = state.lastAttackSummary
+                var nextSabotagedBuildingId = state.sabotagedBuildingId
+                var nextSabotagedPenalty = state.sabotagedBuildingPenaltyPercent
 
                 // Automated Defenses strictly require: 1) Built Turrets/Plasma, 2) Assigned Workers, 3) Vault Power (no Blackout)
                 val hasActiveAutoDefenseGrid = snap.isAutoDefenseActive
@@ -721,6 +748,13 @@ class OutpostViewModel(
                             raidGoldDelta = -minOf(state.gold * (0.15 + daySeverityBonus * 0.75), maxGoldLoss)
                             if (state.totalSurvivors > 0) raidInjuryIncrement = 1 + (currentRaid.dayNumber / 7).coerceAtMost(2)
                             if (currentRaid.isNightMutantSwarm) raidRadSpike = 18 + (currentRaid.dayNumber * 2).coerceAtMost(30)
+                            
+                            // Targeted Sabotage: Saboteurs damage the targeted room
+                            if (currentRaid.targetFacilityId.isNotBlank()) {
+                                nextSabotagedBuildingId = currentRaid.targetFacilityId
+                                nextSabotagedPenalty = 50
+                                repository.logEvent("SABOTAGE", "SABOTAGE ALERT: Raiders crippled ${currentRaid.targetFacilityName}! (-50% output until repaired with Scrap)!")
+                            }
                         }
 
                         // Automated Turret Interception increases Flawless Deflection chance from 15% to 35% and reduces door damage!
@@ -746,6 +780,13 @@ class OutpostViewModel(
                         }
                         if (!currentRaid.isNightMutantSwarm) {
                             nextLastAttackDay = currentRaid.dayNumber
+                        }
+
+                        nextLastAttackSucceeded = wonDefense
+                        nextLastAttackSummary = if (wonDefense) {
+                            "SUCCEEDED: Repelled ${currentRaid.title} (${snap.totalDefenseRating}/${currentRaid.requiredDefenseRating} DEF • Door $nextIntegrity%)"
+                        } else {
+                            "FAILED: ${currentRaid.title} Breached (${snap.totalDefenseRating}/${currentRaid.requiredDefenseRating} DEF • Door $nextIntegrity%)"
                         }
 
                         val interceptPrefix = if (autoInterceptReady) "AUTO-DEFENSE INTERCEPTED: " else ""
@@ -781,25 +822,6 @@ class OutpostViewModel(
                     }
                 }
 
-                // Automated Perimeter & Blast Door Repair (strictly requires Built Auto-Defenses + Assigned Workers + Power!)
-                var autoRepairScrapUsed = 0.0
-                if (tickCounter % 4 == 0 &&
-                    hasActiveAutoDefenseGrid &&
-                    (nextNeedsRepair || nextIntegrity < 100) &&
-                    state.scrap >= 3.0
-                ) {
-                    autoRepairScrapUsed = 3.0
-                    nextIntegrity = (nextIntegrity + 12 + hiredScrappers * 3).coerceAtMost(100)
-                    if (nextIntegrity >= 100) {
-                        nextNeedsRepair = false
-                        overlayFlow.update {
-                            it.copy(
-                                lastDefenseDamageFeedback = "AUTO-REPAIR COMPLETE: Crew & Defense Grid restored Vault Blast Door to 100% Integrity!"
-                            )
-                        }
-                    }
-                }
-
                 // Realistic Shelter Life-Support (O2, Radiation, Dweller Health, Generator Wear & Hardcore Hazards)
                 var nextOxygen = state.oxygenPercent
                 var nextRadiation = (state.radiationMillisieverts + expRadiationDelta + raidRadSpike).coerceIn(0, 1000)
@@ -809,20 +831,34 @@ class OutpostViewModel(
                 var nextShaftHeat = state.miningShaftHeatPercent
                 var nextRoomWear = state.roomStructuralWearPercent
                 var nextPipeLeaks = state.activePipeLeaksCount
+                var nextStamina = state.dwellerStaminaPercent
+                var nextSick = state.sickDwellersCount
 
                 if (tickCounter % 3 == 0) {
                     nextOxygen = (state.oxygenPercent + snap.oxygenDeltaPerSec.roundToInt()).coerceIn(15, 100)
                     nextRadiation = (nextRadiation + snap.radiationDeltaPerSec.roundToInt()).coerceIn(0, 1000)
                     nextShaftHeat = (state.miningShaftHeatPercent - 2).coerceAtLeast(0)
 
+                    val habLv = current.buildingsMap[BuildingType.SURVIVOR_HAB_BLOCK.id] ?: 0
+                    if (state.isRestRotationActive) {
+                        nextStamina = (state.dwellerStaminaPercent + 3 + habLv).coerceAtMost(100)
+                    } else if (state.totalSurvivors > 0 && tickCounter % 6 == 0) {
+                        val fatigueStep = if (snap.activeGridBreakerMode == GridLoadBreakerMode.DRILL_OVERDRIVE) 2 else 1
+                        nextStamina = (state.dwellerStaminaPercent - fatigueStep).coerceAtLeast(15)
+                    }
+
                     val medbayLv = current.buildingsMap[BuildingType.REINFORCED_SILO.id] ?: 0
                     val hydroCount = current.workersMap[WorkerClassType.HYDRO_ENGINEER.id]?.assignedCount ?: 0
                     val starvingOrDehydrated = state.totalSurvivors > 0 && (state.rations < 1.0 || state.water < 1.0)
                     val hypoxicOrIrradiated = nextOxygen < 40 || nextRadiation > 150
-                    val hasUntreatedBeastTrauma = state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0
+                    val hasUntreatedBeastTrauma = state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 || nextSick > 0
+
+                    if (state.totalSurvivors > 0 && (nextRadiation >= 95 || nextPipeLeaks >= 2) && nextSick < state.totalSurvivors && Random.nextInt(100) < 12) {
+                        nextSick = (nextSick + 1).coerceAtMost(state.totalSurvivors.coerceAtLeast(1))
+                    }
 
                     if (starvingOrDehydrated || hypoxicOrIrradiated || hasUntreatedBeastTrauma) {
-                        val traumaPenalty = (state.bleedingDwellersCount + state.venomInfectedDwellersCount).coerceAtMost(3)
+                        val traumaPenalty = (state.bleedingDwellersCount + state.venomInfectedDwellersCount + nextSick).coerceAtMost(4)
                         nextHealth = (state.dwellerHealthPercent - 2 - traumaPenalty).coerceAtLeast(15)
                     } else if (!snap.isVaultBlackout && (medbayLv > 0 || hydroCount > 0)) {
                         nextHealth = (state.dwellerHealthPercent + 2 + medbayLv).coerceAtMost(100)
@@ -853,6 +889,58 @@ class OutpostViewModel(
                             overlayFlow.update { it.copy(lastSalvageFeedback = leakWarn) }
                             repository.logEvent("PIPE LEAK", leakWarn)
                         }
+                    }
+                }
+
+                // Daily Room-Level Automated System Repair:
+                // Scrap is automatically used ONCE PER DAY depending on built Room Levels to repair automated systems ONLY!
+                if (wrapped) {
+                    val stateForAutoRepair = state.copy(
+                        defenseIntegrityPercent = nextIntegrity,
+                        needsDefenseRepair = nextNeedsRepair,
+                        generatorWearPercent = nextGeneratorWear,
+                        roomStructuralWearPercent = nextRoomWear,
+                        activePipeLeaksCount = nextPipeLeaks,
+                        sabotagedBuildingId = nextSabotagedBuildingId
+                    )
+                    val autoRepairPlan = OutpostCalculator.computeDailyAutomatedRepairPlan(
+                        state = stateForAutoRepair,
+                        buildingsMap = current.buildingsMap
+                    )
+                    val availableScrapForRepair = (state.scrap + snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus).coerceAtLeast(0.0)
+                    if (autoRepairPlan.needsAutomatedRepair && availableScrapForRepair > 0.0) {
+                        newDayScrapDeduct = minOf(availableScrapForRepair, autoRepairPlan.scrapCost)
+                        val repairRatio = if (autoRepairPlan.scrapCost > 0.0) {
+                            (newDayScrapDeduct / autoRepairPlan.scrapCost).coerceIn(0.0, 1.0)
+                        } else 0.0
+                        nextIntegrity = (nextIntegrity + (autoRepairPlan.doorIntegrityRestore * repairRatio).roundToInt()).coerceAtMost(100)
+                        if (nextIntegrity >= 100) {
+                            nextNeedsRepair = false
+                        }
+                        nextGeneratorWear = (nextGeneratorWear - (autoRepairPlan.generatorWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
+                        nextRoomWear = (nextRoomWear - (autoRepairPlan.roomWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
+                        if (repairRatio >= 0.5 && autoRepairPlan.pipeLeaksSealed > 0) {
+                            nextPipeLeaks = (nextPipeLeaks - autoRepairPlan.pipeLeaksSealed).coerceAtLeast(0)
+                        }
+                        if (repairRatio >= 0.75 && autoRepairPlan.clearsSabotage) {
+                            nextSabotagedBuildingId = ""
+                            nextSabotagedPenalty = 0
+                        }
+                        val autoRepairMsg = "DAILY AUTO-REPAIR (Room Lv.${autoRepairPlan.totalRoomLevels}): Used -${String.format(java.util.Locale.US, "%.1f", newDayScrapDeduct)} Scrap to repair automated systems (Door $nextIntegrity%, Gen Wear $nextGeneratorWear%, Room Wear $nextRoomWear%)!"
+                        overlayFlow.update { it.copy(lastDefenseDamageFeedback = autoRepairMsg) }
+                        repository.logEvent("DAILY AUTO-REPAIR", autoRepairMsg)
+                    } else {
+                        newDayScrapDeduct = 0.0
+                    }
+
+                    if (state.totalSurvivors > 0 || snap.totalBuiltRoomsCount > 0) {
+                        val spoilMsg = if (foodSpoiledThisDay > 0.0) ", -${foodSpoiledThisDay.roundToInt()} Rations Spoiled" else ""
+                        val isDayStableNow = !snap.isVaultBlackout && snap.isMakingPositiveResources && nextPipeLeaks == 0 && nextSabotagedBuildingId.isEmpty()
+                        val stableMsg = if (isDayStableNow) " [Vault Stability: $nextConsecutiveDaysStable/3 Days]" else " [Vault Instability Reset]"
+                        repository.logEvent(
+                            "NEW DAY",
+                            "Day $nextDayCounter dawned: Crew & Rooms consumed -${newDayFoodDeduct.roundToInt()} Food$spoilMsg, -${newDayWaterDeduct.roundToInt()} Water, -${newDayScrapDeduct.roundToInt()} Auto-Repair Scrap & -${newDayFuelDeduct.roundToInt()} Fuel.$stableMsg"
+                        )
                     }
                 }
 
@@ -913,14 +1001,19 @@ class OutpostViewModel(
                         totalSurvivors = (state.totalSurvivors + expSurvivorDelta).coerceAtLeast(0),
                         totalDwellersLost = state.totalDwellersLost + expLostIncrement,
                         totalExpeditionsCompleted = state.totalExpeditionsCompleted + expCompletedIncrement,
+                        discoveredRelicsCount = state.discoveredRelicsCount + expRelicsIncrement,
                         blastDoorLevel = newBlastDoorLevelFromTimer ?: state.blastDoorLevel,
                         defenseIntegrityPercent = if (newBlastDoorLevelFromTimer != null) 100 else nextIntegrity,
                         needsDefenseRepair = if (newBlastDoorLevelFromTimer != null) false else nextNeedsRepair,
                         luckyNoRepairCount = nextLuckyNoRepair,
                         lastAttackDayResolved = nextLastAttackDay,
+                        lastAttackSucceeded = nextLastAttackSucceeded,
+                        lastAttackSummary = nextLastAttackSummary,
                         oxygenPercent = nextOxygen,
                         radiationMillisieverts = nextRadiation,
                         dwellerHealthPercent = nextHealth,
+                        dwellerStaminaPercent = nextStamina,
+                        sickDwellersCount = nextSick,
                         injuredDwellersCount = nextInjured,
                         generatorWearPercent = nextGeneratorWear,
                         craftedSpears = state.craftedSpears + craftedSpearsDelta,
@@ -959,16 +1052,20 @@ class OutpostViewModel(
                         activeConstructionRemainingSeconds = nextConstructRemSecs,
                         activeConstructionTotalSeconds = nextConstructTotalSecs,
                         activeConstructionRushGoldCost = nextConstructRushCost,
+                        consecutiveDaysStable = nextConsecutiveDaysStable,
+                        totalFoodSpoiled = state.totalFoodSpoiled + foodSpoiledThisDay,
+                        sabotagedBuildingId = nextSabotagedBuildingId,
+                        sabotagedBuildingPenaltyPercent = nextSabotagedPenalty,
                         isGameOver = nextIsGameOver,
                         gameOverReason = nextGameOverReason,
                         lastSavedTimestampMillis = now
                     ),
-                    scrapDelta = snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus - newDayScrapDeduct - autoRepairScrapUsed,
+                    scrapDelta = snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus - newDayScrapDeduct,
                     waterDelta = snap.waterPerSec + cacheWaterBonus + expWaterAward + newDayRoomWaterBonus - newDayWaterDeduct - fiveMinWaterDeduct,
                     rationsDelta = snap.rationsPerSec + cacheRationsBonus + expFoodAward + newDayRoomFoodBonus - newDayFoodDeduct - fiveMinFoodDeduct,
-                    fuelDelta = snap.bioFuelPerSec + expFuelAward - newDayFuelDeduct,
+                    fuelDelta = snap.bioFuelPerSec + cacheFuelBonus + expFuelAward + newDayRoomFuelBonus - newDayFuelDeduct,
                     researchDelta = snap.researchPerSec,
-                    goldDelta = convoyGoldAward + raidGoldDelta + expGoldAward,
+                    goldDelta = snap.goldPerSec + cacheGoldBonus + convoyGoldAward + raidGoldDelta + expGoldAward + newDayRoomGoldBonus,
                     coresDelta = snap.mutagenCoresPerSec + convoyCoresAward + expCoresAward + raidCoresDelta,
                     xpDelta = snap.xpPerSec + convoyXpAward + raidXpDelta + expXpAward + buildCompleteXpAward + craftCompleteXpAward + doorUpgradeCompleteXpAward,
                     storageCap = snap.storageCap
@@ -1049,19 +1146,29 @@ class OutpostViewModel(
             else -> "Daily base attack ($reqDef DEF Req) — Raider warbands grow stronger every passing day!"
         }
 
+        // Targeted raid sabotage target (Power Station, Water Purifier, Hydroponic Farm, or Silo)
+        val targetFacility = when {
+            dayNumber % 4 == 0 -> "BIO_SLUDGE_TURBINE" to "Generator Power Turbine"
+            dayNumber % 4 == 1 -> "ATMOSPHERIC_CONDENSER" to "Water Purifier"
+            dayNumber % 4 == 2 -> "HYDROPONIC_GREENHOUSE" to "Hydroponic Farm"
+            else -> "REINFORCED_SILO" to "Storage Silo"
+        }
+
         return RaiderSiegeThreat(
             id = System.currentTimeMillis() + dayNumber,
             title = raidTitle,
-            subtitle = raidSubtitle,
+            subtitle = "$raidSubtitle [Targeting ${targetFacility.second}]",
             requiredDefenseRating = reqDef,
             bountyGoldReward = goldBounty,
             bountyScrapReward = scrapBounty,
             bountyXpReward = xpBounty,
-            remainingSeconds = 45,
+            remainingSeconds = 120,
             dayNumber = dayNumber,
             isDay10MegaSiege = isDay10MegaSiege,
             isNightMutantSwarm = false,
-            bossClassTitle = bossTitle
+            bossClassTitle = bossTitle,
+            targetFacilityId = targetFacility.first,
+            targetFacilityName = targetFacility.second
         )
     }
 
@@ -1547,7 +1654,9 @@ class OutpostViewModel(
                     defenseIntegrityPercent = nextIntegrity,
                     needsDefenseRepair = nextNeedsRepair,
                     luckyNoRepairCount = state.luckyNoRepairCount + (if (luckyNoRepair) 1 else 0),
-                    lastAttackDayResolved = state.dayCounter
+                    lastAttackDayResolved = state.dayCounter,
+                    lastAttackSucceeded = true,
+                    lastAttackSummary = "SUCCEEDED: Repelled ${raid.title} (+${raid.bountyGoldReward.toInt()} Gold • Door $nextIntegrity%)"
                 ),
                 scrapDelta = raid.bountyScrapReward,
                 goldDelta = raid.bountyGoldReward,
@@ -1719,10 +1828,9 @@ class OutpostViewModel(
             val snap = current.production
             val nextDay = state.dayCounter + 1
 
-            // Deduct Daily Food & Water Upkeep for each hired Dweller + High-Level Room Resource Upkeep!
+            // Deduct Daily Food & Water Upkeep for each hired Dweller + Room-Level Daily Automated System Repair!
             val foodUpkeep = snap.dailyFoodUpkeepPerDay
             val waterUpkeep = snap.dailyWaterUpkeepPerDay + snap.dailyRoomWaterUpkeep
-            val roomScrapUpkeep = snap.dailyRoomScrapUpkeep
             val roomFuelUpkeep = snap.dailyRoomFuelUpkeep
 
             // Advance active construction by 15s (or finish it)
@@ -1751,6 +1859,8 @@ class OutpostViewModel(
             var nextIntegrity = state.defenseIntegrityPercent
             var nextNeedsRepair = state.needsDefenseRepair
             var nextLuckyCount = state.luckyNoRepairCount
+            var nextLastAttackSucceeded = state.lastAttackSucceeded
+            var nextLastAttackSummary = state.lastAttackSummary
             var defenseFeedback: String? = overlayFlow.value.lastDefenseDamageFeedback
 
             if (state.lastAttackDayResolved < state.dayCounter) {
@@ -1784,6 +1894,49 @@ class OutpostViewModel(
                     nextNeedsRepair = true
                     defenseFeedback = "Day ${state.dayCounter} Attack Resolved: Vault Door & Defenses took -$dmg% damage (Now $nextIntegrity%) — Must Repair!"
                 }
+                nextLastAttackSucceeded = won
+                nextLastAttackSummary = if (won) {
+                    "SUCCEEDED: Repelled ${raid.title} (${snap.totalDefenseRating}/${raid.requiredDefenseRating} DEF • Door $nextIntegrity%)"
+                } else {
+                    "FAILED: ${raid.title} Breached (${snap.totalDefenseRating}/${raid.requiredDefenseRating} DEF • Door $nextIntegrity%)"
+                }
+            }
+
+            // Daily Room-Level Automated System Repair:
+            // Scrap is automatically used once per day depending on built Room Levels to repair automated systems ONLY!
+            var nextGenWear = state.generatorWearPercent
+            var nextRoomWear = state.roomStructuralWearPercent
+            var nextPipeLeaks = state.activePipeLeaksCount
+            var nextSabotagedId = state.sabotagedBuildingId
+            var nextSabotagedPenalty = state.sabotagedBuildingPenaltyPercent
+            val autoRepairPlan = OutpostCalculator.computeDailyAutomatedRepairPlan(
+                state = state.copy(
+                    defenseIntegrityPercent = nextIntegrity,
+                    needsDefenseRepair = nextNeedsRepair
+                ),
+                buildingsMap = current.buildingsMap
+            )
+            val dailyProdSeconds = if (snap.isVaultBlackout) 0.0 else 15.0
+            val dailyScrapBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomScrapBonus
+            val dailyWaterBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomWaterBonus
+            val dailyFoodBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomFoodBonus
+            val availableScrap = (state.scrap + snap.scrapPerSec * dailyProdSeconds + dailyScrapBonus + raidScrapDelta).coerceAtLeast(0.0)
+            val roomScrapUpkeep = if (autoRepairPlan.needsAutomatedRepair && availableScrap > 0.0) {
+                minOf(availableScrap, autoRepairPlan.scrapCost)
+            } else 0.0
+            if (autoRepairPlan.needsAutomatedRepair && roomScrapUpkeep > 0.0) {
+                val repairRatio = if (autoRepairPlan.scrapCost > 0.0) (roomScrapUpkeep / autoRepairPlan.scrapCost).coerceIn(0.0, 1.0) else 0.0
+                nextIntegrity = (nextIntegrity + (autoRepairPlan.doorIntegrityRestore * repairRatio).roundToInt()).coerceAtMost(100)
+                if (nextIntegrity >= 100) nextNeedsRepair = false
+                nextGenWear = (nextGenWear - (autoRepairPlan.generatorWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
+                nextRoomWear = (nextRoomWear - (autoRepairPlan.roomWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
+                if (repairRatio >= 0.5 && autoRepairPlan.pipeLeaksSealed > 0) {
+                    nextPipeLeaks = (nextPipeLeaks - autoRepairPlan.pipeLeaksSealed).coerceAtLeast(0)
+                }
+                if (repairRatio >= 0.75 && autoRepairPlan.clearsSabotage) {
+                    nextSabotagedId = ""
+                    nextSabotagedPenalty = 0
+                }
             }
 
             // Evaluate 2-Day Resource Deficit & 6-Day Power Blackout Game Over Rules
@@ -1802,19 +1955,21 @@ class OutpostViewModel(
             val extraFiveMinFood = if (state.totalSurvivors > 0 && state.dwellerFeedCycleSecondsRemaining <= 90) snap.fiveMinDwellerFoodCost else 0.0
             val extraFiveMinWater = if (state.totalSurvivors > 0 && state.dwellerFeedCycleSecondsRemaining <= 90) snap.fiveMinDwellerWaterCost else 0.0
 
-            // Grant daily Vault room production if Vault has enough Power (not in Blackout)!
-            val dailyProdSeconds = if (snap.isVaultBlackout) 0.0 else 15.0
-            val dailyScrapBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomScrapBonus
-            val dailyWaterBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomWaterBonus
-            val dailyFoodBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomFoodBonus
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
                     dayCounter = nextDay,
                     cycleProgress = 0.18f,
                     lastAttackDayResolved = state.dayCounter,
+                    lastAttackSucceeded = nextLastAttackSucceeded,
+                    lastAttackSummary = nextLastAttackSummary,
                     totalRaidsRepelled = state.totalRaidsRepelled + raidRepelledDelta,
                     defenseIntegrityPercent = nextIntegrity,
                     needsDefenseRepair = nextNeedsRepair,
+                    generatorWearPercent = nextGenWear,
+                    roomStructuralWearPercent = nextRoomWear,
+                    activePipeLeaksCount = nextPipeLeaks,
+                    sabotagedBuildingId = nextSabotagedId,
+                    sabotagedBuildingPenaltyPercent = nextSabotagedPenalty,
                     luckyNoRepairCount = nextLuckyCount,
                     blackoutDaysCount = survivalEval.nextBlackoutDaysCount,
                     deficitDaysCount = survivalEval.nextDeficitDaysCount,
@@ -1904,11 +2059,14 @@ class OutpostViewModel(
             val nextStack = (currentStack + 1).coerceIn(1, OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT)
             val totalCrankMw = nextStack * 16.0
             val restoresPower = (prod.totalMegawattGenerated + 16.0) >= prod.totalMegawattDemand
+            // Manual cranking does NOT burn fuel, but gears take wear (+10% wear per crank cycle, max 80%)
+            val nextWear = (state.generatorWearPercent + 10).coerceAtMost(80)
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
                     thoriumOverdriveUntilMillis = now + 45_000L,
                     manualDynamoCranksRemaining = nextCranksLeft,
                     activeDynamoCrankStack = nextStack,
+                    generatorWearPercent = nextWear,
                     blackoutDaysCount = if (restoresPower) 0 else state.blackoutDaysCount,
                     blackoutSecondsAccumulated = if (restoresPower) 0 else state.blackoutSecondsAccumulated
                 ),
@@ -1917,7 +2075,8 @@ class OutpostViewModel(
             )
             repository.updateOutpostState(updated)
             val usedCount = OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT - nextCranksLeft
-            val msg = "Emergency Hand-Crank Dynamo ($usedCount/${OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT} Cranks • $nextCranksLeft left): +${totalCrankMw.toInt()} MW Power for 45s!"
+            val wearWarning = if (nextWear >= 50) " (Dynamo Wear: $nextWear% — service with Scrap!)" else ""
+            val msg = "Emergency Hand-Crank Dynamo ($usedCount/${OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT} Cranks • $nextCranksLeft left • Zero Fuel): +${totalCrankMw.toInt()} MW for 45s!$wearWarning"
             overlayFlow.update {
                 it.copy(lastSalvageFeedback = msg)
             }
@@ -2275,15 +2434,16 @@ class OutpostViewModel(
             if (nextStep < slot.maxProgress) {
                 val tapPrimary = yieldPreview.tapPrimaryAmount
                 val tapGold = yieldPreview.tapGoldAmount
+                val tapFuel = yieldPreview.tapFuelAmount
                 val updatedState = applyXpAndResourceDelta(
                     baseState = stateWithCombo.copy(
                         totalManualScavenges = state.totalManualScavenges + 1,
                         totalGoldSalvaged = state.totalGoldSalvaged + tapGold
                     ),
-                    scrapDelta = if (slot.nodeType.primaryResource == ResourceType.SCRAP) tapPrimary else 1.0,
+                    scrapDelta = if (slot.nodeType.primaryResource == ResourceType.SCRAP) tapPrimary else 0.5,
                     waterDelta = if (slot.nodeType.primaryResource == ResourceType.WATER) tapPrimary else 0.0,
                     rationsDelta = if (slot.nodeType.primaryResource == ResourceType.RATIONS) tapPrimary else 0.0,
-                    fuelDelta = if (slot.nodeType.primaryResource == ResourceType.BIO_FUEL) tapPrimary else 0.0,
+                    fuelDelta = (if (slot.nodeType.primaryResource == ResourceType.BIO_FUEL) tapPrimary else 0.0) + tapFuel,
                     researchDelta = if (slot.nodeType.primaryResource == ResourceType.RESEARCH_DATA) tapPrimary else 0.0,
                     goldDelta = tapGold,
                     xpDelta = 4.0,
@@ -2295,9 +2455,10 @@ class OutpostViewModel(
                     nextDurability <= 20 -> " • Pickaxe Dull ($nextDurability%)!"
                     else -> ""
                 }
+                val formattedTapGold = String.format(java.util.Locale.US, "%.1f", tapGold)
                 overlayFlow.update { ov ->
                     ov.copy(
-                        lastSalvageFeedback = "Salvaged +${tapPrimary.toInt()} ${slot.nodeType.primaryResource.shortLabel} & +${tapGold.toInt()} GOLD (${nextStep}/${slot.maxProgress})$hazardSuffix",
+                        lastSalvageFeedback = "Salvaged +${tapPrimary.toInt()} ${slot.nodeType.primaryResource.shortLabel}, +$formattedTapGold GOLD & +$tapFuel FUEL (${nextStep}/${slot.maxProgress})$hazardSuffix",
                         salvageNodes = ov.salvageNodes.map {
                             if (it.slotIndex == slotIndex) it.copy(currentProgress = nextStep) else it
                         }
@@ -2326,22 +2487,25 @@ class OutpostViewModel(
                 }
                 addRes(slot.nodeType.primaryResource, yieldPreview.primaryAmount)
                 addRes(slot.nodeType.secondaryResource, yieldPreview.secondaryAmount)
+                fuelGain += yieldPreview.bonusFuelFromGoldMine
 
                 // Roll for Rare Relic Jackpot on Node Strip!
                 var jackpotLabel = ""
+                var relicBonus = 0
                 if (Random.nextInt(100) < yieldPreview.rareJackpotChancePercent) {
+                    relicBonus = 1
                     when (Random.nextInt(3)) {
                         0 -> {
                             thoriumBonus = 1.0
-                            jackpotLabel = " + 1 THORIUM ROD!"
+                            jackpotLabel = " + ★1 RELIC & 1 THORIUM ROD!"
                         }
                         1 -> {
                             aetherBonus = 1.0
-                            jackpotLabel = " + 1 AETHER CAPACITOR!"
+                            jackpotLabel = " + ★1 RELIC & 1 AETHER CAPACITOR!"
                         }
                         else -> {
                             coresGain += 1.0
-                            jackpotLabel = " + 1 MUTAGEN CORE!"
+                            jackpotLabel = " + ★1 RELIC & 1 MUTAGEN CORE!"
                         }
                     }
                 }
@@ -2351,6 +2515,7 @@ class OutpostViewModel(
                         rawSalvageCaches = state.rawSalvageCaches + yieldPreview.cacheDropCount,
                         thoriumRods = state.thoriumRods + thoriumBonus,
                         aetherCells = state.aetherCells + aetherBonus,
+                        discoveredRelicsCount = state.discoveredRelicsCount + relicBonus,
                         totalManualScavenges = state.totalManualScavenges + 1,
                         totalNodesStripped = state.totalNodesStripped + 1,
                         totalGoldSalvaged = state.totalGoldSalvaged + yieldPreview.goldAmount
@@ -2368,7 +2533,8 @@ class OutpostViewModel(
                 repository.updateOutpostState(updatedState)
 
                 val replacementType = pickReplacementNode(slotIndex, snap.activePhase)
-                val feedbackMsg = "STRIPPED ${slot.nodeType.title.uppercase()}: +${yieldPreview.goldAmount.toInt()} GOLD, +${yieldPreview.primaryAmount.toInt()} ${slot.nodeType.primaryResource.shortLabel}, +${yieldPreview.cacheDropCount} Cache(s)$jackpotLabel"
+                val formattedVeinGold = String.format(java.util.Locale.US, "%.1f", yieldPreview.goldAmount)
+                val feedbackMsg = "STRIPPED ${slot.nodeType.title.uppercase()}: +$formattedVeinGold GOLD, +${yieldPreview.bonusFuelFromGoldMine} FUEL, +${yieldPreview.primaryAmount.toInt()} ${slot.nodeType.primaryResource.shortLabel}, +${yieldPreview.cacheDropCount} Cache(s)$jackpotLabel"
                 overlayFlow.update { ov ->
                     ov.copy(
                         lastSalvageFeedback = feedbackMsg,
@@ -2394,15 +2560,15 @@ class OutpostViewModel(
             val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
             val refineryLv = current.buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0
             val arrayLv = current.buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0
-            val comboMult = 1.0 + state.salvageComboCount.coerceIn(0, 15) * 0.05
-            val mult = (1.0 + (state.salvageRigLevel - 1) * 0.35) * (1.0 + yardLv * 0.25) * comboMult
+            val comboMult = 1.0 + state.salvageComboCount.coerceIn(0, 15) * 0.04
+            val mult = (1.0 + (state.salvageRigLevel - 1) * 0.22) * (1.0 + yardLv * 0.18) * comboMult
 
-            val scrapGain = (countToOpen * 8.0 * mult).roundToInt().toDouble()
-            val waterGain = (countToOpen * 5.5 * mult).roundToInt().toDouble()
-            val rationsGain = (countToOpen * 5.5 * mult).roundToInt().toDouble()
-            val fuelGain = (countToOpen * 3.0 * (1.0 + refineryLv * 0.25)).roundToInt().toDouble()
-            val researchGain = (countToOpen * 3.0 * (1.0 + arrayLv * 0.25)).roundToInt().toDouble()
-            val goldGain = (countToOpen * 10.0 * mult).roundToInt().toDouble()
+            val scrapGain = (countToOpen * 3.5 * mult).roundToInt().toDouble()
+            val waterGain = (countToOpen * 2.4 * mult).roundToInt().toDouble()
+            val rationsGain = (countToOpen * 2.4 * mult).roundToInt().toDouble()
+            val fuelGain = (countToOpen * 1.4 * (1.0 + refineryLv * 0.20)).roundToInt().toDouble()
+            val researchGain = (countToOpen * 1.4 * (1.0 + arrayLv * 0.20)).roundToInt().toDouble()
+            val goldGain = ((countToOpen * (1.2 + yardLv * 0.35) * mult) * 10.0).roundToInt() / 10.0
             val xpGain = countToOpen * 8.0
 
             val updated = applyXpAndResourceDelta(
@@ -2421,9 +2587,10 @@ class OutpostViewModel(
                 storageCap = current.production.storageCap
             )
             repository.updateOutpostState(updated)
+            val formattedGold = String.format(java.util.Locale.US, "%.1f", goldGain)
             overlayFlow.update {
                 it.copy(
-                    lastSalvageFeedback = "Dismantled $countToOpen Cache(s): +${goldGain.toInt()} GOLD, +${scrapGain.toInt()} SCRAP, +${waterGain.toInt()} WATER, +${rationsGain.toInt()} FOOD!"
+                    lastSalvageFeedback = "Dismantled $countToOpen Cache(s): +$formattedGold GOLD, +${scrapGain.toInt()} SCRAP, +${waterGain.toInt()} WATER, +${rationsGain.toInt()} FOOD!"
                 )
             }
         }
@@ -3623,12 +3790,677 @@ class OutpostViewModel(
         }
     }
 
+    fun repairSabotagedBuilding() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            if (state.sabotagedBuildingId.isEmpty()) return@launch
+            val scrapCost = 25.0
+            if (state.scrap < scrapCost) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "Need 25 Scrap to repair the sabotaged room!")
+                }
+                return@launch
+            }
+            val updated = state.copy(
+                scrap = state.scrap - scrapCost,
+                sabotagedBuildingId = "",
+                sabotagedBuildingPenaltyPercent = 0
+            )
+            repository.updateOutpostState(updated)
+            val msg = "SABOTAGE REPAIRED: Restored room to 100% operational output (-25 Scrap)!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("REPAIR", msg)
+        }
+    }
+
+    fun forageSubterraneanRations() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val snap = current.production
+            val farmLv = current.buildingsMap[BuildingType.HYDROPONIC_GREENHOUSE.id] ?: 0
+            val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
+            val foodGain = ((5.5 + farmLv * 1.5) * snap.uniqueDwellerBonusMultiplier).roundToInt().toDouble()
+            val waterGain = (2.0 * snap.uniqueDwellerBonusMultiplier).roundToInt().toDouble()
+            val scrapGain = (1.5 * snap.uniqueDwellerBonusMultiplier * 10.0).roundToInt() / 10.0
+            val goldGain = ((0.4 + yardLv * 0.15) * snap.uniqueDwellerBonusMultiplier * 10.0).roundToInt() / 10.0
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    dwellerHealthPercent = (state.dwellerHealthPercent + 4).coerceAtMost(100),
+                    totalGoldSalvaged = state.totalGoldSalvaged + goldGain
+                ),
+                scrapDelta = scrapGain,
+                rationsDelta = foodGain,
+                waterDelta = waterGain,
+                goldDelta = goldGain,
+                xpDelta = 10.0,
+                storageCap = snap.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "CAVE FORAGING: Harvested glowing fungi & sifted cave scrap (+${foodGain.toInt()} Food, +${waterGain.toInt()} Water, +$scrapGain Scrap, +$goldGain Gold, +10 XP)!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("FORAGE", msg)
+        }
+    }
+
+    fun boilAquiferWater() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val snap = current.production
+            val condenserLv = current.buildingsMap[BuildingType.ATMOSPHERIC_CONDENSER.id] ?: 0
+            val waterGain = ((6.5 + condenserLv * 1.6) * snap.uniqueDwellerBonusMultiplier).roundToInt().toDouble()
+            val newHeat = (state.miningShaftHeatPercent - 20).coerceAtLeast(0)
+            val newRads = (state.radiationMillisieverts - 5).coerceAtLeast(0)
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    miningShaftHeatPercent = newHeat,
+                    radiationMillisieverts = newRads
+                ),
+                waterDelta = waterGain,
+                xpDelta = 10.0,
+                storageCap = snap.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "AQUIFER DISTILLATION: Boiled & condensed deep thermal steam (+${waterGain.toInt()} Purified Water, -20°C Shaft Heat, -5 mSv Rads, +10 XP)!"
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("WATER DISTILL", msg)
+        }
+    }
+
+    fun fieldPressEmergencyAmmo() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val snap = current.production
+            val scrapCost = 10.0
+            val fuelCost = 2.0
+            val canUseScrapAndFuel = state.scrap >= scrapCost && state.bioFuel >= fuelCost
+            val canUseScrapOnly = state.scrap >= 14.0
+            if (!canUseScrapAndFuel && !canUseScrapOnly) {
+                val warnMsg = "Need 10 Scrap + 2 Bio-Fuel (or 14 Scrap) to field-press +20 Emergency Ammo Rounds!"
+                overlayFlow.update {
+                    it.copy(
+                        lastDefenseDamageFeedback = warnMsg,
+                        lastSalvageFeedback = warnMsg
+                    )
+                }
+                return@launch
+            }
+            val actualScrap = if (canUseScrapAndFuel) scrapCost else 14.0
+            val actualFuel = if (canUseScrapAndFuel) fuelCost else 0.0
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    scrap = (state.scrap - actualScrap).coerceAtLeast(0.0),
+                    bioFuel = (state.bioFuel - actualFuel).coerceAtLeast(0.0),
+                    ammoRounds = state.ammoRounds + 20
+                ),
+                xpDelta = 14.0,
+                storageCap = snap.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "FIELD MUNITIONS PRESS: Forged +20 Ballistic Ammo Rounds (-${actualScrap.toInt()} Scrap${if (actualFuel > 0) ", -2 Fuel" else ""}, +14 XP)!"
+            overlayFlow.update {
+                it.copy(
+                    lastDefenseDamageFeedback = msg,
+                    lastSalvageFeedback = msg
+                )
+            }
+            repository.logEvent("AMMO PRESS", msg)
+        }
+    }
+
+    fun quickStabilizeAllHazards() {
+        viewModelScope.launch {
+            val current = uiState.value
+            var working = current.state
+            val snap = current.production
+            val actions = mutableListOf<String>()
+            var totalXp = 0.0
+            val now = System.currentTimeMillis()
+
+            // 1. Crank Emergency Dynamo if in Blackout & cranks available
+            if (snap.isVaultBlackout && working.manualDynamoCranksRemaining > 0) {
+                val nextCranks = (working.manualDynamoCranksRemaining - 1).coerceAtLeast(0)
+                val nextStack = (if (working.thoriumOverdriveUntilMillis > now) working.activeDynamoCrankStack + 1 else 1)
+                    .coerceIn(1, OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT)
+                working = working.copy(
+                    thoriumOverdriveUntilMillis = now + 45_000L,
+                    manualDynamoCranksRemaining = nextCranks,
+                    activeDynamoCrankStack = nextStack
+                )
+                actions.add("Cranked Dynamo (+${nextStack * 16} MW)")
+                totalXp += 12.0
+            }
+
+            // 2. Clear Cave-In Hazard
+            if (working.activeCaveInHazard && working.scrap >= 14.0) {
+                working = working.copy(
+                    scrap = working.scrap - 14.0,
+                    activeCaveInHazard = false,
+                    miningShaftHeatPercent = (working.miningShaftHeatPercent - 35).coerceAtLeast(0)
+                )
+                actions.add("Cleared Cave-In")
+                totalXp += 18.0
+            }
+
+            // 3. Weld Pipe Leaks & Room Structural Wear
+            if (working.activePipeLeaksCount > 0 || working.roomStructuralWearPercent >= 20) {
+                val weldCost = (12.0 + working.activePipeLeaksCount * 6.0 + working.roomStructuralWearPercent * 0.25).roundToInt().toDouble()
+                if (working.scrap >= weldCost) {
+                    working = working.copy(
+                        scrap = working.scrap - weldCost,
+                        activePipeLeaksCount = 0,
+                        roomStructuralWearPercent = 0
+                    )
+                    actions.add("Welded Pipes & Rooms")
+                    totalXp += 20.0
+                }
+            }
+
+            // 4. Repair Sabotaged Building
+            if (working.sabotagedBuildingId.isNotEmpty() && working.scrap >= 25.0) {
+                working = working.copy(
+                    scrap = working.scrap - 25.0,
+                    sabotagedBuildingId = "",
+                    sabotagedBuildingPenaltyPercent = 0
+                )
+                actions.add("Repaired Sabotage")
+                totalXp += 16.0
+            }
+
+            // 5. Tune Generator Gears
+            if (working.generatorWearPercent >= 25 && working.scrap >= 8.0) {
+                working = working.copy(
+                    scrap = working.scrap - 8.0,
+                    generatorWearPercent = 0
+                )
+                actions.add("Tuned Dynamo Gears")
+                totalXp += 14.0
+            }
+
+            // 6. Sharpen Pickaxe
+            val sharpenCost = (10.0 + working.salvageRigLevel * 3.0).roundToInt().toDouble()
+            if (working.pickaxeDurabilityPercent < 80 && working.scrap >= sharpenCost) {
+                working = working.copy(
+                    scrap = working.scrap - sharpenCost,
+                    pickaxeDurabilityPercent = 100
+                )
+                actions.add("Sharpened Pickaxe")
+                totalXp += 10.0
+            }
+
+            // 7. Cool Mining Shaft
+            if (working.miningShaftHeatPercent >= 40 && working.water >= 8.0) {
+                working = working.copy(
+                    water = working.water - 8.0,
+                    miningShaftHeatPercent = (working.miningShaftHeatPercent - 55).coerceAtLeast(0)
+                )
+                actions.add("Cooled Shaft")
+                totalXp += 10.0
+            }
+
+            // 8. Treat Bleeding / Venom / Sick / Exhausted Dwellers
+            if (working.bleedingDwellersCount > 0 || working.venomInfectedDwellersCount > 0 || working.injuredDwellersCount > 0 || working.sickDwellersCount > 0) {
+                if (working.medkitsCount > 0) {
+                    working = working.copy(
+                        medkitsCount = working.medkitsCount - 1,
+                        bleedingDwellersCount = 0,
+                        venomInfectedDwellersCount = 0,
+                        sickDwellersCount = 0,
+                        injuredDwellersCount = 0,
+                        dwellerHealthPercent = (working.dwellerHealthPercent + 30).coerceAtMost(100),
+                        dwellerStaminaPercent = (working.dwellerStaminaPercent + 20).coerceAtMost(100)
+                    )
+                    actions.add("Cured Trauma & Sickness (Medkit)")
+                    totalXp += 16.0
+                } else if (working.water >= 8.0 && working.rations >= 8.0) {
+                    working = working.copy(
+                        water = working.water - 8.0,
+                        rations = working.rations - 8.0,
+                        bleedingDwellersCount = 0,
+                        venomInfectedDwellersCount = 0,
+                        sickDwellersCount = 0,
+                        injuredDwellersCount = 0,
+                        dwellerHealthPercent = (working.dwellerHealthPercent + 25).coerceAtMost(100),
+                        dwellerStaminaPercent = (working.dwellerStaminaPercent + 15).coerceAtMost(100)
+                    )
+                    actions.add("Field-Cured Trauma & Sickness")
+                    totalXp += 16.0
+                }
+            }
+            if (working.dwellerStaminaPercent < 65) {
+                working = working.copy(
+                    dwellerStaminaPercent = (working.dwellerStaminaPercent + 30).coerceAtMost(100)
+                )
+                actions.add("Restored Crew Stamina (${working.dwellerStaminaPercent}%)")
+                totalXp += 8.0
+            }
+
+            // 9. Scrub Oxygen & Flush Radiation
+            if (working.oxygenPercent < 90) {
+                working = working.copy(
+                    oxygenPercent = (working.oxygenPercent + 22).coerceAtMost(100)
+                )
+                actions.add("Scrubbed O2 (${working.oxygenPercent}%)")
+                totalXp += 8.0
+            }
+            if (working.radiationMillisieverts >= 15) {
+                if (working.radAwayCount > 0 && working.radiationMillisieverts >= 35) {
+                    working = working.copy(
+                        radAwayCount = working.radAwayCount - 1,
+                        radiationMillisieverts = (working.radiationMillisieverts - 45).coerceAtLeast(0)
+                    )
+                    actions.add("Injected RadAway")
+                    totalXp += 10.0
+                } else if (working.water >= 4.0) {
+                    working = working.copy(
+                        water = working.water - 4.0,
+                        radiationMillisieverts = (working.radiationMillisieverts - 25).coerceAtLeast(0)
+                    )
+                    actions.add("Decon Shower (-25mSv)")
+                    totalXp += 8.0
+                }
+            }
+
+            if (actions.isEmpty()) {
+                // Even if all hazards are clear, grant a small O2/Water/Food morale sweep!
+                working = working.copy(
+                    oxygenPercent = 100,
+                    dwellerHealthPercent = (working.dwellerHealthPercent + 5).coerceAtMost(100)
+                )
+                val msg = "SHELTER SYSTEMS NOMINAL: All pipes, generators, O2 scrubbers & crew vitals verified (+6 Food, +6 Water, +8 XP)!"
+                val updated = applyXpAndResourceDelta(
+                    baseState = working,
+                    waterDelta = 6.0,
+                    rationsDelta = 6.0,
+                    xpDelta = 8.0,
+                    storageCap = snap.storageCap
+                )
+                repository.updateOutpostState(updated)
+                overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+                repository.logEvent("STABILIZE", msg)
+            } else {
+                val updated = applyXpAndResourceDelta(
+                    baseState = working,
+                    xpDelta = totalXp,
+                    storageCap = snap.storageCap
+                )
+                repository.updateOutpostState(updated)
+                val summary = "OVERSEER AUTO-STABILIZE COMPLETE: ${actions.joinToString(" • ")} (+${totalXp.toInt()} XP)!"
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = summary,
+                        lastDefenseDamageFeedback = summary
+                    )
+                }
+                repository.logEvent("AUTO-STABILIZE", summary)
+            }
+        }
+    }
+
+    fun commissionEdenCoreModule(phaseNumber: Int) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val moduleCosts = OutpostCalculator.computeEdenCoreModuleCosts(state, current.buildingsMap)
+            val module = moduleCosts.find { it.phaseNumber == phaseNumber } ?: return@launch
+            if (!module.canAfford || !module.requirementsMet || module.isBuilt) return@launch
+
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    edenCorePhase = phaseNumber,
+                    scrap = state.scrap - module.scrapCost,
+                    water = (state.water - module.waterCost).coerceAtLeast(0.0),
+                    rations = (state.rations - module.rationsCost).coerceAtLeast(0.0),
+                    bioFuel = (state.bioFuel - module.fuelCost).coerceAtLeast(0.0),
+                    researchData = (state.researchData - module.researchCost).coerceAtLeast(0.0),
+                    gold = (state.gold - module.goldCost).coerceAtLeast(0.0),
+                    thoriumRods = (state.thoriumRods - module.thoriumCost).coerceAtLeast(0.0),
+                    aetherCells = (state.aetherCells - module.aetherCost).coerceAtLeast(0.0),
+                    mutagenCores = (state.mutagenCores - module.coresCost).coerceAtLeast(0.0)
+                ),
+                xpDelta = 100.0 * phaseNumber,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "EDEN CORE COMMISSIONED: ${module.title} completed! (+${100 * phaseNumber} XP)!"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    levelUpBanner = LevelUpBannerState(
+                        title = "EDEN CORE MODULE $phaseNumber ONLINE!",
+                        subtitle = module.title,
+                        rewardSummary = module.description,
+                        isCommandLevel = false
+                    )
+                )
+            }
+            repository.logEvent("EDEN CORE", msg)
+        }
+    }
+
+    fun auditCertificationTier(tierNumber: Int) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val previews = OutpostCalculator.computeCertificationPreviews(state, current.production)
+            val preview = previews.find { it.tierNumber == tierNumber } ?: return@launch
+            if (!preview.isMet || preview.isCertified) return@launch
+
+            val isVictory = tierNumber >= 5
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    certificationTier = tierNumber,
+                    isSelfSustainedCertified = isVictory || state.isSelfSustainedCertified
+                ),
+                goldDelta = 50.0 * tierNumber,
+                xpDelta = 150.0 * tierNumber,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val title = if (isVictory) "★ VAULT AUTONOMY ACHIEVED: TIER V CERTIFIED!" else "CERTIFICATION PASSED: ${preview.title}"
+            val summary = if (isVictory) "Perpetual Closed-Loop Self-Sustained Vault Confirmed! (+500 XP, +250 Gold)!" else "Tier $tierNumber criteria officially validated (+${150 * tierNumber} XP, +${50 * tierNumber} Gold)!"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = "$title: $summary",
+                    levelUpBanner = LevelUpBannerState(
+                        title = title,
+                        subtitle = preview.title,
+                        rewardSummary = summary,
+                        isCommandLevel = isVictory
+                    )
+                )
+            }
+            repository.logEvent("CERTIFICATION", "$title: $summary")
+        }
+    }
+
     fun dismissOfflineReport() {
         overlayFlow.update { it.copy(offlineReport = null) }
     }
 
     fun dismissLevelUpBanner() {
         overlayFlow.update { it.copy(levelUpBanner = null) }
+    }
+
+    // --- PHASE 3 HARDCORE SURVIVAL: SLEEP STAMINA, SICKNESS QUARANTINE, POWER LOAD BALANCER, AMMO/TRAPS & DEEP-CORE DRILLING ---
+
+    fun toggleRestRotation() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val nextActive = !state.isRestRotationActive
+            val boostedStamina = if (nextActive) {
+                (state.dwellerStaminaPercent + 25).coerceAtMost(100)
+            } else {
+                state.dwellerStaminaPercent
+            }
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    isRestRotationActive = nextActive,
+                    dwellerStaminaPercent = boostedStamina
+                ),
+                xpDelta = if (nextActive) 8.0 else 0.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = if (nextActive) {
+                "BUNK SLEEP ROTATION ACTIVE: Crew rotating through Vault Living Quarters (+25% Stamina now -> $boostedStamina%, rapid sleep recovery & -25% appetite strain)!"
+            } else {
+                "FULL WORK SHIFT RESUMED: All Dwellers returned to active Vault stations (100% full shift output)!"
+            }
+            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
+            repository.logEvent("SLEEP SHIFT", msg)
+        }
+    }
+
+    fun cureSickAndExhaustedCrew() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val hasMedkit = state.medkitsCount > 0
+            val hasRadAway = state.radAwayCount > 0
+            val waterCost = if (!hasMedkit && !hasRadAway) 6.0 else 0.0
+            val foodCost = if (!hasMedkit && !hasRadAway) 6.0 else 0.0
+            if (!hasMedkit && !hasRadAway && (state.water < waterCost || state.rations < foodCost)) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "Need 1 Medkit/RadAway or 6 Water + 6 Food to quarantine & cure sick/exhausted Dwellers!")
+                }
+                return@launch
+            }
+            val newStamina = (state.dwellerStaminaPercent + 35).coerceAtMost(100)
+            val newHealth = (state.dwellerHealthPercent + 25).coerceAtMost(100)
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    medkitsCount = (state.medkitsCount - (if (hasMedkit) 1 else 0)).coerceAtLeast(0),
+                    radAwayCount = (state.radAwayCount - (if (!hasMedkit && hasRadAway) 1 else 0)).coerceAtLeast(0),
+                    water = (state.water - waterCost).coerceAtLeast(0.0),
+                    rations = (state.rations - foodCost).coerceAtLeast(0.0),
+                    sickDwellersCount = 0,
+                    bleedingDwellersCount = 0,
+                    venomInfectedDwellersCount = 0,
+                    injuredDwellersCount = 0,
+                    dwellerStaminaPercent = newStamina,
+                    dwellerHealthPercent = newHealth
+                ),
+                xpDelta = 18.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "QUARANTINE & VITALS RESTORED: Cured all Dysentery/Rad-Sickness & restored Stamina to $newStamina% / Health to $newHealth% (+18 XP)!"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("QUARANTINE", msg)
+        }
+    }
+
+    fun setGridLoadBreakerMode(mode: GridLoadBreakerMode) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            repository.updateOutpostState(state.copy(gridLoadBreakerMode = mode.id))
+            val msg = "GRID BREAKER ROUTED -> ${mode.shortLabel.uppercase()}: ${mode.effectSummary}"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("POWER BREAKER", msg)
+        }
+    }
+
+    fun selectTurretAmmoType(ammoType: TurretAmmoType) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            repository.updateOutpostState(state.copy(selectedAmmoTypeId = ammoType.id))
+            val msg = "TURRET MUNITIONS LOADED -> ${ammoType.title.uppercase()}: ${ammoType.effectSummary}"
+            overlayFlow.update {
+                it.copy(
+                    lastDefenseDamageFeedback = msg,
+                    lastSalvageFeedback = msg
+                )
+            }
+            repository.logEvent("MUNITIONS", msg)
+        }
+    }
+
+    fun armPerimeterCryoTrap() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val scrapCost = 12.0
+            val waterCost = 6.0
+            if (state.scrap < scrapCost || state.water < waterCost) {
+                overlayFlow.update {
+                    it.copy(lastDefenseDamageFeedback = "Need 12 Scrap & 6 Water to fabricate & arm a Perimeter Cryo-Shrapnel Trap!")
+                }
+                return@launch
+            }
+            val newTrapCount = state.activeCryoTrapsCount + 1
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    scrap = state.scrap - scrapCost,
+                    water = state.water - waterCost,
+                    activeCryoTrapsCount = newTrapCount
+                ),
+                xpDelta = 16.0,
+                storageCap = current.production.storageCap
+            )
+            repository.updateOutpostState(updated)
+            val msg = "CRYO-SHRAPNEL TRAP ARMED: $newTrapCount Active Perimeter Cryo-Trap(s) online (+${newTrapCount * 14} DEF vs Siege Waves, +16 XP)!"
+            overlayFlow.update {
+                it.copy(
+                    lastDefenseDamageFeedback = msg,
+                    lastSalvageFeedback = msg
+                )
+            }
+            repository.logEvent("CRYO TRAP", msg)
+        }
+    }
+
+    fun executeDeepCoreDrill() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val snap = current.production
+            if (state.activeCaveInHazard) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "DEEP BOREHOLE BLOCKED BY CAVE-IN! Shore up the Cave-In first (-14 Scrap).")
+                }
+                return@launch
+            }
+            val scrapCost = if (state.scrap >= 8.0) 8.0 else 0.0
+            val waterCost = if (state.water >= 4.0) 4.0 else 0.0
+            val drillBonusMeters = if (snap.activeGridBreakerMode == GridLoadBreakerMode.DRILL_OVERDRIVE) 100 else 75
+            val newDepth = state.deepCoreDepthMeters + drillBonusMeters
+            val depthTier = 1 + (newDepth / 300)
+            val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
+            val scrapYield = (8.0 + depthTier * 3.2) * snap.uniqueDwellerBonusMultiplier
+            val goldYield = ((2.2 + depthTier * 1.1 + yardLv * 0.8) * snap.uniqueDwellerBonusMultiplier * 10.0).roundToInt() / 10.0
+            val fuelYield = ((0.6 + yardLv * 0.35 + depthTier * 0.25) * 10.0).roundToInt() / 10.0
+            val foundRelic = Random.nextInt(100) < (24 + depthTier * 4).coerceAtMost(55)
+            val foundThorium = Random.nextInt(100) < 28
+            val newRelics = state.discoveredRelicsCount + (if (foundRelic) 1 else 0)
+            val nextHeat = (state.miningShaftHeatPercent + 12).coerceAtMost(95)
+
+            // Check if we crossed a Subterranean Boss depth threshold!
+            val crossedBoss = SubterraneanBossType.entries.firstOrNull { boss ->
+                state.deepCoreDepthMeters < boss.depthThresholdMeters && newDepth >= boss.depthThresholdMeters
+            } ?: if (state.activeSubterraneanBossId.isEmpty() && newDepth >= 300 && Random.nextInt(100) < 25) {
+                SubterraneanBossType.entries.lastOrNull { newDepth >= it.depthThresholdMeters }
+            } else null
+
+            val nextBossId = crossedBoss?.id ?: state.activeSubterraneanBossId
+            val nextBossHp = if (crossedBoss != null) 100 else state.subterraneanBossHpPercent
+
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    scrap = (state.scrap - scrapCost).coerceAtLeast(0.0),
+                    water = (state.water - waterCost).coerceAtLeast(0.0),
+                    deepCoreDepthMeters = newDepth,
+                    discoveredRelicsCount = newRelics,
+                    thoriumRods = state.thoriumRods + (if (foundThorium) 1.0 else 0.0),
+                    miningShaftHeatPercent = nextHeat,
+                    activeSubterraneanBossId = nextBossId,
+                    subterraneanBossHpPercent = nextBossHp,
+                    totalGoldSalvaged = state.totalGoldSalvaged + goldYield
+                ),
+                scrapDelta = scrapYield,
+                fuelDelta = fuelYield,
+                goldDelta = goldYield,
+                xpDelta = 24.0 + depthTier * 6.0,
+                storageCap = snap.storageCap
+            )
+            repository.updateOutpostState(updated)
+
+            val relicSuffix = if (foundRelic) {
+                val outPct = String.format(java.util.Locale.US, "%.1f", newRelics * 1.5)
+                val mwBonus = String.format(java.util.Locale.US, "%.1f", newRelics * 0.3)
+                " • ★ PRE-FALL RELIC UNEARTHED ($newRelics Total: +$outPct% Output, +${newRelics * 2} DEF, +${mwBonus} MW & +${newRelics * 15} Cap)!"
+            } else ""
+            val bossSuffix = if (crossedBoss != null) " • ⚠ SUBTERRANEAN BOSS AWAKENED: ${crossedBoss.title} at ${newDepth}m!" else ""
+            val msg = "DEEP-CORE BOREHOLE (${newDepth}m): +$goldYield Gold, +$fuelYield Fuel, +${scrapYield.toInt()} Scrap$relicSuffix$bossSuffix"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = if (crossedBoss != null) msg else it.lastDefenseDamageFeedback
+                )
+            }
+            repository.logEvent("DEEP CORE", msg)
+        }
+    }
+
+    fun strikeSubterraneanBoss() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val snap = current.production
+            val boss = SubterraneanBossType.fromId(state.activeSubterraneanBossId) ?: return@launch
+            val ammoUsed = minOf(state.ammoRounds, 6)
+            val scrapUsed = if (ammoUsed < 6 && state.scrap >= 10.0) 10.0 else 0.0
+            val baseDamage = 38 + (snap.totalDefenseRating / 6).coerceAtMost(35) + (if (ammoUsed >= 6) 15 else 0)
+            val remainingHp = (state.subterraneanBossHpPercent - baseDamage).coerceAtLeast(0)
+
+            if (remainingHp <= 0) {
+                val newRelics = state.discoveredRelicsCount + boss.relicRewardCount
+                val updated = applyXpAndResourceDelta(
+                    baseState = state.copy(
+                        ammoRounds = (state.ammoRounds - ammoUsed).coerceAtLeast(0),
+                        scrap = (state.scrap - scrapUsed).coerceAtLeast(0.0),
+                        activeSubterraneanBossId = "",
+                        subterraneanBossHpPercent = 0,
+                        discoveredRelicsCount = newRelics,
+                        aetherCells = state.aetherCells + 1.0
+                    ),
+                    goldDelta = boss.goldReward,
+                    coresDelta = boss.mutagenCoresReward,
+                    xpDelta = boss.xpReward,
+                    storageCap = snap.storageCap
+                )
+                repository.updateOutpostState(updated)
+                val winMsg = "★ SUBTERRANEAN BOSS SLAIN: Defeated ${boss.title}! Looted +${boss.relicRewardCount} Pre-Fall Relic(s) ($newRelics total), +${boss.mutagenCoresReward.toInt()} Mutagen Cores, +1 Aether Cell & +${boss.goldReward.toInt()} Gold!"
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = winMsg,
+                        lastDefenseDamageFeedback = winMsg,
+                        levelUpBanner = LevelUpBannerState(
+                            title = "★ SUBTERRANEAN BOSS VANQUISHED!",
+                            subtitle = "${boss.title} (${boss.depthThresholdMeters}m Deep Core)",
+                            rewardSummary = "+${boss.relicRewardCount} Pre-Fall Relic(s) • +${boss.mutagenCoresReward.toInt()} Cores • +${boss.goldReward.toInt()} Gold",
+                            isCommandLevel = false
+                        )
+                    )
+                }
+                repository.logEvent("BOSS SLAIN", winMsg)
+            } else {
+                val updated = applyXpAndResourceDelta(
+                    baseState = state.copy(
+                        ammoRounds = (state.ammoRounds - ammoUsed).coerceAtLeast(0),
+                        scrap = (state.scrap - scrapUsed).coerceAtLeast(0.0),
+                        subterraneanBossHpPercent = remainingHp
+                    ),
+                    xpDelta = 20.0,
+                    storageCap = snap.storageCap
+                )
+                repository.updateOutpostState(updated)
+                val hitMsg = "DEEP-CORE STRIKE vs ${boss.title}: Dealt -$baseDamage% Hull/Carapace Damage ($remainingHp% HP remaining)!"
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = hitMsg,
+                        lastDefenseDamageFeedback = hitMsg
+                    )
+                }
+                repository.logEvent("BOSS STRIKE", hitMsg)
+            }
+        }
     }
 
     private fun applyXpAndResourceDelta(

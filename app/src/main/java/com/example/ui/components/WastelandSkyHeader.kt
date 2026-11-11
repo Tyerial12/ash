@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.local.OutpostStateEntity
 import com.example.domain.ProductionSnapshot
+import com.example.widget.VaultStatusAppWidgetProvider
 import com.example.model.ActiveBuildingConstruction
 import com.example.model.ActiveDoorUpgrade
 import com.example.model.ActiveDwellerExpedition
@@ -64,8 +66,9 @@ import kotlin.math.roundToInt
 
 private enum class HeaderTelemetryTab(val label: String) {
     COMPACT("Compact"),
-    RESOURCES_GATHERED("Resources Gathered"),
-    SYSTEMS_ONLINE("Systems Online")
+    RESOURCES_GATHERED("Resources"),
+    SYSTEMS_ONLINE("Systems"),
+    QUICK_SURVIVAL("⚡ Survival")
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -78,6 +81,12 @@ fun WastelandSkyHeader(
     activeDoorUpgrade: ActiveDoorUpgrade? = null,
     activeExpedition: ActiveDwellerExpedition? = null,
     onRequestRestartGame: () -> Unit = {},
+    onQuickStabilizeAll: () -> Unit = {},
+    onForageRations: () -> Unit = {},
+    onBoilWater: () -> Unit = {},
+    onFieldPressAmmo: () -> Unit = {},
+    onCrankDynamo: () -> Unit = {},
+    onScrubAir: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(HeaderTelemetryTab.COMPACT) }
@@ -389,6 +398,7 @@ fun WastelandSkyHeader(
                         HeaderTelemetryTab.COMPACT -> "header_tab_compact"
                         HeaderTelemetryTab.RESOURCES_GATHERED -> "header_tab_resources"
                         HeaderTelemetryTab.SYSTEMS_ONLINE -> "header_tab_systems"
+                        HeaderTelemetryTab.QUICK_SURVIVAL -> "header_tab_survival"
                     }
                     Surface(
                         color = if (isSelected) SolarAmber.copy(alpha = 0.22f) else BunkerSlate,
@@ -437,14 +447,18 @@ fun WastelandSkyHeader(
                 ResourceChip("WATER", state.water, production.waterPerSec, ResourceType.WATER.color)
                 ResourceChip("FOOD", state.rations, production.rationsPerSec, ResourceType.RATIONS.color)
                 ResourceChip("FUEL", state.bioFuel, production.bioFuelPerSec, ResourceType.BIO_FUEL.color)
-                RareBadgeChip("GOLD", state.gold.toInt(), XpGold)
+                if (production.goldPerSec > 0.0) {
+                    ResourceChip("GOLD", state.gold, production.goldPerSec, XpGold)
+                } else {
+                    RareBadgeChip("GOLD", state.gold.toInt(), XpGold)
+                }
                 RareBadgeChip("AMMO", state.ammoRounds, SolarAmber)
                 if (state.prestigeCores > 0) {
                     RareBadgeChip("★CORES", state.prestigeCores, XpGold)
                 }
             }
 
-            // EXPANDABLE TELEMETRY DRAWER: Resources Gathered OR Current Systems Online
+            // EXPANDABLE TELEMETRY DRAWER: Resources Gathered, Current Systems Online, or Quick Survival
             AnimatedVisibility(visible = selectedTab != HeaderTelemetryTab.COMPACT) {
                 Surface(
                     color = ObsidianCharcoal.copy(alpha = 0.96f),
@@ -465,10 +479,143 @@ fun WastelandSkyHeader(
                             activeDoorUpgrade = activeDoorUpgrade,
                             activeExpedition = activeExpedition
                         )
+                        HeaderTelemetryTab.QUICK_SURVIVAL -> QuickSurvivalDrawerPanel(
+                            state = state,
+                            onQuickStabilizeAll = onQuickStabilizeAll,
+                            onForageRations = onForageRations,
+                            onBoilWater = onBoilWater,
+                            onFieldPressAmmo = onFieldPressAmmo,
+                            onCrankDynamo = onCrankDynamo,
+                            onScrubAir = onScrubAir
+                        )
                         HeaderTelemetryTab.COMPACT -> {}
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun QuickSurvivalDrawerPanel(
+    state: OutpostStateEntity,
+    onQuickStabilizeAll: () -> Unit,
+    onForageRations: () -> Unit,
+    onBoilWater: () -> Unit,
+    onFieldPressAmmo: () -> Unit,
+    onCrankDynamo: () -> Unit,
+    onScrubAir: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, SurplusGreen.copy(alpha = 0.65f), RoundedCornerShape(10.dp))
+            .padding(8.dp)
+            .testTag("drawer_quick_survival"),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "⚡ OVERSEER EMERGENCY FIELD SURVIVAL ACTIONS",
+            style = MaterialTheme.typography.labelMedium,
+            color = SurplusGreen,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            QuickHeaderActionPill(
+                label = "AUTO-STABILIZE ALL",
+                subtitle = "Fix Leaks, Wear & Air",
+                color = SolarAmber,
+                onClick = onQuickStabilizeAll,
+                tag = "header_quick_stabilize_btn",
+                modifier = Modifier.weight(1f)
+            )
+            QuickHeaderActionPill(
+                label = "FORAGE RATIONS",
+                subtitle = "+Food & +Water (-3S)",
+                color = SurplusGreen,
+                onClick = onForageRations,
+                tag = "header_forage_rations_btn",
+                modifier = Modifier.weight(1f)
+            )
+            QuickHeaderActionPill(
+                label = "BOIL AQUIFER H2O",
+                subtitle = "+Purified H2O & Cool",
+                color = CryoCyan,
+                onClick = onBoilWater,
+                tag = "header_boil_water_btn",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            QuickHeaderActionPill(
+                label = "PRESS +20 AMMO",
+                subtitle = "-10 Scrap & -2 Fuel",
+                color = WarningOrange,
+                onClick = onFieldPressAmmo,
+                tag = "header_press_ammo_btn",
+                modifier = Modifier.weight(1f)
+            )
+            QuickHeaderActionPill(
+                label = "CRANK (${state.manualDynamoCranksRemaining}/4)",
+                subtitle = "Emergency +18 MW",
+                color = XpGold,
+                onClick = onCrankDynamo,
+                tag = "header_crank_dynamo_btn",
+                modifier = Modifier.weight(1f)
+            )
+            QuickHeaderActionPill(
+                label = "SCRUB AIR (${state.oxygenPercent}%)",
+                subtitle = "+22% O2 (-6W/-4S)",
+                color = RadTeal,
+                onClick = onScrubAir,
+                tag = "header_scrub_air_btn",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickHeaderActionPill(
+    label: String,
+    subtitle: String,
+    color: Color,
+    onClick: () -> Unit,
+    tag: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = color.copy(alpha = 0.16f),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.7f)),
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .testTag(tag)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMutedAsh,
+                maxLines = 1
+            )
         }
     }
 }
@@ -524,11 +671,23 @@ private fun ResourcesGatheredDrawerPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            RareBadgeChip("GOLD", state.gold.toInt(), XpGold)
+            if (production.goldPerSec > 0.0) {
+                ResourceChip("GOLD", state.gold, production.goldPerSec, XpGold)
+            } else {
+                RareBadgeChip("GOLD", state.gold.toInt(), XpGold)
+            }
             RareBadgeChip("THORIUM", state.thoriumRods.toInt(), WarningOrange)
             RareBadgeChip("AETHER", state.aetherCells.toInt(), CryoCyan)
             RareBadgeChip("CRATES", state.rawSalvageCaches, SolarAmber)
             RareBadgeChip("PRESTIGE CORES", state.prestigeCores, XpGold)
+        }
+        if (production.goldPerSec > 0.0 || production.goldMineSmallFuelPerSec > 0.0) {
+            Text(
+                text = "⛏ Gold Mine Upgrade Bonus: +${formatRate(production.goldPerSec)}/s Gold (+${production.dailyRoomGoldBonus.toInt()}/Day) & +${formatRate(production.goldMineSmallFuelPerSec)}/s Bio-Fuel (+${String.format(Locale.US, "%.1f", production.dailyRoomFuelBonus)}/Day)",
+                style = MaterialTheme.typography.labelSmall,
+                color = XpGold,
+                fontWeight = FontWeight.SemiBold
+            )
         }
 
         val upkeepColor = when {
@@ -625,6 +784,47 @@ private fun CurrentSystemsOnlineDrawerPanel(
             color = XpGold,
             fontWeight = FontWeight.Bold
         )
+
+        val context = LocalContext.current
+        var widgetFeedback by rememberSaveable { mutableStateOf("") }
+        Surface(
+            color = SolarAmber.copy(alpha = 0.16f),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, SolarAmber.copy(alpha = 0.75f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable {
+                    VaultStatusAppWidgetProvider.pushLiveStateToWidgets(context, state, production)
+                    val pinned = VaultStatusAppWidgetProvider.requestPinVaultWidget(context)
+                    widgetFeedback = if (pinned) {
+                        "Phone Home-Screen Widget pin requested & synced!"
+                    } else {
+                        "Widget telemetry synced! Long-press your Phone Home Screen -> Widgets -> Vault City to place it."
+                    }
+                }
+                .testTag("pin_phone_widget_btn")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "📱 PIN / SYNC VAULT PHONE WIDGET (HOME SCREEN RESOURCES & STATUS)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SolarAmber,
+                    fontWeight = FontWeight.Bold
+                )
+                if (widgetFeedback.isNotEmpty()) {
+                    Text(
+                        text = widgetFeedback,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SurplusGreen
+                    )
+                }
+            }
+        }
     }
 }
 

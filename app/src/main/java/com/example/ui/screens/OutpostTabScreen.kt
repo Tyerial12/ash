@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,6 +70,7 @@ import com.example.model.PickaxeTier
 import com.example.model.PowerStationType
 import com.example.model.RareAnomaly
 import com.example.model.SalvageNodeSlot
+import com.example.model.SubterraneanBossType
 import com.example.model.WorkerClassType
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Phishing
@@ -136,6 +138,9 @@ fun OutpostTabScreen(
     onCoolMiningShaft: () -> Unit = {},
     onClearCaveIn: () -> Unit = {},
     onWeldRoomPipes: () -> Unit = {},
+    onRepairSabotagedBuilding: () -> Unit = {},
+    onExecuteDeepCoreDrill: () -> Unit = {},
+    onStrikeSubterraneanBoss: () -> Unit = {},
     initialSubViewName: String? = null,
     modifier: Modifier = Modifier
 ) {
@@ -271,6 +276,14 @@ fun OutpostTabScreen(
             }
 
             if (showMineAndFix) {
+                item(key = "subterranean_deep_core_drilling_item") {
+                    SubterraneanDeepCoreDrillingCard(
+                        uiState = uiState,
+                        onExecuteDeepCoreDrill = onExecuteDeepCoreDrill,
+                        onStrikeSubterraneanBoss = onStrikeSubterraneanBoss
+                    )
+                }
+
                 item(key = "hardcore_mining_hazards_item") {
                     HardcoreMiningHazardsCard(
                         uiState = uiState,
@@ -317,6 +330,45 @@ fun OutpostTabScreen(
                         uiState = uiState,
                         onWeldRoomPipes = onWeldRoomPipes
                     )
+                }
+
+                if (uiState.state.sabotagedBuildingId.isNotBlank()) {
+                    item(key = "sabotaged_room_alert_card") {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = HazardRed.copy(alpha = 0.2f),
+                            border = BorderStroke(1.5.dp, HazardRed)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "⚠ FACILITY SABOTAGED: ${uiState.state.sabotagedBuildingId} (-${uiState.state.sabotagedBuildingPenaltyPercent}% Output)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = HazardRed
+                                )
+                                Text(
+                                    text = "Raider sappers bypassed the perimeter and crippled this facility! Repair immediately with Scrap to restore normal output.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary
+                                )
+                                Button(
+                                    onClick = onRepairSabotagedBuilding,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = HazardRed,
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    Text("REPAIR SABOTAGED ROOM (-25 SCRAP)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // 5. Build & Repair Broken Vault Shelter Rooms Header & Category Filter Row
@@ -932,8 +984,13 @@ private fun VaultPowerAndDayControlCard(
                         color = if (isBlackout || isStarving || isDeficitShutdown) HazardRed else SurplusGreen,
                         fontWeight = FontWeight.Bold
                     )
+                    val autoRepairText = if (prod.needsAutomatedSystemRepair) {
+                        "-${prod.dailyRoomScrapUpkeep.toInt()}S Auto-Repair"
+                    } else {
+                        "0S Auto-Repair (Intact)"
+                    }
                     Text(
-                        text = "Vault Lv.${state.commandLevel} + $builtRoomsCount Rooms Drain -${String.format(Locale.US, "%.1f", prod.totalVaultResourceDrainPerSec)}/s vs Gain +${String.format(Locale.US, "%.1f", prod.totalGrossResourceGainPerSec)}/s • Daily Upkeep: -${prod.dailyFoodUpkeepPerDay.toInt()}F, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()}W, -${prod.dailyRoomScrapUpkeep.toInt()}S, -${prod.dailyRoomFuelUpkeep.toInt()}Fuel",
+                        text = "Vault Lv.${state.commandLevel} + $builtRoomsCount Rooms Drain -${String.format(Locale.US, "%.1f", prod.totalVaultResourceDrainPerSec)}/s vs Gain +${String.format(Locale.US, "%.1f", prod.totalGrossResourceGainPerSec)}/s • Daily: -${prod.dailyFoodUpkeepPerDay.toInt()}F, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()}W, $autoRepairText, -${prod.dailyRoomFuelUpkeep.toInt()}Fuel",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextPrimary
                     )
@@ -1526,7 +1583,7 @@ private fun WastelandSalvageFieldDeck(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "SWING PICKAXE (MINE SCRAP, GOLD, WATER & XP)",
+                    text = "SWING PICKAXE (MINE GOLD, SMALL FUEL, SCRAP & XP)",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -1686,12 +1743,12 @@ private fun SalvageNodeRowCard(
                         }
                     }
                     Text(
-                        text = "Vein Break: +${yieldPreview.primaryAmount.toInt()} ${node.primaryResource.shortLabel} • +${yieldPreview.secondaryAmount.toInt()} ${node.secondaryResource.shortLabel} • +${node.cacheDropCount} Crate",
+                        text = "Vein Break: +${yieldPreview.primaryAmount.toInt()} ${node.primaryResource.shortLabel} • +${yieldPreview.secondaryAmount.toInt()} ${node.secondaryResource.shortLabel} • +${yieldPreview.bonusFuelFromGoldMine} FUEL • +${node.cacheDropCount} Crate",
                         style = MaterialTheme.typography.labelSmall,
                         color = node.accentColor
                     )
                     Text(
-                        text = "Each Pickaxe Swing: +${yieldPreview.tapPrimaryAmount.toInt()} ${node.primaryResource.shortLabel} & +${yieldPreview.tapGoldAmount.toInt()} GOLD",
+                        text = "Each Pickaxe Swing: +${yieldPreview.tapPrimaryAmount.toInt()} ${node.primaryResource.shortLabel}, +${yieldPreview.tapGoldAmount.toInt()} GOLD & +${yieldPreview.tapFuelAmount} FUEL",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -1897,6 +1954,7 @@ private fun BuildingStructureCard(
     }
     val isConstructingThis = activeConstruction?.buildingType == type
     val isAnotherConstructing = activeConstruction != null && !isConstructingThis
+    var showUpgradeConfirm by remember { mutableStateOf(false) }
 
     Surface(
         color = SteelPanel,
@@ -1983,7 +2041,7 @@ private fun BuildingStructureCard(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Room Resource Drain (Lv.$level -> Lv.${level + 1}): -${cost.currentRoomUpkeep.dailyScrap.toInt()}S/-${cost.currentRoomUpkeep.dailyWater.toInt()}W -> -${cost.nextLevelRoomUpkeep.dailyScrap.toInt()}S/-${cost.nextLevelRoomUpkeep.dailyWater.toInt()}W/-${cost.nextLevelRoomUpkeep.dailyFuel.toInt()}Fuel/Day",
+                            text = "Higher-Level Room Drain (Lv.$level -> Lv.${level + 1}): -${cost.currentRoomUpkeep.dailyWater.toInt()}W/-${cost.currentRoomUpkeep.dailyFuel.toInt()}Fuel (-${cost.currentRoomUpkeep.dailyScrap.toInt()}S Auto-Repair) -> -${cost.nextLevelRoomUpkeep.dailyWater.toInt()}W/-${cost.nextLevelRoomUpkeep.dailyFuel.toInt()}Fuel (-${cost.nextLevelRoomUpkeep.dailyScrap.toInt()}S Auto-Repair)/Day",
                             style = MaterialTheme.typography.labelSmall,
                             color = WarningOrange,
                             fontWeight = FontWeight.SemiBold
@@ -2022,6 +2080,18 @@ private fun BuildingStructureCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = XpGold
                 )
+                if (type == BuildingType.SALVAGE_YARD) {
+                    val curSmallFuel = if (level > 0) String.format(Locale.US, "%.2f", 0.06 + level * 0.07) else "0.00"
+                    val nextSmallFuel = String.format(Locale.US, "%.2f", 0.06 + (level + 1) * 0.07)
+                    val curTapFuel = String.format(Locale.US, "%.2f", 0.35 + level * 0.25)
+                    val nextTapFuel = String.format(Locale.US, "%.2f", 0.35 + (level + 1) * 0.25)
+                    Text(
+                        text = "⛽ Gold Mine Fuel & Gold Trickle: Lv.$level (+$curSmallFuel Fuel/s & +$curTapFuel Fuel/Swing) -> Lv.${level + 1} (+$nextSmallFuel Fuel/s, +$nextTapFuel Fuel/Swing & +25% Gold)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SurplusGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
                 if (cost.willExceedPowerGrid) {
                     Text(
@@ -2104,7 +2174,13 @@ private fun BuildingStructureCard(
                 }
 
                 Button(
-                    onClick = onUpgrade,
+                    onClick = {
+                        if (cost.willExceedPowerGrid || level >= 2) {
+                            showUpgradeConfirm = true
+                        } else {
+                            onUpgrade()
+                        }
+                    },
                     enabled = cost.canAfford && !isConstructingThis && !isAnotherConstructing,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (level == 0) RadTeal else SolarAmber,
@@ -2130,6 +2206,76 @@ private fun BuildingStructureCard(
             }
         }
     }
+
+    if (showUpgradeConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showUpgradeConfirm = false },
+            containerColor = SteelPanel,
+            title = {
+                Text(
+                    text = "CONFIRM: UPGRADE ${type.displayName.uppercase()} (LV.${level + 1})",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = SolarAmber,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Think before you upgrade! Ensure your Vault resources and power grid can cover ongoing operating costs:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextPrimary
+                    )
+                    Surface(
+                        color = BunkerCharcoal,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "• Upfront Cost: ${cost.scrapCost.toInt()} Scrap" +
+                                    (if (cost.waterCost > 0) ", ${cost.waterCost.toInt()} Water" else "") +
+                                    (if (cost.fuelCost > 0) ", ${cost.fuelCost.toInt()} Fuel" else ""),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "• Power Grid Demand: +${cost.additionalMegawattDraw} MW" +
+                                    (if (cost.willExceedPowerGrid) " ⚠ EXCEEDS CURRENT GRID! (Will trigger Blackout)" else " (Grid Safe)"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (cost.willExceedPowerGrid) HazardRed else SurplusGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "• Upkeep Drain: -${cost.nextLevelRoomUpkeep.dailyScrap.toInt()}S/-${cost.nextLevelRoomUpkeep.dailyWater.toInt()}W/-${cost.nextLevelRoomUpkeep.dailyFuel.toInt()}Fuel per day",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WarningOrange
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUpgradeConfirm = false
+                        onUpgrade()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (cost.willExceedPowerGrid) HazardRed else SolarAmber,
+                        contentColor = BunkerCharcoal
+                    )
+                ) {
+                    Text("AUTHORIZE UPGRADE", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showUpgradeConfirm = false }) {
+                    Text("CANCEL", color = TextSecondary)
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -2149,5 +2295,211 @@ private fun CostPill(
             color = TextPrimary,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
         )
+    }
+}
+
+@Composable
+fun SubterraneanDeepCoreDrillingCard(
+    uiState: OutpostUiState,
+    onExecuteDeepCoreDrill: () -> Unit,
+    onStrikeSubterraneanBoss: () -> Unit
+) {
+    val state = uiState.state
+    val snap = uiState.production
+    val depth = state.deepCoreDepthMeters
+    val relics = state.discoveredRelicsCount
+    val activeBoss = snap.activeSubterraneanBoss
+    val nextBoss = SubterraneanBossType.nextBossForDepth(depth)
+    val accent = if (activeBoss != null && state.subterraneanBossHpPercent > 0) HazardRed else BioluminescentViolet
+
+    Surface(
+        color = SteelPanel,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.8f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("subterranean_deep_core_drilling_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Explore,
+                        contentDescription = "Subterranean Deep-Core Drilling",
+                        tint = accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "SUBTERRANEAN DEEP-CORE BOREHOLE & RELIC VAULTS",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = accent,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Drill deep into the crust for Pre-Fall Relics (+1.5% Out, +2 DEF, +0.3 MW, +15 Cap & -1% Repair/Relic) & fight Abyssal Bosses!",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
+                Surface(
+                    color = accent.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.6f))
+                ) {
+                    Text(
+                        text = "${depth}m DEEP",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    color = BunkerCharcoal,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, BioluminescentViolet.copy(alpha = 0.5f)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("PRE-FALL RELICS (SMALL OUTPOST BONUSES)", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text(
+                            text = "$relics RELICS (+${String.format(Locale.US, "%.1f", relics * 1.5)}% OUT • +${relics * 2} DEF • +${String.format(Locale.US, "%.1f", relics * 0.3)} MW • +${relics * 15} CAP)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = BioluminescentViolet,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Surface(
+                    color = BunkerCharcoal,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, SolarAmber.copy(alpha = 0.5f)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("NEXT BOSS LAYER", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Text(
+                            text = nextBoss?.let { "${it.depthThresholdMeters}m: ${it.title}" } ?: "ALL ABYSS LAYERS BREACHED",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = SolarAmber,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            if (activeBoss != null && state.subterraneanBossHpPercent > 0) {
+                Surface(
+                    color = HazardRed.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.5.dp, HazardRed),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚠ BOSS AWAKENED: ${activeBoss.title.uppercase()}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = HazardRed,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = "HP: ${state.subterraneanBossHpPercent}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = XpGold,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                        Text(
+                            text = "${activeBoss.hazardDescription} • Loot: +${activeBoss.relicRewardCount} Relic(s), +${activeBoss.mutagenCoresReward.toInt()} Cores & +${activeBoss.goldReward.toInt()} Gold",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextPrimary
+                        )
+                        LinearProgressIndicator(
+                            progress = { (state.subterraneanBossHpPercent / 100f).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = HazardRed,
+                            trackColor = BunkerCharcoal
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onExecuteDeepCoreDrill,
+                    enabled = !state.activeCaveInHazard,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BioluminescentViolet,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("execute_deep_core_drill_btn")
+                ) {
+                    Text(
+                        text = "DRILL DEEP CORE (+75m • RELIC ROLL)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                if (activeBoss != null && state.subterraneanBossHpPercent > 0) {
+                    Button(
+                        onClick = onStrikeSubterraneanBoss,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = HazardRed,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("strike_subterranean_boss_btn")
+                    ) {
+                        Text(
+                            text = "STRIKE BOSS (-6 AMMO)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+        }
     }
 }

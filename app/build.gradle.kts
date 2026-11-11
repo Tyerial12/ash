@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.ashfalloutpost.wzxkqr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 8
-    versionName = "8.0"
+    versionCode = 13
+    versionName = "13.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

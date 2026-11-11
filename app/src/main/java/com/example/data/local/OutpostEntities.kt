@@ -102,6 +102,30 @@ data class OutpostStateEntity(
     val activeConstructionRemainingSeconds: Int = 0,
     val activeConstructionTotalSeconds: Int = 0,
     val activeConstructionRushGoldCost: Double = 0.0,
+    // Eden Core Endgame Project & 5-Tier Self-Sufficiency Certification
+    val edenCorePhase: Int = 0, // 0..4 (Modules I-IV built)
+    val certificationTier: Int = 0, // 0..5 (Tiers I-V certified)
+    val consecutiveDaysStable: Int = 0, // Days running on zero blackout, positive ledger & 0 pipe bursts
+    val isSelfSustainedCertified: Boolean = false, // Ultimate Victory flag
+    // Food Spoilage & Cold Storage Ledger
+    val totalFoodSpoiled: Double = 0.0,
+    val lastSpoilageDayResolved: Int = 0,
+    // Targeted Sieges & Sabotaged Rooms
+    val sabotagedBuildingId: String = "", // e.g. "BIO_SLUDGE_TURBINE", "ATMOSPHERIC_CONDENSER"
+    val sabotagedBuildingPenaltyPercent: Int = 0, // 0..75% penalty until repaired with Scrap
+    // Deep Physiological Survival (Sleep/Exhaustion & Sickness), Grid Load Breakers, Tactical Ammo & Deep-Core Drilling
+    val dwellerStaminaPercent: Int = 100, // 0..100% — Sleep/Rest stamina; drops during continuous shifts, restored by Quarters Rest Rotation
+    val sickDwellersCount: Int = 0, // 0..15 — Subterranean pathogen/sickness count from rads or raw water; cured with Boiled Water / Medkit
+    val isRestRotationActive: Boolean = false, // True when off-shift Dwellers are rotating through Living Quarters bunks
+    val gridLoadBreakerMode: String = "BALANCED", // BALANCED, LIFE_SUPPORT_FIRST, DEFENSE_SURGE, DRILL_OVERDRIVE
+    val selectedAmmoTypeId: String = "STANDARD_FMJ", // STANDARD_FMJ, ARMOR_PIERCING, INCENDIARY_NAPALM, EMP_ARC_SHELLS
+    val activeCryoTrapsCount: Int = 0, // Perimeter Cryo-Shrapnel Traps (+14 DEF each & slows siege waves)
+    val deepCoreDepthMeters: Int = 0, // Subterranean Deep-Core Borehole depth in meters (0m..3000m+)
+    val activeSubterraneanBossId: String = "", // Active boss encounter ID at 300m, 900m, or 1800m
+    val subterraneanBossHpPercent: Int = 0, // 0..100% remaining HP of active subterranean boss
+    val discoveredRelicsCount: Int = 0, // Permanent Pre-Fall Relics unearthed (+1.5% Output, +2 DEF, +0.3 MW, +15 Storage & -1% Auto-Repair Cost each)
+    val lastAttackSucceeded: Boolean = true, // True if the latest Outpost raid/siege was repelled; False if breached
+    val lastAttackSummary: String = "Awaiting First Siege • Defenses Ready",
     val isGameOver: Boolean = false,
     val gameOverReason: String = "",
     val lastSavedTimestampMillis: Long = System.currentTimeMillis()

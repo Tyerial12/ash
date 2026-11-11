@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         SkillNodeEntity::class,
         EventLogEntity::class
     ],
-    version = 15,
+    version = 18,
     exportSchema = false
 )
 abstract class OutpostDatabase : RoomDatabase() {

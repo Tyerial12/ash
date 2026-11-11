@@ -98,8 +98,10 @@ import com.example.model.LevelUpBannerState
 import com.example.model.OfflineReport
 import com.example.model.ResourceType
 import com.example.notifications.VaultNotificationHelper
+import com.example.ui.components.UnifiedVaultAlertHud
 import com.example.ui.components.WastelandSkyHeader
 import com.example.ui.components.formatCompact
+import com.example.widget.VaultStatusAppWidgetProvider
 import com.example.ui.screens.CraftHuntDefenseTabScreen
 import com.example.ui.screens.CrewAndPowerTabScreen
 import com.example.ui.screens.CurrentResourcesTabScreen
@@ -136,12 +138,11 @@ enum class OutpostDestination(
     val unselectedIcon: ImageVector,
     val tag: String
 ) {
-    MINING(R.string.tab_mining, Icons.Filled.Gavel, Icons.Outlined.Gavel, "nav_tab_mining"),
-    BUILDING(R.string.tab_building, Icons.Filled.Apartment, Icons.Outlined.Apartment, "nav_tab_building"),
-    HUNTING(R.string.tab_hunting, Icons.Filled.Security, Icons.Outlined.Security, "nav_tab_hunting"),
-    VAULT_STATS(R.string.tab_vault_stats, Icons.Filled.Assessment, Icons.Outlined.Assessment, "nav_tab_vault_stats"),
-    RESOURCES(R.string.tab_resources, Icons.Filled.Inventory2, Icons.Outlined.Inventory2, "nav_tab_resources"),
-    CREW_POWER(R.string.tab_crew_power, Icons.Filled.Groups, Icons.Outlined.Groups, "nav_tab_crew_power")
+    VAULT(R.string.tab_vault_core, Icons.Filled.Apartment, Icons.Outlined.Apartment, "nav_tab_vault"),
+    OPERATIONS(R.string.tab_operations, Icons.Filled.Gavel, Icons.Outlined.Gavel, "nav_tab_operations"),
+    CREW(R.string.tab_dwellers_expeditions, Icons.Filled.Groups, Icons.Outlined.Groups, "nav_tab_crew"),
+    DEFENSE(R.string.tab_defense_security, Icons.Filled.Security, Icons.Outlined.Security, "nav_tab_defense"),
+    LOGISTICS(R.string.tab_logistics_trade, Icons.Filled.Inventory2, Icons.Outlined.Inventory2, "nav_tab_logistics")
 }
 
 class MainActivity : ComponentActivity() {
@@ -283,7 +284,7 @@ fun AshfallOutpostApp(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val latestUiState by rememberUpdatedState(uiState)
 
-    var currentTab by rememberSaveable { mutableStateOf(OutpostDestination.MINING) }
+    var currentTab by rememberSaveable { mutableStateOf(OutpostDestination.VAULT) }
     var showRestartDialog by rememberSaveable { mutableStateOf(false) }
 
     // Request POST_NOTIFICATIONS runtime permission on Android 13+ so offline phone alerts can post
@@ -306,12 +307,18 @@ fun AshfallOutpostApp(
     }
 
     // Schedule offline phone notifications when the game leaves foreground (ON_STOP)
-    // and cancel pending alarms when the game is loaded (ON_START)
+    // and cancel pending alarms when the game is loaded (ON_START), while keeping the Home Screen Phone Widget live-synced
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> {
                     VaultNotificationHelper.cancelScheduledOfflineNotifications(context)
+                    val snapshotState = latestUiState
+                    VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+                        context = context,
+                        state = snapshotState.state,
+                        production = snapshotState.production
+                    )
                 }
                 Lifecycle.Event.ON_STOP -> {
                     val snapshotState = latestUiState
@@ -320,6 +327,11 @@ fun AshfallOutpostApp(
                         state = snapshotState.state,
                         production = snapshotState.production,
                         activeConstruction = snapshotState.activeConstruction
+                    )
+                    VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+                        context = context,
+                        state = snapshotState.state,
+                        production = snapshotState.production
                     )
                 }
                 else -> {}
@@ -331,12 +343,36 @@ fun AshfallOutpostApp(
         }
     }
 
-    BackHandler(enabled = currentTab != OutpostDestination.MINING) {
-        currentTab = OutpostDestination.MINING
+    BackHandler(enabled = currentTab != OutpostDestination.VAULT) {
+        currentTab = OutpostDestination.VAULT
     }
 
     val state = uiState.state
     val prod = uiState.production
+
+    // Keep the installed Home Screen Phone Widget synchronized as resources and status change
+    LaunchedEffect(
+        state.dayCounter,
+        state.commandLevel,
+        state.scrap.toInt() / 5,
+        state.water.toInt() / 5,
+        state.rations.toInt() / 5,
+        state.bioFuel.toInt() / 2,
+        state.gold.toInt() / 5,
+        state.ammoRounds,
+        prod.isVaultBlackout,
+        prod.isDefenseShutDownByDeficit,
+        prod.totalDefenseRating,
+        state.dwellerHealthPercent,
+        state.dwellerStaminaPercent,
+        state.oxygenPercent
+    ) {
+        VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+            context = context,
+            state = state,
+            production = prod
+        )
+    }
 
     if (state.isGameOver) {
         VaultGameOverDialog(
@@ -412,43 +448,7 @@ fun AshfallOutpostApp(
                             BadgedBox(
                                 badge = {
                                     when (dest) {
-                                        OutpostDestination.MINING -> {
-                                            if (state.activeCaveInHazard || state.pickaxeDurabilityPercent <= 25) {
-                                                Badge(containerColor = HazardRed, contentColor = TextPrimary) {
-                                                    Text(if (state.activeCaveInHazard) "CAVE!" else "DULL")
-                                                }
-                                            }
-                                        }
-                                        OutpostDestination.BUILDING -> {
-                                            if (state.activePipeLeaksCount > 0 || uiState.activeConstruction != null) {
-                                                Badge(
-                                                    containerColor = if (state.activePipeLeaksCount > 0) HazardRed else SolarAmber,
-                                                    contentColor = if (state.activePipeLeaksCount > 0) TextPrimary else BunkerCharcoal
-                                                ) {
-                                                    Text(
-                                                        if (state.activePipeLeaksCount > 0) {
-                                                            "LEAK"
-                                                        } else {
-                                                            "${uiState.activeConstruction?.remainingSeconds ?: 0}s"
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        OutpostDestination.HUNTING -> {
-                                            if (uiState.activeRaidThreat != null || state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 || state.needsDefenseRepair) {
-                                                Badge(containerColor = HazardRed, contentColor = TextPrimary) {
-                                                    Text(
-                                                        when {
-                                                            uiState.activeRaidThreat != null -> "RAID"
-                                                            state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 -> "BLEED"
-                                                            else -> "FIX"
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        OutpostDestination.VAULT_STATS -> {
+                                        OutpostDestination.VAULT -> {
                                             if (prod.isVaultBlackout || prod.isVaultResourceDeficit || state.availableSkillPoints > 0) {
                                                 Badge(
                                                     containerColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit) HazardRed else RadTeal,
@@ -464,24 +464,65 @@ fun AshfallOutpostApp(
                                                 }
                                             }
                                         }
-                                        OutpostDestination.RESOURCES -> {
+                                        OutpostDestination.OPERATIONS -> {
+                                            if (state.activePipeLeaksCount > 0 || uiState.activeConstruction != null || state.activeCaveInHazard) {
+                                                Badge(
+                                                    containerColor = if (state.activePipeLeaksCount > 0 || state.activeCaveInHazard) HazardRed else SolarAmber,
+                                                    contentColor = if (state.activePipeLeaksCount > 0 || state.activeCaveInHazard) TextPrimary else BunkerCharcoal
+                                                ) {
+                                                    Text(
+                                                        when {
+                                                            state.activePipeLeaksCount > 0 -> "LEAK"
+                                                            state.activeCaveInHazard -> "CAVE!"
+                                                            else -> "${uiState.activeConstruction?.remainingSeconds ?: 0}s"
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        OutpostDestination.CREW -> {
+                                            if (idleSurvivors > 0 || canHireCandidate || uiState.activeExpedition != null) {
+                                                Badge(
+                                                    containerColor = when {
+                                                        idleSurvivors > 0 -> WarningOrange
+                                                        canHireCandidate -> XpGold
+                                                        else -> RadTeal
+                                                    },
+                                                    contentColor = BunkerCharcoal
+                                                ) {
+                                                    Text(
+                                                        when {
+                                                            idleSurvivors > 0 -> "${idleSurvivors}IDLE"
+                                                            canHireCandidate -> "HIRE"
+                                                            else -> "${uiState.activeExpedition?.remainingSeconds ?: 0}s"
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        OutpostDestination.DEFENSE -> {
+                                            if (uiState.activeRaidThreat != null || state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 || state.needsDefenseRepair) {
+                                                Badge(containerColor = HazardRed, contentColor = TextPrimary) {
+                                                    Text(
+                                                        when {
+                                                            uiState.activeRaidThreat != null -> "${uiState.activeRaidThreat?.remainingSeconds}s"
+                                                            state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 -> "BLEED"
+                                                            else -> "FIX"
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        OutpostDestination.LOGISTICS -> {
                                             if (!prod.isMakingPositiveResources || state.rawSalvageCaches > 0) {
                                                 Badge(
                                                     containerColor = if (!prod.isMakingPositiveResources) WarningOrange else SurplusGreen,
                                                     contentColor = BunkerCharcoal
                                                 ) {
-                                                    Text(if (!prod.isMakingPositiveResources) "-/s" else "${state.rawSalvageCaches}")
-                                                }
-                                            }
-                                        }
-                                        OutpostDestination.CREW_POWER -> {
-                                            if (idleSurvivors > 0 || canHireCandidate || uiState.activeExpedition != null) {
-                                                Badge(containerColor = SurplusGreen, contentColor = BunkerCharcoal) {
                                                     Text(
                                                         when {
-                                                            uiState.activeExpedition != null -> "${uiState.activeExpedition?.remainingSeconds ?: 0}s"
-                                                            idleSurvivors > 0 -> "$idleSurvivors"
-                                                            else -> "!"
+                                                            !prod.isMakingPositiveResources -> "-/s"
+                                                            else -> "${state.rawSalvageCaches}"
                                                         }
                                                     )
                                                 }
@@ -534,7 +575,33 @@ fun AshfallOutpostApp(
                     activeCrafting = uiState.activeCrafting,
                     activeDoorUpgrade = uiState.activeDoorUpgrade,
                     activeExpedition = uiState.activeExpedition,
-                    onRequestRestartGame = { showRestartDialog = true }
+                    onRequestRestartGame = { showRestartDialog = true },
+                    onQuickStabilizeAll = viewModel::quickStabilizeAllHazards,
+                    onForageRations = viewModel::forageSubterraneanRations,
+                    onBoilWater = viewModel::boilAquiferWater,
+                    onFieldPressAmmo = viewModel::fieldPressEmergencyAmmo,
+                    onCrankDynamo = viewModel::crankEmergencyDynamo,
+                    onScrubAir = viewModel::scrubVaultAirManual
+                )
+
+                // Persistent Unified Vault Alert HUD: live pulse for Blackout, Pipe Leaks, Sabotage, Low Fuel, Raids
+                UnifiedVaultAlertHud(
+                    state = state,
+                    production = prod,
+                    activeRaid = uiState.activeRaidThreat,
+                    onNavigateToCrisis = { target ->
+                        when {
+                            target.startsWith("operations") -> currentTab = OutpostDestination.OPERATIONS
+                            target.startsWith("crew") -> currentTab = OutpostDestination.CREW
+                            target.startsWith("defense") -> currentTab = OutpostDestination.DEFENSE
+                            target.startsWith("logistics") -> currentTab = OutpostDestination.LOGISTICS
+                            else -> currentTab = OutpostDestination.VAULT
+                        }
+                    },
+                    onQuickRepairSabotage = viewModel::repairSabotagedBuilding,
+                    onQuickCrankDynamo = viewModel::crankEmergencyDynamo,
+                    onQuickTuneGenerators = viewModel::maintainGenerators,
+                    onQuickStabilizeAll = viewModel::quickStabilizeAllHazards
                 )
 
                 AnimatedVisibility(
@@ -552,83 +619,7 @@ fun AshfallOutpostApp(
 
                 Box(modifier = Modifier.weight(1f)) {
                     when (currentTab) {
-                        OutpostDestination.MINING -> OutpostTabScreen(
-                            uiState = uiState,
-                            onHarvestNode = viewModel::harvestSalvageNode,
-                            onDismantleCaches = viewModel::dismantleSalvageCache,
-                            onSmeltSalvageForGold = viewModel::smeltSalvageForGold,
-                            onProspectRichVein = viewModel::prospectRichVein,
-                            onUpgradeSalvageRig = viewModel::upgradeSalvageRig,
-                            onUpgradeBuilding = viewModel::upgradeBuilding,
-                            onAccelerateConstruction = viewModel::accelerateBuildingConstruction,
-                            onRushConstruction = viewModel::rushBuildingConstructionWithGold,
-                            onUpgradePowerStation = viewModel::upgradePowerStation,
-                            onCrankDynamo = viewModel::crankEmergencyDynamo,
-                            onMaintainGenerators = viewModel::maintainGenerators,
-                            onScrubAir = viewModel::scrubVaultAirManual,
-                            onFlushRadiation = viewModel::useRadAway,
-                            onAdvanceDay = viewModel::advanceDayManually,
-                            onClaimAnomaly = viewModel::claimRareAnomaly,
-                            onWalkToStation = viewModel::walkOverseerToStation,
-                            onFishSpot = viewModel::executeFishing,
-                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
-                            onSetOperationalPosture = viewModel::setOperationalPosture,
-                            onCallEmergencyReliefDrop = viewModel::callEmergencyReliefDrop,
-                            onRequestRestartGame = { showRestartDialog = true },
-                            onSharpenPickaxe = viewModel::sharpenPickaxe,
-                            onCoolMiningShaft = viewModel::coolMiningShaft,
-                            onClearCaveIn = viewModel::clearCaveInHazard,
-                            onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
-                            initialSubViewName = "MINE"
-                        )
-                        OutpostDestination.BUILDING -> OutpostTabScreen(
-                            uiState = uiState,
-                            onHarvestNode = viewModel::harvestSalvageNode,
-                            onDismantleCaches = viewModel::dismantleSalvageCache,
-                            onSmeltSalvageForGold = viewModel::smeltSalvageForGold,
-                            onProspectRichVein = viewModel::prospectRichVein,
-                            onUpgradeSalvageRig = viewModel::upgradeSalvageRig,
-                            onUpgradeBuilding = viewModel::upgradeBuilding,
-                            onAccelerateConstruction = viewModel::accelerateBuildingConstruction,
-                            onRushConstruction = viewModel::rushBuildingConstructionWithGold,
-                            onUpgradePowerStation = viewModel::upgradePowerStation,
-                            onCrankDynamo = viewModel::crankEmergencyDynamo,
-                            onMaintainGenerators = viewModel::maintainGenerators,
-                            onScrubAir = viewModel::scrubVaultAirManual,
-                            onFlushRadiation = viewModel::useRadAway,
-                            onAdvanceDay = viewModel::advanceDayManually,
-                            onClaimAnomaly = viewModel::claimRareAnomaly,
-                            onWalkToStation = viewModel::walkOverseerToStation,
-                            onFishSpot = viewModel::executeFishing,
-                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
-                            onSetOperationalPosture = viewModel::setOperationalPosture,
-                            onCallEmergencyReliefDrop = viewModel::callEmergencyReliefDrop,
-                            onRequestRestartGame = { showRestartDialog = true },
-                            onSharpenPickaxe = viewModel::sharpenPickaxe,
-                            onCoolMiningShaft = viewModel::coolMiningShaft,
-                            onClearCaveIn = viewModel::clearCaveInHazard,
-                            onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
-                            initialSubViewName = "ROOMS"
-                        )
-                        OutpostDestination.HUNTING -> CraftHuntDefenseTabScreen(
-                            uiState = uiState,
-                            onCraftItem = viewModel::craftItem,
-                            onAccelerateCrafting = viewModel::accelerateItemCrafting,
-                            onRushCrafting = viewModel::rushItemCraftingWithGold,
-                            onExecuteHunt = viewModel::executeHunt,
-                            onExecuteFishing = viewModel::executeFishing,
-                            onRepelRaid = viewModel::repelRaiderSiege,
-                            onExecuteCountermeasure = viewModel::executeSiegeCountermeasure,
-                            onRepairDefenses = viewModel::repairVaultDefenses,
-                            onUpgradeBlastDoor = viewModel::upgradeBlastDoor,
-                            onAccelerateDoorUpgrade = viewModel::accelerateBlastDoorUpgrade,
-                            onRushDoorUpgrade = viewModel::rushBlastDoorUpgradeWithGold,
-                            onToggleAutoDefense = viewModel::toggleAutoDefense,
-                            onUseMedkit = viewModel::useMedkit,
-                            onUseRadAway = viewModel::useRadAway,
-                            onTreatHuntingInjuries = viewModel::treatHuntingInjuries
-                        )
-                        OutpostDestination.VAULT_STATS -> VaultStatsTabScreen(
+                        OutpostDestination.VAULT -> VaultStatsTabScreen(
                             uiState = uiState,
                             onSetPosture = viewModel::setOperationalPosture,
                             onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
@@ -644,6 +635,26 @@ fun AshfallOutpostApp(
                                     onRequestGoogleSignIn()
                                 }
                             },
+                            onCommissionEdenCoreModule = viewModel::commissionEdenCoreModule,
+                            onAuditCertificationTier = viewModel::auditCertificationTier,
+                            onNavigateToTab = { tabKey ->
+                                when (tabKey) {
+                                    "operations" -> currentTab = OutpostDestination.OPERATIONS
+                                    "crew" -> currentTab = OutpostDestination.CREW
+                                    "defense" -> currentTab = OutpostDestination.DEFENSE
+                                    "logistics" -> currentTab = OutpostDestination.LOGISTICS
+                                    else -> currentTab = OutpostDestination.VAULT
+                                }
+                            },
+                            onQuickStabilizeAll = viewModel::quickStabilizeAllHazards,
+                            onForageRations = viewModel::forageSubterraneanRations,
+                            onBoilWater = viewModel::boilAquiferWater,
+                            onFieldPressAmmo = viewModel::fieldPressEmergencyAmmo,
+                            onScrubAir = viewModel::scrubVaultAirManual,
+                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
+                            onToggleRestRotation = viewModel::toggleRestRotation,
+                            onCureSickAndExhaustedCrew = viewModel::cureSickAndExhaustedCrew,
+                            onSetGridLoadBreakerMode = viewModel::setGridLoadBreakerMode,
                             isGoogleSignedIn = isGoogleSignedIn,
                             onRequestGoogleSignIn = onRequestGoogleSignIn,
                             onPublishVault = {
@@ -657,15 +668,38 @@ fun AshfallOutpostApp(
                                 }
                             }
                         )
-                        OutpostDestination.RESOURCES -> CurrentResourcesTabScreen(
+                        OutpostDestination.OPERATIONS -> OutpostTabScreen(
                             uiState = uiState,
-                            onDismantleCache = viewModel::dismantleSalvageCache,
-                            onSmeltGold = viewModel::smeltSalvageForGold,
+                            onHarvestNode = viewModel::harvestSalvageNode,
+                            onDismantleCaches = viewModel::dismantleSalvageCache,
+                            onSmeltSalvageForGold = viewModel::smeltSalvageForGold,
+                            onProspectRichVein = viewModel::prospectRichVein,
+                            onUpgradeSalvageRig = viewModel::upgradeSalvageRig,
+                            onUpgradeBuilding = viewModel::upgradeBuilding,
+                            onAccelerateConstruction = viewModel::accelerateBuildingConstruction,
+                            onRushConstruction = viewModel::rushBuildingConstructionWithGold,
+                            onUpgradePowerStation = viewModel::upgradePowerStation,
+                            onCrankDynamo = viewModel::crankEmergencyDynamo,
+                            onMaintainGenerators = viewModel::maintainGenerators,
+                            onScrubAir = viewModel::scrubVaultAirManual,
+                            onFlushRadiation = viewModel::useRadAway,
+                            onAdvanceDay = viewModel::advanceDayManually,
+                            onClaimAnomaly = viewModel::claimRareAnomaly,
+                            onWalkToStation = viewModel::walkOverseerToStation,
+                            onFishSpot = viewModel::executeFishing,
                             onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
-                            onSellResourceToTown = { town, res, amt -> viewModel.sellResourceToTown(town, res, amt) },
-                            onBuyRareSyndicateItem = viewModel::buyRareSyndicateItem
+                            onSetOperationalPosture = viewModel::setOperationalPosture,
+                            onCallEmergencyReliefDrop = viewModel::callEmergencyReliefDrop,
+                            onRequestRestartGame = { showRestartDialog = true },
+                            onSharpenPickaxe = viewModel::sharpenPickaxe,
+                            onCoolMiningShaft = viewModel::coolMiningShaft,
+                            onClearCaveIn = viewModel::clearCaveInHazard,
+                            onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
+                            onRepairSabotagedBuilding = viewModel::repairSabotagedBuilding,
+                            onExecuteDeepCoreDrill = viewModel::executeDeepCoreDrill,
+                            onStrikeSubterraneanBoss = viewModel::strikeSubterraneanBoss
                         )
-                        OutpostDestination.CREW_POWER -> CrewAndPowerTabScreen(
+                        OutpostDestination.CREW -> CrewAndPowerTabScreen(
                             uiState = uiState,
                             onAssignWorker = viewModel::assignWorker,
                             onHireCandidate = viewModel::hireCandidate,
@@ -673,7 +707,11 @@ fun AshfallOutpostApp(
                             onSendExpedition = viewModel::sendDwellerExpedition,
                             onToggleAutoShift = viewModel::toggleAutoShift,
                             onOptimizeCrewNow = viewModel::optimizeCrewForCurrentPhase,
-                            onSellToTown = { town, res -> viewModel.sellResourceToTown(town, res) },
+                            onLaunchRescueBeacon = viewModel::launchRescueBeacon,
+                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
+                            onToggleRestRotation = viewModel::toggleRestRotation,
+                            onCureSickAndExhaustedCrew = viewModel::cureSickAndExhaustedCrew,
+                            onSellToTown = { town, res -> viewModel.sellResourceToTown(town, res, 25.0) },
                             onBuyRareItem = viewModel::buyRareSyndicateItem,
                             onDispatchConvoy = viewModel::dispatchConvoy,
                             onUpgradeConvoy = viewModel::upgradeConvoy,
@@ -701,7 +739,7 @@ fun AshfallOutpostApp(
                                     viewModel.broadcastSupplyDrop(
                                         senderName = overseerName,
                                         resourceType = ResourceType.SCRAP,
-                                        amount = 30
+                                        amount = 25
                                     )
                                 } else {
                                     onRequestGoogleSignIn()
@@ -709,14 +747,40 @@ fun AshfallOutpostApp(
                             },
                             onClaimSupplyDrop = { drop ->
                                 if (isGoogleSignedIn) {
-                                    viewModel.claimPublicSupplyDrop(
-                                        drop = drop,
-                                        claimerName = overseerName
-                                    )
+                                    viewModel.claimPublicSupplyDrop(drop, overseerName)
                                 } else {
                                     onRequestGoogleSignIn()
                                 }
                             }
+                        )
+                        OutpostDestination.DEFENSE -> CraftHuntDefenseTabScreen(
+                            uiState = uiState,
+                            onCraftItem = viewModel::craftItem,
+                            onAccelerateCrafting = viewModel::accelerateItemCrafting,
+                            onRushCrafting = viewModel::rushItemCraftingWithGold,
+                            onExecuteHunt = viewModel::executeHunt,
+                            onExecuteFishing = viewModel::executeFishing,
+                            onRepelRaid = viewModel::repelRaiderSiege,
+                            onExecuteCountermeasure = viewModel::executeSiegeCountermeasure,
+                            onRepairDefenses = viewModel::repairVaultDefenses,
+                            onUpgradeBlastDoor = viewModel::upgradeBlastDoor,
+                            onAccelerateDoorUpgrade = viewModel::accelerateBlastDoorUpgrade,
+                            onRushDoorUpgrade = viewModel::rushBlastDoorUpgradeWithGold,
+                            onToggleAutoDefense = viewModel::toggleAutoDefense,
+                            onUseMedkit = viewModel::useMedkit,
+                            onUseRadAway = viewModel::useRadAway,
+                            onTreatHuntingInjuries = viewModel::treatHuntingInjuries,
+                            onFieldPressAmmo = viewModel::fieldPressEmergencyAmmo,
+                            onSelectTurretAmmoType = viewModel::selectTurretAmmoType,
+                            onArmPerimeterCryoTrap = viewModel::armPerimeterCryoTrap
+                        )
+                        OutpostDestination.LOGISTICS -> CurrentResourcesTabScreen(
+                            uiState = uiState,
+                            onDismantleCache = viewModel::dismantleSalvageCache,
+                            onSmeltGold = viewModel::smeltSalvageForGold,
+                            onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
+                            onSellResourceToTown = { town, res, amt -> viewModel.sellResourceToTown(town, res, amt) },
+                            onBuyRareSyndicateItem = viewModel::buyRareSyndicateItem
                         )
                     }
                 }

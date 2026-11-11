@@ -11,6 +11,11 @@
     <string name="tab_vault_stats">Vault Stats</string>
     <string name="tab_resources">Resources</string>
     <string name="tab_crew_power">Crew &amp; Power</string>
+    <string name="tab_vault_core">Hub</string>
+    <string name="tab_operations">Mine &amp; Build</string>
+    <string name="tab_dwellers_expeditions">Dwellers</string>
+    <string name="tab_defense_security">Defend &amp; Hunt</string>
+    <string name="tab_logistics_trade">Trade &amp; Net</string>
     <string name="action_scavenge">Swing Pickaxe</string>
     <string name="action_recruit">Hire with Gold</string>
     <string name="action_train_class">Train Dwellers</string>
@@ -19,4 +24,6 @@
     <string name="offline_report_title">Vault City Overseer Report</string>
     <string name="offline_report_claim">Claim Vault Supplies &amp; XP</string>
     <string name="hero_banner_desc">Vault City Nuclear Shelter</string>
+    <string name="widget_vault_status_title">Vault Command &amp; Resources</string>
+    <string name="widget_vault_status_description">Live telemetry for Vault Scrap, Water, Food, Fuel, Gold, Power Grid MW, Crew Vitals, and Defense Alerts.</string>
 </resources>

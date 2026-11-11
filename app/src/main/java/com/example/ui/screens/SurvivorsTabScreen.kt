@@ -99,6 +99,10 @@ fun SurvivorsTabScreen(
     onAdjustWorker: (WorkerClassType, Int) -> Unit,
     onToggleAutoShift: (Boolean) -> Unit,
     onOptimizeCrew: () -> Unit,
+    onLaunchRescueBeacon: () -> Unit = {},
+    onIssueEmergencyRations: () -> Unit = {},
+    onToggleRestRotation: () -> Unit = {},
+    onCureSickAndExhaustedCrew: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state = uiState.state
@@ -193,7 +197,7 @@ fun SurvivorsTabScreen(
                                 )
                                 if (state.totalSurvivors == 0) {
                                     Text(
-                                        text = "You start ALONE in an empty broken Vault (0 Dwellers)! Repair Room #1 (Vault Living Quarters) in the Vault tab, mine Gold with your Pickaxe, and hire Survivors below to automate your shelter.",
+                                        text = "You start ALONE in an empty broken Vault (0 Dwellers)! Repair Room #1 (Vault Living Quarters) in the Mine & Build tab, mine Gold with your Pickaxe, and hire Survivors below or fire the Rescue Beacon to automate your shelter.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = XpGold
                                     )
@@ -206,7 +210,7 @@ fun SurvivorsTabScreen(
                                     )
                                 } else if (!hasHousingSpace) {
                                     Text(
-                                        text = "Vault Living Quarters full (${state.totalSurvivors}/${prod.maxWorkerCapacity} • ${OutpostCalculator.MAX_VAULT_DWELLERS} Max Vault Cap)! Upgrade Vault Living Quarters in the Vault tab to hire more Dwellers.",
+                                        text = "Vault Living Quarters full (${state.totalSurvivors}/${prod.maxWorkerCapacity} • ${OutpostCalculator.MAX_VAULT_DWELLERS} Max Vault Cap)! Upgrade Vault Living Quarters in Mine & Build to hire more Dwellers.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = HazardRed
                                     )
@@ -228,6 +232,106 @@ fun SurvivorsTabScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Quick Rescue Beacon & Feed Crew Row
+                        val canLaunchBeacon = hasHousingSpace &&
+                            state.scrap >= 35.0 &&
+                            state.rations >= 15.0 &&
+                            state.researchData >= 6.0
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onLaunchRescueBeacon,
+                                enabled = canLaunchBeacon,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = RadTeal,
+                                    contentColor = BunkerCharcoal,
+                                    disabledContainerColor = BunkerCharcoal,
+                                    disabledContentColor = TextMuted
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("launch_rescue_beacon_btn")
+                            ) {
+                                Text(
+                                    text = if (!hasHousingSpace) "NEED QUARTERS LV.1" else "RESCUE BEACON (-35S/-15F/-6T)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Button(
+                                onClick = onIssueEmergencyRations,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SurplusGreen,
+                                    contentColor = BunkerCharcoal
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("crew_emergency_rations_btn")
+                            ) {
+                                Text(
+                                    text = "FEED CREW (+14F/+14W)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Hardcore Sleep Stamina & Quarantine Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onToggleRestRotation,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("survivors_sleep_shift_btn")
+                            ) {
+                                Text(
+                                    text = if (state.isRestRotationActive) {
+                                        "SLEEP ON (${state.dwellerStaminaPercent}% STAM)"
+                                    } else {
+                                        "SLEEP SHIFT (${state.dwellerStaminaPercent}% STAM)"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (state.dwellerStaminaPercent < 35) HazardRed else RadTeal,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Button(
+                                onClick = onCureSickAndExhaustedCrew,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (state.sickDwellersCount > 0 || state.dwellerStaminaPercent < 35) HazardRed else SolarAmber,
+                                    contentColor = if (state.sickDwellersCount > 0 || state.dwellerStaminaPercent < 35) TextPrimary else BunkerCharcoal
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("survivors_cure_sick_btn")
+                            ) {
+                                Text(
+                                    text = "CURE SICK (${state.sickDwellersCount} SICK)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
 

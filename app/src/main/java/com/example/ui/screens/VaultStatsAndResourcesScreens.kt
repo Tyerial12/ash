@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.OutpostCalculator
 import com.example.model.BuildingType
+import com.example.model.GridLoadBreakerMode
 import com.example.model.HireableCandidate
 import com.example.model.PowerStationType
 import com.example.model.RareSyndicateItem
@@ -509,13 +510,15 @@ fun HardcoreBuildingMaintenanceCard(
 @Composable
 fun HardcoreHuntingTraumaAndAmmoCard(
     uiState: OutpostUiState,
-    onTreatHuntingInjuries: () -> Unit
+    onTreatHuntingInjuries: () -> Unit,
+    onFieldPressAmmo: () -> Unit = {}
 ) {
     val state = uiState.state
     val bleeding = state.bleedingDwellersCount
     val venom = state.venomInfectedDwellersCount
     val hasTrauma = bleeding > 0 || venom > 0 || state.injuredDwellersCount > 0
     val accent = if (hasTrauma) HazardRed else BioGreen
+    val canPressAmmo = (state.scrap >= 10.0 && state.bioFuel >= 2.0) || state.scrap >= 14.0
 
     Card(
         modifier = Modifier
@@ -624,28 +627,53 @@ fun HardcoreHuntingTraumaAndAmmoCard(
                 }
             }
 
-            if (hasTrauma) {
-                Button(
-                    onClick = onTreatHuntingInjuries,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onFieldPressAmmo,
+                    enabled = canPressAmmo,
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
                         .heightIn(min = 48.dp)
-                        .testTag("treat_hunting_injuries_btn"),
+                        .testTag("field_press_ammo_btn"),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = HazardRed,
-                        contentColor = Color.White
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = SolarAmber.copy(alpha = 0.22f),
+                        contentColor = SolarAmber
                     )
                 ) {
                     Text(
-                        text = if (state.medkitsCount > 0 || state.radAwayCount > 0) {
-                            "SUTURE BLEEDING & PURGE VENOM (-1 MEDKIT/RADAWAY • +25% HEALTH)"
-                        } else {
-                            "EMERGENCY FIELD SUTURE (-8 WATER & -8 FOOD • +25% HEALTH)"
-                        },
+                        text = "FIELD-PRESS +20 AMMO (-10S/-2F)",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
+                }
+
+                if (hasTrauma) {
+                    Button(
+                        onClick = onTreatHuntingInjuries,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("treat_hunting_injuries_btn"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = HazardRed,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = if (state.medkitsCount > 0 || state.radAwayCount > 0) {
+                                "SUTURE TRAUMA (-1 MED)"
+                            } else {
+                                "FIELD SUTURE (-8W/-8F)"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
                 }
             }
         }
@@ -663,6 +691,18 @@ fun VaultStatsTabScreen(
     onEmergencyManualCrank: () -> Unit,
     onUnlockOrUpgradeSkill: (SkillNodeDefinition) -> Unit,
     onPerformPrestige: () -> Unit,
+    onCommissionEdenCoreModule: (Int) -> Unit = {},
+    onAuditCertificationTier: (Int) -> Unit = {},
+    onNavigateToTab: (String) -> Unit = {},
+    onQuickStabilizeAll: () -> Unit = {},
+    onForageRations: () -> Unit = {},
+    onBoilWater: () -> Unit = {},
+    onFieldPressAmmo: () -> Unit = {},
+    onScrubAir: () -> Unit = {},
+    onIssueEmergencyRations: () -> Unit = {},
+    onToggleRestRotation: () -> Unit = {},
+    onCureSickAndExhaustedCrew: () -> Unit = {},
+    onSetGridLoadBreakerMode: (GridLoadBreakerMode) -> Unit = {},
     isGoogleSignedIn: Boolean = true,
     onRequestGoogleSignIn: () -> Unit = {},
     onPublishVault: () -> Unit = {}
@@ -883,7 +923,261 @@ fun VaultStatsTabScreen(
                 }
             }
 
-            // 1. Background Phone Notifications Card (Max Resources, Power Outage, Room Upgrade Done)
+            // 0B. Interactive 5-Stage Overseer Survival Roadmap & Live Objective Tracker
+            item {
+                OverseerSurvivalRoadmapCard(
+                    uiState = uiState,
+                    onNavigateToTab = onNavigateToTab
+                )
+            }
+
+            // 0C. Hands-On Overseer Field Survival & Auto-Stabilize Deck
+            item {
+                OverseerFieldSurvivalDeckCard(
+                    uiState = uiState,
+                    onQuickStabilizeAll = onQuickStabilizeAll,
+                    onForageRations = onForageRations,
+                    onBoilWater = onBoilWater,
+                    onFieldPressAmmo = onFieldPressAmmo,
+                    onScrubAir = onScrubAir,
+                    onIssueEmergencyRations = onIssueEmergencyRations
+                )
+            }
+
+            // 0D. Hardcore Physiological Needs (Hunger, Thirst, Sleep Stamina & Sickness Quarantine)
+            item {
+                PhysiologicalVitalsAndQuarantineCard(
+                    uiState = uiState,
+                    onToggleRestRotation = onToggleRestRotation,
+                    onCureSickAndExhaustedCrew = onCureSickAndExhaustedCrew,
+                    onIssueEmergencyRations = onIssueEmergencyRations
+                )
+            }
+
+            // 0E. Strict Power Grid Load Balancer & Machinery Breakdown Maintenance
+            item {
+                PowerGridLoadBalancerCard(
+                    uiState = uiState,
+                    onSetGridLoadBreakerMode = onSetGridLoadBreakerMode,
+                    onWeldRoomPipes = onWeldRoomPipes,
+                    onEmergencyManualCrank = onEmergencyManualCrank
+                )
+            }
+
+            // 1. Eden Core Endgame Project & 5-Tier Self-Sufficiency Certification Card
+            item {
+                val moduleCosts = OutpostCalculator.computeEdenCoreModuleCosts(state, uiState.buildingsMap)
+                val certPreviews = OutpostCalculator.computeCertificationPreviews(state, snap)
+                val isVictory = state.isSelfSustainedCertified
+                val headerAccent = if (isVictory) BioGreen else SolarAmber
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("eden_core_certification_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+                    border = BorderStroke(1.5.dp, headerAccent.copy(alpha = 0.8f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PrecisionManufacturing,
+                                    contentDescription = "Eden Core",
+                                    tint = headerAccent,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = if (isVictory) "★ PERPETUAL EDEN CORE VAULT (AUTONOMOUS)" else "EDEN CORE: 5-TIER AUTONOMY PROJECT",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = headerAccent,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                    Text(
+                                        text = if (isVictory) "Victory Achieved! All 5 Self-Sufficiency Tiers Certified!" else "Build 4 Eden Modules & Certify 5 Tiers for Full Automation!",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = headerAccent.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, headerAccent.copy(alpha = 0.55f))
+                            ) {
+                                Text(
+                                    text = "TIER ${state.certificationTier}/5",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = headerAccent,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "EDEN CORE MODULES (${state.edenCorePhase}/4 BUILT):",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        moduleCosts.forEach { mod ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                color = VaultDarkSurface,
+                                border = BorderStroke(1.dp, if (mod.isBuilt) BioGreen else VaultCardBorder)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = mod.title,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (mod.isBuilt) BioGreen else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (mod.isBuilt) {
+                                            Text(
+                                                text = "✓ BUILT",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = BioGreen
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = mod.description,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Requirement: ${mod.requiredBuildingSummary}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (mod.requirementsMet) BioGreen else RustOrange
+                                    )
+                                    if (!mod.isBuilt) {
+                                        val costText = buildString {
+                                            if (mod.scrapCost > 0) append("${mod.scrapCost.toInt()} Scrap ")
+                                            if (mod.waterCost > 0) append("${mod.waterCost.toInt()} Water ")
+                                            if (mod.rationsCost > 0) append("${mod.rationsCost.toInt()} Food ")
+                                            if (mod.fuelCost > 0) append("${mod.fuelCost.toInt()} Fuel ")
+                                            if (mod.researchCost > 0) append("${mod.researchCost.toInt()} Tech ")
+                                            if (mod.goldCost > 0) append("${mod.goldCost.toInt()} Gold ")
+                                            if (mod.thoriumCost > 0) append("${mod.thoriumCost.toInt()} Thorium ")
+                                            if (mod.aetherCost > 0) append("${mod.aetherCost.toInt()} Aether ")
+                                            if (mod.coresCost > 0) append("${mod.coresCost.toInt()} Cores")
+                                        }
+                                        Text(
+                                            text = "Cost: $costText",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = if (mod.canAfford) SolarAmber else HazardRed
+                                        )
+                                        Button(
+                                            onClick = { onCommissionEdenCoreModule(mod.phaseNumber) },
+                                            enabled = mod.canAfford && mod.requirementsMet,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 40.dp)
+                                                .testTag("commission_eden_module_${mod.phaseNumber}"),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = SolarAmber,
+                                                contentColor = Color.Black
+                                            )
+                                        ) {
+                                            Text("COMMISSION MODULE ${mod.phaseNumber}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = VaultCardBorder)
+
+                        Text(
+                            text = "5-TIER SELF-SUFFICIENCY CERTIFICATION (STABLE: ${state.consecutiveDaysStable}/3 DAYS):",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        certPreviews.forEach { cert ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                color = VaultDarkSurface,
+                                border = BorderStroke(1.dp, if (cert.isCertified) BioGreen else if (cert.isMet) SolarAmber else VaultCardBorder)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = cert.title,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (cert.isCertified) BioGreen else if (cert.isMet) SolarAmber else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (cert.isCertified) {
+                                            Text(
+                                                text = "✓ CERTIFIED",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = BioGreen
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = cert.requirementSummary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (cert.isMet) BioGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (!cert.isCertified && cert.isMet) {
+                                        Button(
+                                            onClick = { onAuditCertificationTier(cert.tierNumber) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 38.dp)
+                                                .testTag("audit_cert_tier_${cert.tierNumber}"),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = BioGreen,
+                                                contentColor = Color.Black
+                                            )
+                                        ) {
+                                            Text("CERTIFY TIER ${cert.tierNumber} (+${cert.tierNumber * 50} Gold)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Background Phone Notifications Card (Max Resources, Power Outage, Room Upgrade Done)
             item {
                 Card(
                     modifier = Modifier
@@ -1203,8 +1497,423 @@ fun VaultStatsTabScreen(
             item {
                 HardcoreHuntingTraumaAndAmmoCard(
                     uiState = uiState,
-                    onTreatHuntingInjuries = onTreatHuntingInjuries
+                    onTreatHuntingInjuries = onTreatHuntingInjuries,
+                    onFieldPressAmmo = onFieldPressAmmo
                 )
+            }
+            item {
+                VaultEventLogTerminalCard(uiState = uiState)
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverseerSurvivalRoadmapCard(
+    uiState: OutpostUiState,
+    onNavigateToTab: (String) -> Unit
+) {
+    val state = uiState.state
+    val snap = uiState.production
+    val quartersLv = uiState.buildingsMap[BuildingType.SURVIVOR_HAB_BLOCK.id] ?: 0
+    val step1Done = state.scrap >= 35.0 || state.gold >= 10.0 || state.totalGoldSalvaged > 0.0 || quartersLv > 0
+    val step2Done = quartersLv >= 1
+    val step3Done = state.totalSurvivors >= 1 && snap.totalAssignedWorkers >= 1
+    val step4Done = !snap.isVaultBlackout && snap.isMakingPositiveResources && snap.totalBuiltRoomsCount >= 3
+    val step5Done = state.isSelfSustainedCertified
+
+    val activeStageIndex = when {
+        !step1Done -> 1
+        !step2Done -> 2
+        !step3Done -> 3
+        !step4Done -> 4
+        else -> 5
+    }
+
+    val (activeTitle, activeInstruction, targetTab, actionButtonText) = when (activeStageIndex) {
+        1 -> Quadruple(
+            "STAGE 1/5: SWING PICKAXE FOR SCRAP, WATER & GOLD",
+            "You start alone in a ruined shelter. Tap 'Mine & Build' to swing your Pickaxe at salvage veins, sharpen the edge, and cool shaft heat.",
+            "operations",
+            "GO TO MINE & BUILD"
+        )
+        2 -> Quadruple(
+            "STAGE 2/5: REPAIR ROOM #1 (LIVING QUARTERS LV.1)",
+            "All Vault rooms start broken at Lv.0 (20% Worst). Repair Vault Living Quarters in 'Mine & Build' to unlock bed capacity for Dwellers!",
+            "operations",
+            "BUILD LIVING QUARTERS"
+        )
+        3 -> Quadruple(
+            "STAGE 3/5: HIRE DWELLERS WITH GOLD & ASSIGN SHIFTS",
+            "Open the 'Dwellers' tab to hire Wasteland Survivors with Gold (8% Unique Dweller chance) or fire the Rescue Beacon, then assign them to work!",
+            "crew",
+            "GO TO DWELLERS TAB"
+        )
+        4 -> Quadruple(
+            "STAGE 4/5: STABILIZE MW POWER & 60S FEEDING SURPLUS",
+            "Build Water, Hydroponics & Bio-Refinery rooms so resource generation stays positive and your crew is fed every 60 seconds.",
+            "operations",
+            "EXPAND ROOMS & POWER"
+        )
+        else -> Quadruple(
+            "STAGE 5/5: DEFEND 10D SIEGES & BUILD EDEN CORE",
+            "Keep Automated Turrets powered & manned in 'Defend & Hunt', hunt wasteland beasts with Ammo, and certify all 5 Eden Core Autonomy Tiers!",
+            "defense",
+            "GO TO DEFEND & HUNT"
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("overseer_survival_roadmap_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+        border = BorderStroke(1.5.dp, SolarAmber.copy(alpha = 0.85f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "OVERSEER SURVIVAL ROADMAP & NEXT MISSION",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = SolarAmber,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = SolarAmber.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, SolarAmber)
+                ) {
+                    Text(
+                        text = "STAGE $activeStageIndex/5",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SolarAmber,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                color = VaultDarkSurface,
+                border = BorderStroke(1.dp, CyanHydro.copy(alpha = 0.65f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = activeTitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = CyanHydro,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = activeInstruction,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Button(
+                        onClick = { onNavigateToTab(targetTab) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("roadmap_primary_action_btn"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SolarAmber,
+                            contentColor = Color.Black
+                        )
+                    ) {
+                        Text(
+                            text = actionButtonText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                RoadmapMiniBadge("1.Pickaxe", step1Done)
+                RoadmapMiniBadge("2.Quarters", step2Done)
+                RoadmapMiniBadge("3.Dwellers", step3Done)
+                RoadmapMiniBadge("4.Surplus", step4Done)
+                RoadmapMiniBadge("5.Eden Core", step5Done)
+            }
+        }
+    }
+}
+
+private data class Quadruple<A, B, C, D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)
+
+private fun com.example.data.local.OutpostStateEntity.totalBuiltRoomsCount(): Int {
+    return if (commandLevel >= 2 || totalSurvivors > 0) 3 else 0
+}
+
+@Composable
+private fun RoadmapMiniBadge(label: String, done: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = if (done) BioGreen.copy(alpha = 0.18f) else VaultDarkSurface,
+        border = BorderStroke(1.dp, if (done) BioGreen else VaultCardBorder)
+    ) {
+        Text(
+            text = if (done) "✓ $label" else "○ $label",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (done) BioGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+        )
+    }
+}
+
+@Composable
+private fun OverseerFieldSurvivalDeckCard(
+    uiState: OutpostUiState,
+    onQuickStabilizeAll: () -> Unit,
+    onForageRations: () -> Unit,
+    onBoilWater: () -> Unit,
+    onFieldPressAmmo: () -> Unit,
+    onScrubAir: () -> Unit,
+    onIssueEmergencyRations: () -> Unit
+) {
+    val state = uiState.state
+    val hazardCount = listOf(
+        uiState.production.isVaultBlackout,
+        state.activeCaveInHazard,
+        state.activePipeLeaksCount > 0,
+        state.roomStructuralWearPercent >= 25,
+        state.sabotagedBuildingId.isNotEmpty(),
+        state.generatorWearPercent >= 40,
+        state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0,
+        state.oxygenPercent < 80,
+        state.radiationMillisieverts >= 35
+    ).count { it }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("overseer_field_survival_deck_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+        border = BorderStroke(1.5.dp, BioGreen.copy(alpha = 0.75f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "HANDS-ON FIELD SURVIVAL & AUTO-STABILIZE DECK",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = BioGreen,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = "Forage cave mushrooms, boil aquifer water, press ballistic ammo, or stabilize all shelter hazards in 1 tap!",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Button(
+                onClick = onQuickStabilizeAll,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("stats_auto_stabilize_all_btn"),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (hazardCount > 0) HazardRed else SolarAmber,
+                    contentColor = if (hazardCount > 0) Color.White else Color.Black
+                )
+            ) {
+                Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (hazardCount > 0) {
+                        "AUTO-STABILIZE $hazardCount ACTIVE SHELTER HAZARDS NOW"
+                    } else {
+                        "ONE-TAP SHELTER TUNE-UP & HAZARD SWEEP (ALL CLEAR)"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onForageRations,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("stats_forage_rations_btn"),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = BioGreen.copy(alpha = 0.2f),
+                        contentColor = BioGreen
+                    )
+                ) {
+                    Text(
+                        text = "FORAGE CAVE (+FOOD/+H2O)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                FilledTonalButton(
+                    onClick = onBoilWater,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("stats_boil_water_btn"),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = CyanHydro.copy(alpha = 0.2f),
+                        contentColor = CyanHydro
+                    )
+                ) {
+                    Text(
+                        text = "BOIL WATER (+H2O/-HEAT)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onFieldPressAmmo,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("stats_press_ammo_btn"),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = SolarAmber.copy(alpha = 0.2f),
+                        contentColor = SolarAmber
+                    )
+                ) {
+                    Text(
+                        text = "PRESS +20 AMMO (${state.ammoRounds})",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                FilledTonalButton(
+                    onClick = onScrubAir,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("stats_scrub_air_btn"),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = CyanHydro.copy(alpha = 0.2f),
+                        contentColor = CyanHydro
+                    )
+                ) {
+                    Text(
+                        text = "SCRUB AIR (${state.oxygenPercent}% O2)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                FilledTonalButton(
+                    onClick = onIssueEmergencyRations,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("stats_emergency_rations_btn"),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = RustOrange.copy(alpha = 0.2f),
+                        contentColor = RustOrange
+                    )
+                ) {
+                    Text(
+                        text = "FEED CREW (+14F/+14W)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VaultEventLogTerminalCard(
+    uiState: OutpostUiState
+) {
+    val logs = uiState.eventLogs.take(6)
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("vault_event_log_terminal_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+        border = BorderStroke(1.dp, VaultCardBorder)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "VAULT OVERSEER TERMINAL EVENT LOG",
+                style = MaterialTheme.typography.titleSmall,
+                color = CyanHydro,
+                fontWeight = FontWeight.ExtraBold
+            )
+            if (logs.isEmpty()) {
+                Text(
+                    text = "System initialized. Swing your Pickaxe in Mine & Build to begin salvaging.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                logs.forEach { entry ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = VaultDarkSurface,
+                        border = BorderStroke(1.dp, VaultCardBorder)
+                    ) {
+                        Text(
+                            text = "• ${entry.message}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -1316,11 +2025,52 @@ fun CurrentResourcesTabScreen(
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = "Includes Gradual Room Output, 60s Crew Feeding, Pipe Leaks (${state.activePipeLeaksCount}) & Reactor Fuel Burn",
+                                    text = "Includes Precursor Chains, 60s Feeding, Pipe Leaks (${state.activePipeLeaksCount}) & Food Rot (${snap.foodSpoilagePercentPerDay}%/Day)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                        }
+                    }
+
+                    if (snap.sabotagedBuildingId.isNotBlank()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = HazardRed.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, HazardRed)
+                        ) {
+                            Text(
+                                text = "SABOTAGE PENALTY: Raiders crippled ${snap.sabotagedBuildingId} (-${snap.sabotagedBuildingPenaltyPercent}% output)! Repair in Rooms view.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = HazardRed,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = VaultDarkSurface,
+                        border = BorderStroke(1.dp, if (snap.isCryoPreservationActive) BioGreen else RustOrange)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (snap.isCryoPreservationActive) {
+                                    "CRYO-PRESERVATION: 100% PRESERVED (0% Rot Loss)"
+                                } else {
+                                    "FOOD SPOILAGE: ${snap.foodSpoilagePercentPerDay}% Rot/Day (-${snap.dailyFoodSpoilageLoss.roundToInt()} Rations/Day • Build Cryo Vault Lv.5 to stop rot)"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (snap.isCryoPreservationActive) BioGreen else RustOrange
+                            )
                         }
                     }
 
@@ -1681,6 +2431,342 @@ private fun NetResourceLedgerRow(
 }
 
 @Composable
+fun PhysiologicalVitalsAndQuarantineCard(
+    uiState: OutpostUiState,
+    onToggleRestRotation: () -> Unit,
+    onCureSickAndExhaustedCrew: () -> Unit,
+    onIssueEmergencyRations: () -> Unit
+) {
+    val state = uiState.state
+    val snap = uiState.production
+    val stamina = state.dwellerStaminaPercent.coerceIn(0, 100)
+    val sickCount = state.sickDwellersCount
+    val traumaCount = state.bleedingDwellersCount + state.venomInfectedDwellersCount + state.injuredDwellersCount
+    val isExhaustedOrSick = stamina < 35 || sickCount > 0 || traumaCount > 0
+    val accent = when {
+        sickCount > 0 || stamina < 35 || snap.isWorkersStarvingOrDehydrated -> HazardRed
+        state.isRestRotationActive -> CyanHydro
+        else -> BioGreen
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("physiological_vitals_quarantine_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.75f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.HealthAndSafety,
+                        contentDescription = "Physiological Vitals",
+                        tint = accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "DEEP PHYSIOLOGICAL VITALS: HUNGER, THIRST, SLEEP & SICKNESS",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = accent,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Crew need 60s Food/Water, Bunk Sleep Stamina (${stamina}%) & Quarantine vs Dysentery/Rad-Fever!",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = accent.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.55f))
+                ) {
+                    Text(
+                        text = if (state.isRestRotationActive) "SLEEP SHIFT" else "WORK SHIFT",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = accent,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = VaultDarkSurface,
+                    border = BorderStroke(1.dp, if (snap.isWorkersStarvingOrDehydrated) HazardRed else BioGreen.copy(alpha = 0.45f))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("HUNGER & THIRST", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = "${state.rations.toInt()}F • ${state.water.toInt()}W (${state.dwellerFeedCycleSecondsRemaining}s)",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (snap.isWorkersStarvingOrDehydrated) HazardRed else BioGreen
+                        )
+                    }
+                }
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = VaultDarkSurface,
+                    border = BorderStroke(1.dp, if (stamina < 35) HazardRed else CyanHydro.copy(alpha = 0.45f))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("SLEEP STAMINA", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = "$stamina% (${(snap.staminaEfficiencyMultiplier * 100).roundToInt()}% Eff)",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (stamina < 35) HazardRed else CyanHydro
+                        )
+                    }
+                }
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = VaultDarkSurface,
+                    border = BorderStroke(1.dp, if (sickCount > 0 || traumaCount > 0) HazardRed else SolarAmber.copy(alpha = 0.45f))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("SICK / TRAUMA", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = "$sickCount SICK / $traumaCount WOUND",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (sickCount > 0 || traumaCount > 0) HazardRed else BioGreen
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onToggleRestRotation,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("toggle_rest_rotation_btn"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (state.isRestRotationActive) CyanHydro.copy(alpha = 0.25f) else SolarAmber.copy(alpha = 0.2f),
+                        contentColor = if (state.isRestRotationActive) CyanHydro else SolarAmber
+                    )
+                ) {
+                    Text(
+                        text = if (state.isRestRotationActive) "RESUME FULL SHIFT" else "ROTATE SLEEP SHIFT (+25% STAM)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                Button(
+                    onClick = onCureSickAndExhaustedCrew,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("cure_sick_exhausted_crew_btn"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isExhaustedOrSick) HazardRed else BioGreen,
+                        contentColor = if (isExhaustedOrSick) Color.White else Color.Black
+                    )
+                ) {
+                    Text(
+                        text = if (state.medkitsCount > 0 || state.radAwayCount > 0) {
+                            "QUARANTINE CURE (-1 MED)"
+                        } else {
+                            "CURE & RESTORE (-6W/-6F)"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PowerGridLoadBalancerCard(
+    uiState: OutpostUiState,
+    onSetGridLoadBreakerMode: (GridLoadBreakerMode) -> Unit,
+    onWeldRoomPipes: () -> Unit,
+    onEmergencyManualCrank: () -> Unit
+) {
+    val state = uiState.state
+    val snap = uiState.production
+    val activeMode = snap.activeGridBreakerMode
+    val mwGen = snap.totalMegawattGenerated
+    val mwDemand = snap.totalMegawattDemand
+    val accent = when {
+        snap.isVaultBlackout -> HazardRed
+        snap.isVaultBrownout -> RustOrange
+        else -> SolarAmber
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("power_grid_load_balancer_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.75f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ElectricBolt,
+                        contentDescription = "Power Grid Load Balancer",
+                        tint = accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "STRICT POWER GRID LOAD BALANCER & CIRCUIT BREAKERS",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = accent,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Active Breaker: ${activeMode.shortLabel} (${activeMode.effectSummary})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = accent.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.55f))
+                ) {
+                    Text(
+                        text = "${mwGen.roundToInt()}/${mwDemand.roundToInt()} MW",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = accent,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                GridLoadBreakerMode.entries.forEach { mode ->
+                    val selected = mode == activeMode
+                    FilledTonalButton(
+                        onClick = { onSetGridLoadBreakerMode(mode) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("grid_breaker_${mode.id.lowercase()}_btn"),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (selected) SolarAmber.copy(alpha = 0.28f) else VaultDarkSurface,
+                            contentColor = if (selected) SolarAmber else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = mode.shortLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            if (snap.isVaultBlackout || state.activePipeLeaksCount > 0 || state.roomStructuralWearPercent >= 25) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (snap.isVaultBlackout && state.manualDynamoCranksRemaining > 0) {
+                        Button(
+                            onClick = onEmergencyManualCrank,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = HazardRed, contentColor = Color.White)
+                        ) {
+                            Text(
+                                text = "CRANK DYNAMO (${state.manualDynamoCranksRemaining}/4)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                    if (state.activePipeLeaksCount > 0 || state.roomStructuralWearPercent >= 25) {
+                        FilledTonalButton(
+                            onClick = onWeldRoomPipes,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = CyanHydro.copy(alpha = 0.22f),
+                                contentColor = CyanHydro
+                            )
+                        ) {
+                            Text(
+                                text = "WELD ${state.activePipeLeaksCount} LEAKS & WEAR (${state.roomStructuralWearPercent}%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun CrewAndPowerTabScreen(
     uiState: OutpostUiState,
     onAssignWorker: (WorkerClassType, Int) -> Unit,
@@ -1689,6 +2775,10 @@ fun CrewAndPowerTabScreen(
     onSendExpedition: (WastelandExpeditionType) -> Unit,
     onToggleAutoShift: (Boolean) -> Unit,
     onOptimizeCrewNow: () -> Unit,
+    onLaunchRescueBeacon: () -> Unit = {},
+    onIssueEmergencyRations: () -> Unit = {},
+    onToggleRestRotation: () -> Unit = {},
+    onCureSickAndExhaustedCrew: () -> Unit = {},
     onSellToTown: (TradeTown, ResourceType) -> Unit,
     onBuyRareItem: (RareSyndicateItem) -> Unit,
     onDispatchConvoy: (TradeTown) -> Unit,
@@ -1765,7 +2855,11 @@ fun CrewAndPowerTabScreen(
                     onSendExpedition = onSendExpedition,
                     onAdjustWorker = onAssignWorker,
                     onToggleAutoShift = onToggleAutoShift,
-                    onOptimizeCrew = onOptimizeCrewNow
+                    onOptimizeCrew = onOptimizeCrewNow,
+                    onLaunchRescueBeacon = onLaunchRescueBeacon,
+                    onIssueEmergencyRations = onIssueEmergencyRations,
+                    onToggleRestRotation = onToggleRestRotation,
+                    onCureSickAndExhaustedCrew = onCureSickAndExhaustedCrew
                 )
             } else {
                 TradePowerTabScreen(

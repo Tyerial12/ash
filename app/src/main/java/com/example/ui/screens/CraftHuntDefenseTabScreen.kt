@@ -66,6 +66,7 @@ import com.example.model.FishingSpot
 import com.example.model.HuntingTarget
 import com.example.model.RaiderSiegeThreat
 import com.example.model.SiegeCountermeasureType
+import com.example.model.TurretAmmoType
 import com.example.ui.components.formatRate
 import com.example.ui.theme.BioluminescentViolet
 import com.example.ui.theme.BunkerSlate
@@ -107,6 +108,9 @@ fun CraftHuntDefenseTabScreen(
     onUseMedkit: () -> Unit = {},
     onUseRadAway: () -> Unit = {},
     onTreatHuntingInjuries: () -> Unit = {},
+    onFieldPressAmmo: () -> Unit = {},
+    onSelectTurretAmmoType: (TurretAmmoType) -> Unit = {},
+    onArmPerimeterCryoTrap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedSubView by remember { mutableStateOf(ArmorySubView.ALL) }
@@ -180,6 +184,15 @@ fun CraftHuntDefenseTabScreen(
             }
 
             if (showSiegeAndMedbay) {
+                item(key = "tactical_munitions_and_cryo_traps_card") {
+                    TacticalMunitionsAndCryoTrapsCard(
+                        uiState = uiState,
+                        onSelectTurretAmmoType = onSelectTurretAmmoType,
+                        onArmPerimeterCryoTrap = onArmPerimeterCryoTrap,
+                        onFieldPressAmmo = onFieldPressAmmo
+                    )
+                }
+
                 // 1. Daily Base Defense, Day 10 Mega-Siege, Automated Defenses & Timed Blast Door Upgrade Card
                 item(key = "defense_status_card") {
                     DefensePerimeterCard(
@@ -244,7 +257,8 @@ fun CraftHuntDefenseTabScreen(
                 item(key = "hardcore_hunting_trauma_item") {
                     HardcoreHuntingTraumaAndAmmoCard(
                         uiState = uiState,
-                        onTreatHuntingInjuries = onTreatHuntingInjuries
+                        onTreatHuntingInjuries = onTreatHuntingInjuries,
+                        onFieldPressAmmo = onFieldPressAmmo
                     )
                 }
 
@@ -1037,6 +1051,32 @@ private fun DefensePerimeterCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        if (activeRaid.targetFacilityName.isNotEmpty()) {
+                            Surface(
+                                color = HazardRed.copy(alpha = 0.18f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, HazardRed.copy(alpha = 0.6f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = HazardRed,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "TARGETED SABOTAGE OBJECTIVE: ${activeRaid.targetFacilityName.uppercase()} (-50% Output if breached!)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = HazardRed,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                         if (activeRaid.weakenedByPercent > 0) {
                             Text(
                                 text = "⚡ Countermeasures Deployed (${activeRaid.countermeasuresUsedCount}): Siege Armor Weakened by -${activeRaid.weakenedByPercent}%!",
@@ -1776,5 +1816,147 @@ private fun SectionDividerTitle(
             style = MaterialTheme.typography.bodySmall,
             color = TextMutedAsh
         )
+    }
+}
+
+@Composable
+fun TacticalMunitionsAndCryoTrapsCard(
+    uiState: OutpostUiState,
+    onSelectTurretAmmoType: (TurretAmmoType) -> Unit,
+    onArmPerimeterCryoTrap: () -> Unit,
+    onFieldPressAmmo: () -> Unit
+) {
+    val state = uiState.state
+    val prod = uiState.production
+    val activeAmmo = prod.activeAmmoType
+    val canArmTrap = state.scrap >= 12.0 && state.water >= 6.0
+
+    Surface(
+        color = ElevatedSteel,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.5.dp, CryoCyan.copy(alpha = 0.8f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("tactical_munitions_cryo_traps_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GpsFixed,
+                        contentDescription = "Tactical Munitions & Cryo Traps",
+                        tint = CryoCyan,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "TACTICAL TURRET MUNITIONS & CRYO-SHRAPNEL TRAPS",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CryoCyan,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Loaded: ${activeAmmo.title} (${activeAmmo.effectSummary})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMutedAsh
+                        )
+                    }
+                }
+                Surface(
+                    color = CryoCyan.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, CryoCyan.copy(alpha = 0.6f))
+                ) {
+                    Text(
+                        text = "${state.activeCryoTrapsCount} CRYO TRAPS (+${state.activeCryoTrapsCount * 14} DEF)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CryoCyan,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                TurretAmmoType.entries.forEach { ammo ->
+                    val selected = ammo == activeAmmo
+                    Button(
+                        onClick = { onSelectTurretAmmoType(ammo) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selected) SolarAmber else ObsidianCharcoal,
+                            contentColor = if (selected) ObsidianCharcoal else SolarAmber
+                        ),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("select_ammo_${ammo.id.lowercase()}")
+                    ) {
+                        Text(
+                            text = ammo.shortLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onArmPerimeterCryoTrap,
+                    enabled = canArmTrap,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CryoCyan,
+                        contentColor = ObsidianCharcoal
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("arm_perimeter_cryo_trap_btn")
+                ) {
+                    Text(
+                        text = "ARM CRYO TRAP (-12S/-6W • +14 DEF)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onFieldPressAmmo,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("munitions_press_ammo_btn")
+                ) {
+                    Text(
+                        text = "PRESS +20 AMMO (${state.ammoRounds} RDS)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SolarAmber,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }

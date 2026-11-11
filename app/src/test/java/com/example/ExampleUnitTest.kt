@@ -68,8 +68,8 @@ class ExampleUnitTest {
             skillsMap = emptyMap(),
             activePhase = DayNightPhase.SCORCHING_DAY
         )
-        assertTrue("Pickaxe mining yields Gold directly", baseSalvage.goldAmount >= 14.0)
-        assertTrue("Each Pickaxe swing yields Gold", baseSalvage.tapGoldAmount >= 3.0)
+        assertTrue("Pickaxe mining yields real small amounts of Gold directly", baseSalvage.goldAmount in 1.5..8.0)
+        assertTrue("Each Pickaxe swing yields a real small amount of Gold", baseSalvage.tapGoldAmount in 0.5..3.0)
     }
 
     @Test
@@ -761,16 +761,16 @@ class ExampleUnitTest {
         assertFalse("Unstaffed high-level Vault with running reactors is taking more than it is making", negativeSnap.isMakingPositiveResources)
         assertTrue(negativeSnap.netResourceBalancePerSec < 0.0)
 
-        // 6. Max Dwellers is 15 & Rooms gradually get better from Level 0 (worst) upward
-        assertEquals(15, OutpostCalculator.MAX_VAULT_DWELLERS)
-        val habLv6Snap = OutpostCalculator.computeProductionSnapshot(
+        // 6. Max Dwellers is 30 (+4 per room level) & Rooms gradually get better from Level 0 (worst) upward
+        assertEquals(30, OutpostCalculator.MAX_VAULT_DWELLERS)
+        val habLv12Snap = OutpostCalculator.computeProductionSnapshot(
             baseState,
-            mapOf(BuildingType.SURVIVOR_HAB_BLOCK.id to 6),
+            mapOf(BuildingType.SURVIVOR_HAB_BLOCK.id to 12),
             emptyMap(),
             emptyMap(),
             1000L
         )
-        assertEquals("Max Dwellers is strictly capped at 15 even with high-level Living Quarters", 15, habLv6Snap.maxWorkerCapacity)
+        assertEquals("Max Dwellers is strictly capped at 30 even with high-level Living Quarters", 30, habLv12Snap.maxWorkerCapacity)
 
         val lv0Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(0)
         val lv1Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(1)
@@ -779,8 +779,8 @@ class ExampleUnitTest {
         val lv4Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(4)
         val lv5Mult = OutpostCalculator.computeRoomLevelOutputMultiplier(5)
         assertTrue(
-            "Rooms gradually get better each level with Level 0 being worst (0.20) -> Lv.1 (0.38) -> Lv.2 (0.56) -> Lv.3 (0.74) -> Lv.4 (0.92) -> Lv.5 (1.10)",
-            lv0Mult == 0.20 && lv0Mult < lv1Mult && lv1Mult < lv2Mult && lv2Mult < lv3Mult && lv3Mult < lv4Mult && lv4Mult < lv5Mult && lv5Mult > 1.0
+            "Rooms gradually get better each level with Level 0 being worst (0.15) -> Lv.1 (0.28) -> Lv.2 (0.42) -> Lv.3 (0.60) -> Lv.4 (0.85) -> Lv.5 (1.15)",
+            lv0Mult == 0.15 && lv0Mult < lv1Mult && lv1Mult < lv2Mult && lv2Mult < lv3Mult && lv3Mult < lv4Mult && lv4Mult < lv5Mult && lv5Mult > 1.0
         )
 
         val eff0 = OutpostCalculator.computeRoomEffectiveTotalOutputMultiplier(0)
@@ -861,4 +861,232 @@ class ExampleUnitTest {
         assertTrue("Positive net Scrap/s schedules a Max Resources ETA", (schedule.secondsUntilResourcesAtMax ?: 0L) > 0L)
         assertTrue("Fuel consumption schedules an Out of Power ETA", (schedule.secondsUntilPowerOutage ?: 0L) > 0L)
     }
+
+    @Test
+    fun dwellersHiring_andMax50Cap_workProperly() {
+        val board = CaravanCandidateGenerator.generateBoard(
+            totalHiredSoFar = 4,
+            commandLevel = 3,
+            discountMult = 1.0
+        )
+        assertTrue("Caravan generates at least 3 candidates", board.size >= 3)
+        val candidate = board.first()
+        assertTrue("Candidate has valid hiring cost", candidate.goldSigningFee > 0.0)
+
+        // Verify cap calculation (Base 4 + Lv.7 * 4 = 32 -> capped at 30 capacity)
+        val livingQuarters = mapOf(BuildingType.SURVIVOR_HAB_BLOCK.id to 7)
+        val prodAt30 = OutpostCalculator.computeProductionSnapshot(
+            state = OutpostStateEntity(totalSurvivors = 29),
+            buildingsMap = livingQuarters,
+            workersMap = emptyMap(),
+            skillsMap = emptyMap(),
+            nowMillis = 1000L
+        )
+        assertEquals(30, OutpostCalculator.MAX_VAULT_DWELLERS)
+        assertEquals(4, BuildingType.SURVIVOR_HAB_BLOCK.populationBonusPerLevel)
+        assertEquals("Can hire up to 30 dwellers (+4 per room level)", 30, prodAt30.maxWorkerCapacity)
+
+        val cappedState = OutpostStateEntity(totalSurvivors = 30)
+        val beaconCost = OutpostCalculator.computeRescueBeaconCost(
+            state = cappedState,
+            maxWorkerCapacity = 30,
+            skillsMap = emptyMap()
+        )
+        assertFalse("At 30 Max Dwellers cap, beacon cannot recruit more dwellers", beaconCost.hasHousingSpace)
+    }
+
+    @Test
+    fun repelRaiderSiege_andDefendTab_operateWithoutCrash() {
+        val state = OutpostStateEntity(
+            dayCounter = 3,
+            commandLevel = 2,
+            defenseIntegrityPercent = 100,
+            craftedShrapnelMines = 2,
+            ammoRounds = 30,
+            gold = 50.0,
+            scrap = 100.0
+        )
+        val raidThreat = OutpostCalculator.computeDailyRaidRequiredDefense(
+            dayNumber = 3,
+            activePhase = DayNightPhase.SCORCHING_DAY
+        )
+        assertTrue("Day 3 raid defense requirement is calculated", raidThreat > 0)
+
+        val blastDoorCost = OutpostCalculator.computeBlastDoorUpgradeCost(
+            state = state,
+            skillsMap = emptyMap(),
+            workersMap = emptyMap()
+        )
+        assertEquals(2, blastDoorCost.targetLevel)
+        assertTrue("Blast door upgrade time is scaled", blastDoorCost.upgradeTimeSeconds > 0)
+
+        val repairCost = OutpostCalculator.computeDefenseRepairCost(
+            state = state.copy(defenseIntegrityPercent = 70, needsDefenseRepair = true),
+            skillsMap = emptyMap(),
+            buildingsMap = emptyMap()
+        )
+        assertTrue("Repair is needed when integrity < 100", repairCost.needsRepair)
+        assertTrue("Repair costs scrap and gold", repairCost.scrapCost > 0.0 && repairCost.goldCost > 0.0)
+
+        // Verify extreme or corrupted state values (NaN resources, negative door level, out-of-range integrity) never crash
+        val corruptedState = state.copy(
+            blastDoorLevel = -5,
+            defenseIntegrityPercent = -100,
+            sentryTurretCount = -10,
+            scrap = Double.NaN,
+            gold = Double.NEGATIVE_INFINITY
+        )
+        val safeRepairCost = OutpostCalculator.computeDefenseRepairCost(
+            state = corruptedState,
+            skillsMap = mapOf("IND_MODULAR_PREFAB" to 999),
+            buildingsMap = mapOf(BuildingType.BIO_SLUDGE_REFINERY.id to 999)
+        )
+        assertTrue("Corrupted state repair cost remains finite and bounded", safeRepairCost.scrapCost.isFinite() && safeRepairCost.goldCost.isFinite())
+        assertFalse("NaN/negative resources cannot afford repair", safeRepairCost.canAfford)
+
+        val safeDoorCost = OutpostCalculator.computeBlastDoorUpgradeCost(
+            state = corruptedState,
+            skillsMap = mapOf("IND_MODULAR_PREFAB" to -50),
+            workersMap = emptyMap()
+        )
+        assertEquals(2, safeDoorCost.targetLevel)
+        assertTrue("Corrupted state door upgrade cost remains finite", safeDoorCost.scrapCost.isFinite() && safeDoorCost.goldCost.isFinite())
+        assertFalse("NaN/negative resources cannot afford door upgrade", safeDoorCost.canAfford)
+    }
+
+    @Test
+    fun goldMineGathersGoldAndSmallFuel_andPhoneWidgetSnapshotReflectsVaultStatus() {
+        val baseState = OutpostStateEntity(
+            totalSurvivors = 2,
+            rations = 50.0,
+            water = 50.0,
+            bioFuel = 25.0,
+            bioTurbineLevel = 4,
+            salvageRigLevel = 2
+        )
+        val workers = mapOf(
+            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 2, classLevel = 1)
+        )
+        val snapLv1 = OutpostCalculator.computeProductionSnapshot(
+            state = baseState,
+            buildingsMap = mapOf(BuildingType.SALVAGE_YARD.id to 1),
+            workersMap = workers,
+            skillsMap = emptyMap(),
+            nowMillis = 1000L
+        )
+        val snapLv3 = OutpostCalculator.computeProductionSnapshot(
+            state = baseState,
+            buildingsMap = mapOf(BuildingType.SALVAGE_YARD.id to 3),
+            workersMap = workers,
+            skillsMap = emptyMap(),
+            nowMillis = 1000L
+        )
+
+        assertTrue("Gold Mine Lv.1 gathers Gold/s", snapLv1.goldPerSec > 0.0)
+        assertTrue("Gold Mine Lv.1 gathers small Bio-Fuel/s", snapLv1.goldMineSmallFuelPerSec > 0.0)
+        assertTrue("Upgrading Gold Mine increases Gold/s", snapLv3.goldPerSec > snapLv1.goldPerSec)
+        assertTrue("Upgrading Gold Mine increases small Bio-Fuel/s trickle", snapLv3.goldMineSmallFuelPerSec > snapLv1.goldMineSmallFuelPerSec)
+        assertTrue("Upgrading Gold Mine increases daily Gold & Fuel bonus", snapLv3.dailyRoomGoldBonus > snapLv1.dailyRoomGoldBonus && snapLv3.dailyRoomFuelBonus > snapLv1.dailyRoomFuelBonus)
+
+        val yieldLv1 = OutpostCalculator.computeSalvageNodeYield(
+            nodeType = com.example.model.SalvageNodeType.entries.first(),
+            state = baseState,
+            buildingsMap = mapOf(BuildingType.SALVAGE_YARD.id to 1),
+            workersMap = workers,
+            skillsMap = emptyMap(),
+            activePhase = DayNightPhase.SCORCHING_DAY
+        )
+        val yieldLv3 = OutpostCalculator.computeSalvageNodeYield(
+            nodeType = com.example.model.SalvageNodeType.entries.first(),
+            state = baseState,
+            buildingsMap = mapOf(BuildingType.SALVAGE_YARD.id to 3),
+            workersMap = workers,
+            skillsMap = emptyMap(),
+            activePhase = DayNightPhase.SCORCHING_DAY
+        )
+        assertTrue("Pickaxe swing and vein break gather Gold and small Bio-Fuel", yieldLv1.tapGoldAmount > 0.0 && yieldLv1.tapFuelAmount > 0.0 && yieldLv1.bonusFuelFromGoldMine > 0.0)
+        assertTrue("Upgrading Gold Mine increases Pickaxe small Bio-Fuel yield", yieldLv3.tapFuelAmount > yieldLv1.tapFuelAmount && yieldLv3.bonusFuelFromGoldMine > yieldLv1.bonusFuelFromGoldMine)
+
+        val widgetSnap = com.example.widget.VaultStatusAppWidgetProvider.buildWidgetSnapshot(
+            baseState.copy(
+                gold = 42.0,
+                scrap = 88.0,
+                totalRaidsRepelled = 3,
+                lastAttackSucceeded = true,
+                lastAttackSummary = "SUCCEEDED: Repelled Ash Raider Vanguard"
+            ),
+            snapLv3
+        )
+        assertEquals(88.0, widgetSnap.scrap, 0.01)
+        assertEquals(42.0, widgetSnap.gold, 0.01)
+        assertTrue("Phone widget snapshot includes Gold/s rate", widgetSnap.goldPerSec > 0.0)
+        assertTrue("Phone widget snapshot shows whether last attack succeeded or failed", widgetSnap.lastAttackSucceeded)
+        assertTrue(widgetSnap.lastAttackSummary.contains("SUCCEEDED"))
+        assertEquals(2, widgetSnap.totalSurvivors)
+        assertEquals(4, widgetSnap.maxWorkerCapacity)
+        assertEquals(1, widgetSnap.onlineRoomsCount)
+    }
+
+    @Test
+    fun dailyScrapAutoRepairsAutomatedSystemsOnlyDependingOnRoomLevel_andRelicsGrantSmallOutpostBonuses() {
+        val intactAutomatedState = OutpostStateEntity(
+            commandLevel = 2,
+            totalSurvivors = 2,
+            rations = 50.0,
+            water = 50.0,
+            bioFuel = 50.0,
+            bioTurbineLevel = 5,
+            defenseIntegrityPercent = 100,
+            needsDefenseRepair = false,
+            generatorWearPercent = 0,
+            roomStructuralWearPercent = 0,
+            activePipeLeaksCount = 0,
+            sabotagedBuildingId = ""
+        )
+        val buildingsLv1 = mapOf(BuildingType.SALVAGE_YARD.id to 1)
+        val buildingsLv3 = mapOf(BuildingType.SALVAGE_YARD.id to 3, BuildingType.ATMOSPHERIC_CONDENSER.id to 2)
+        val workers = mapOf(
+            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 2, classLevel = 1)
+        )
+
+        val intactPlan = OutpostCalculator.computeDailyAutomatedRepairPlan(intactAutomatedState, buildingsLv3)
+        val intactSnap = OutpostCalculator.computeProductionSnapshot(intactAutomatedState, buildingsLv3, workers, emptyMap(), 1000L)
+        assertFalse("When all automated systems are intact, no automated repair is needed", intactPlan.needsAutomatedRepair)
+        assertEquals("0 Scrap is used daily when automated systems do not need repair", 0.0, intactPlan.scrapCost, 0.001)
+        assertEquals("Daily room scrap upkeep is 0.0 when automated systems are intact", 0.0, intactSnap.dailyRoomScrapUpkeep, 0.001)
+
+        val damagedAutomatedState = intactAutomatedState.copy(
+            defenseIntegrityPercent = 70,
+            needsDefenseRepair = true,
+            generatorWearPercent = 35,
+            roomStructuralWearPercent = 25,
+            activePipeLeaksCount = 1
+        )
+        val planLv1 = OutpostCalculator.computeDailyAutomatedRepairPlan(damagedAutomatedState, buildingsLv1)
+        val planLv3 = OutpostCalculator.computeDailyAutomatedRepairPlan(damagedAutomatedState, buildingsLv3)
+        assertTrue("Damaged automated systems trigger daily Scrap auto-repair", planLv1.needsAutomatedRepair && planLv3.needsAutomatedRepair)
+        assertTrue("Higher room levels use more Scrap per day to repair automated systems", planLv3.scrapCost > planLv1.scrapCost)
+        assertTrue(
+            "Higher room levels restore more Door Integrity, Generator Wear, and Room Wear per day",
+            planLv3.doorIntegrityRestore > planLv1.doorIntegrityRestore &&
+                planLv3.generatorWearReduction > planLv1.generatorWearReduction &&
+                planLv3.roomWearReduction > planLv1.roomWearReduction
+        )
+
+        // Verify Relics grant small bonuses across the Outpost (+1.5% Output, +2 DEF, +0.3 MW, +15 Storage, +1% Morale, -1% Auto-Repair Cost)
+        val stateWith3Relics = damagedAutomatedState.copy(discoveredRelicsCount = 3)
+        val snap0Relics = OutpostCalculator.computeProductionSnapshot(damagedAutomatedState, buildingsLv3, workers, emptyMap(), 1000L)
+        val snap3Relics = OutpostCalculator.computeProductionSnapshot(stateWith3Relics, buildingsLv3, workers, emptyMap(), 1000L)
+
+        assertEquals(4.5, snap3Relics.relicOutputBonusPercent, 0.01)
+        assertEquals(6, snap3Relics.relicDefenseBonus)
+        assertEquals(0.9, snap3Relics.relicMegawattBonus, 0.01)
+        assertEquals(45.0, snap3Relics.relicStorageBonus, 0.01)
+        assertEquals(3, snap3Relics.relicAutoRepairDiscountPercent)
+        assertTrue("Relics give a small boost to Scrap/s output", snap3Relics.scrapPerSec > snap0Relics.scrapPerSec)
+        assertTrue("Relics give a small boost to Outpost MW generated", snap3Relics.totalMegawattGenerated > snap0Relics.totalMegawattGenerated)
+        assertTrue("Relics give a small boost to Outpost Storage Capacity", snap3Relics.storageCap > snap0Relics.storageCap)
+        assertTrue("Relics slightly reduce daily auto-repair Scrap cost", snap3Relics.dailyAutoRepairScrapCost < snap0Relics.dailyAutoRepairScrapCost)
+    }
 }
+
