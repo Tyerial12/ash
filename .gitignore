@@ -17,4 +17,6 @@ local.properties
 .env
 debug.keystore
 *-debug.log
+!/releases/
+!/releases/*.apk
 
