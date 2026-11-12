@@ -1,5 +1,6 @@
 package com.example.widget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -8,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Build
+import android.os.SystemClock
 import android.widget.RemoteViews
 import com.example.MainActivity
 import com.example.R
@@ -65,11 +67,22 @@ data class VaultWidgetSnapshot(
 
 class VaultStatusAppWidgetProvider : AppWidgetProvider() {
 
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        scheduleNextAutoRefresh(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        cancelAutoRefresh(context)
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        scheduleNextAutoRefresh(context)
         // 1. Render immediately from fast SharedPreferences snapshot
         val cachedSnapshot = readSnapshotFromPrefs(context)
         updateWidgetViews(context, appWidgetManager, appWidgetIds, cachedSnapshot)
@@ -99,12 +112,16 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
             val ids = appWidgetManager.getAppWidgetIds(componentName)
             if (ids.isNotEmpty()) {
                 onUpdate(context, appWidgetManager, ids)
+            } else {
+                cancelAutoRefresh(context)
             }
         }
     }
 
     companion object {
         const val ACTION_REFRESH_VAULT_WIDGET = "com.example.widget.ACTION_REFRESH_VAULT_WIDGET"
+        const val AUTO_REFRESH_INTERVAL_MILLIS = 10_000L // Auto-refresh widget every 10 seconds
+        private const val AUTO_REFRESH_REQUEST_CODE = 709
         private const val PREFS_NAME = "vault_widget_telemetry_prefs"
 
         fun buildWidgetSnapshot(
@@ -127,10 +144,12 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                     "☣ MEDBAY ALERT: ${state.sickDwellersCount} SICK / CREW TRAUMA (${state.dwellerHealthPercent}% HP)" to true
                 state.activePipeLeaksCount > 0 || state.activeCaveInHazard ->
                     "🔧 HAZARD ALERT: ${state.activePipeLeaksCount} PIPE LEAK(S) • TAP TO REPAIR" to true
+                production.isStoreRoomFull ->
+                    "📦 STORE ROOM HALTED (${production.totalStoredResources.toInt()}/${production.storageCap.toInt()}) • RESTARTS AT ≤${production.storeRoomResumeThreshold.toInt()}" to false
                 production.totalDefenseRating < production.todayRequiredDefense ->
                     "⚔ SIEGE WARNING: ${production.totalDefenseRating}/${production.todayRequiredDefense} DEF READY" to false
                 else ->
-                    "🟢 SYSTEMS NOMINAL • ${production.onlineRoomsCount}/${production.totalBuiltRoomsCount} ROOMS ONLINE" to false
+                    "🟢 SYSTEMS NOMINAL • ${production.onlineRoomsCount}/${production.totalBuiltRoomsCount} ROOMS • 10S AUTO" to false
             }
 
             return VaultWidgetSnapshot(
@@ -188,7 +207,56 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 val componentName = ComponentName(appContext, VaultStatusAppWidgetProvider::class.java)
                 val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
                 if (appWidgetIds != null && appWidgetIds.isNotEmpty()) {
+                    scheduleNextAutoRefresh(appContext)
                     updateWidgetViews(appContext, appWidgetManager, appWidgetIds, snapshot)
+                }
+            }
+        }
+
+        fun scheduleNextAutoRefresh(context: Context) {
+            runCatching {
+                val appContext = context.applicationContext
+                val appWidgetManager = AppWidgetManager.getInstance(appContext)
+                val componentName = ComponentName(appContext, VaultStatusAppWidgetProvider::class.java)
+                val ids = appWidgetManager.getAppWidgetIds(componentName)
+                if (ids == null || ids.isEmpty()) return@runCatching
+
+                val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return@runCatching
+                val refreshIntent = Intent(appContext, VaultStatusAppWidgetProvider::class.java).apply {
+                    action = ACTION_REFRESH_VAULT_WIDGET
+                }
+                val pendingIntent = PendingIntent.getBroadcast(
+                    appContext,
+                    AUTO_REFRESH_REQUEST_CODE,
+                    refreshIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val triggerAtElapsed = SystemClock.elapsedRealtime() + AUTO_REFRESH_INTERVAL_MILLIS
+                alarmManager.setWindow(
+                    AlarmManager.ELAPSED_REALTIME,
+                    triggerAtElapsed,
+                    2_000L,
+                    pendingIntent
+                )
+            }
+        }
+
+        fun cancelAutoRefresh(context: Context) {
+            runCatching {
+                val appContext = context.applicationContext
+                val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return@runCatching
+                val refreshIntent = Intent(appContext, VaultStatusAppWidgetProvider::class.java).apply {
+                    action = ACTION_REFRESH_VAULT_WIDGET
+                }
+                val pendingIntent = PendingIntent.getBroadcast(
+                    appContext,
+                    AUTO_REFRESH_REQUEST_CODE,
+                    refreshIntent,
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                )
+                if (pendingIntent != null) {
+                    alarmManager.cancel(pendingIntent)
+                    pendingIntent.cancel()
                 }
             }
         }
@@ -216,18 +284,40 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
 
         private suspend fun loadSnapshotFromDatabase(context: Context): VaultWidgetSnapshot? {
             val dao = OutpostDatabase.getDatabase(context).outpostDao()
-            val state = dao.getOutpostStateOnce() ?: return null
+            val savedState = dao.getOutpostStateOnce() ?: return null
             val buildingsMap = dao.getBuildingsOnce().associate { it.buildingTypeId to it.level }
             val workersMap = dao.getWorkerClassesOnce().associateBy { it.workerClassId }
             val skillsMap = dao.getSkillNodesOnce().associate { it.nodeId to it.currentRank }
-            val prod = OutpostCalculator.computeProductionSnapshot(
-                state = state,
+            val now = System.currentTimeMillis()
+            val baseProd = OutpostCalculator.computeProductionSnapshot(
+                state = savedState,
                 buildingsMap = buildingsMap,
                 workersMap = workersMap,
                 skillsMap = skillsMap,
-                nowMillis = System.currentTimeMillis()
+                nowMillis = now
             )
-            return buildWidgetSnapshot(state, prod)
+            val elapsedSecs = ((now - savedState.lastSavedTimestampMillis) / 1000L).coerceIn(0L, 43_200L)
+            val projectedState = if (elapsedSecs >= 2L && savedState.totalSurvivors > 0 && baseProd.totalAssignedWorkers > 0) {
+                val offlineFactor = 0.65
+                val cap = baseProd.storageCap
+                savedState.copy(
+                    scrap = (savedState.scrap + baseProd.scrapPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    water = (savedState.water + baseProd.waterPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    rations = (savedState.rations + baseProd.rationsPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    bioFuel = (savedState.bioFuel + baseProd.bioFuelPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    gold = (savedState.gold + baseProd.goldPerSec * elapsedSecs * offlineFactor).coerceAtLeast(0.0)
+                )
+            } else {
+                savedState
+            }
+            val finalProd = OutpostCalculator.computeProductionSnapshot(
+                state = projectedState,
+                buildingsMap = buildingsMap,
+                workersMap = workersMap,
+                skillsMap = skillsMap,
+                nowMillis = now
+            )
+            return buildWidgetSnapshot(projectedState, finalProd)
         }
 
         private fun updateWidgetViews(

@@ -105,7 +105,6 @@ fun HardcoreMiningHazardsCard(
     val durability = state.pickaxeDurabilityPercent.coerceIn(0, 100)
     val heat = state.miningShaftHeatPercent.coerceIn(0, 100)
     val hasCaveIn = state.activeCaveInHazard
-    val sharpenScrapCost = (10.0 + state.salvageRigLevel * 3.0).roundToInt()
 
     val cardAccent = when {
         hasCaveIn || durability <= 20 || heat >= 80 -> HazardRed
@@ -143,13 +142,13 @@ fun HardcoreMiningHazardsCard(
                     )
                     Column {
                         Text(
-                            text = "HARDCORE MINING TELEMETRY & HAZARDS",
+                            text = "MANUAL MINING TELEMETRY (0 SCRAP COST)",
                             style = MaterialTheme.typography.titleSmall,
                             color = cardAccent,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "Swinging Pickaxe wears tip (-3%/swing) & builds shaft heat (+7%/swing). 80%+ Heat risks Cave-Ins!",
+                            text = "Manual mining, Pickaxe sharpening & Cave-In clearing cost 0 Scrap! Scrap is saved for daily room auto-repairs.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -273,7 +272,7 @@ fun HardcoreMiningHazardsCard(
             ) {
                 FilledTonalButton(
                     onClick = onSharpenPickaxe,
-                    enabled = durability < 100 && state.scrap >= sharpenScrapCost,
+                    enabled = durability < 100,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)
@@ -286,7 +285,7 @@ fun HardcoreMiningHazardsCard(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "SHARPEN (-$sharpenScrapCost SCRAP)",
+                        text = if (durability < 100) "SHARPEN (FREE • 0 SCRAP)" else "PICKAXE SHARP (100%)",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -317,7 +316,7 @@ fun HardcoreMiningHazardsCard(
             if (hasCaveIn) {
                 Button(
                     onClick = onClearCaveIn,
-                    enabled = state.scrap >= 14.0,
+                    enabled = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
@@ -335,7 +334,7 @@ fun HardcoreMiningHazardsCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "SHORE UP CAVE-IN COLLAPSE (-14 SCRAP • RESTORE 100% YIELD)",
+                        text = "CLEAR CAVE-IN COLLAPSE (FREE • 0 SCRAP • RESTORE 100% YIELD)",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -393,13 +392,17 @@ fun HardcoreBuildingMaintenanceCard(
                     )
                     Column {
                         Text(
-                            text = "GRADUAL ROOM SCALING (LV.0 WORST → LV.10+) & PIPE INTEGRITY",
+                            text = "DAILY ROOM-LEVEL SCRAP AUTO-REPAIR & ROOM INTEGRITY",
                             style = MaterialTheme.typography.titleSmall,
                             color = borderAccent,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "Lv.0 (20% Worst) → Lv.1 (38%) → Lv.2 (56%) → Lv.3 (74%) → Lv.4 (92%) → Lv.5 (110%) +18%/Lv!",
+                            text = if (snap.needsAutomatedSystemRepair) {
+                                "Daily Auto-Repair Active: Uses ${snap.dailyAutoRepairScrapCost.toInt()} Scrap/day (scaled by Room Lv.${uiState.buildingsMap.values.sum()}) to fix Door, Generators & Rooms!"
+                            } else {
+                                "All Automated Systems Intact (0 Scrap/day used)! When damaged, Scrap is used daily based on Room Levels."
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -2158,13 +2161,17 @@ fun CurrentResourcesTabScreen(
                             )
                             Column {
                                 Text(
-                                    text = "VAULT STORAGE CAPACITY: ${snap.storageCap.toInt()} MAX PER RESOURCE",
+                                    text = if (snap.isStoreRoomFull) {
+                                        "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): RESTARTS AT ≤${snap.storeRoomResumeThreshold.toInt()} (50%)!"
+                                    } else {
+                                        "VAULT STORE ROOM: ${snap.totalStoredResources.toInt()} / ${snap.storageCap.toInt()} STORED"
+                                    },
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = SolarAmber,
+                                    color = if (snap.isStoreRoomFull) HazardRed else SolarAmber,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = "Vault Store Room Lv.$storeRoomLv (+420/Lv) • Medbay & Silo Lv.$siloLv (+220/Lv)",
+                                    text = "When Store Room fills up, ALL resources stop gathering and do not restart until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()}). Upgrade Store Room Lv.$storeRoomLv (+${snap.storeRoomStorageBonus.toInt()} Cap) to expand.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -2819,7 +2826,7 @@ fun CrewAndPowerTabScreen(
                 Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "DWELLERS (${uiState.state.totalSurvivors}/15)",
+                    text = "DWELLERS (${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity})",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.ExtraBold
                 )

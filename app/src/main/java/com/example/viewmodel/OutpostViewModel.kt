@@ -634,6 +634,8 @@ class OutpostViewModel(
                 var expLostIncrement = 0
                 var expCompletedIncrement = 0
                 var expRelicsIncrement = 0
+                var expArmorIncrement = 0
+                var expWeaponsIncrement = 0
                 var expAmmoUsed = 0
                 var expGasMaskUsed = 0
                 var expHazmatUsed = 0
@@ -659,7 +661,8 @@ class OutpostViewModel(
                             expRadiationDelta = 16
                         }
                         val ammoLootBonus = if (hasAmmoSupport) 1.25 else 1.0
-                        val radarLootMult = (1.0 + radarLv * 0.20) * snap.uniqueDwellerBonusMultiplier * ammoLootBonus
+                        val weaponLootBonus = 1.0 + (state.dwellerWeaponsCount.coerceAtMost(6) * 0.05)
+                        val radarLootMult = (1.0 + radarLv * 0.20) * snap.uniqueDwellerBonusMultiplier * ammoLootBonus * weaponLootBonus
                         val died = Random.nextInt(100) < effectiveDeathChance
                         if (died && state.totalSurvivors > 0) {
                             expSurvivorDelta = -1
@@ -676,6 +679,8 @@ class OutpostViewModel(
                             expFuelAward = (expType.fuelReward * radarLootMult).roundToInt().toDouble()
                             expCoresAward = expType.coresReward
                             expXpAward = (expType.xpReward * radarLootMult).roundToInt().toDouble()
+                            expArmorIncrement = expType.armorReward
+                            expWeaponsIncrement = expType.weaponsReward
                             expCompletedIncrement = 1
                             if (Random.nextInt(100) < 22) {
                                 expRelicsIncrement = 1
@@ -685,8 +690,10 @@ class OutpostViewModel(
                                 expGasMaskUsed > 0 -> " [Gas Mask Protected]"
                                 else -> ""
                             }
+                            val extraDefGained = expArmorIncrement * OutpostCalculator.DWELLER_ARMOR_DEFENSE_BONUS +
+                                expWeaponsIncrement * OutpostCalculator.DWELLER_WEAPON_DEFENSE_BONUS
                             val relicNote = if (expRelicsIncrement > 0) " + ★1 Pre-Fall Relic" else ""
-                            val winMsg = "EXPEDITION SURVIVED (${100 - effectiveDeathChance}%)$gearNote: Dweller returned from ${expType.title} with +${expGoldAward.toInt()} Gold, +${expFoodAward.toInt()} Food, +${expWaterAward.toInt()} Water$relicNote!"
+                            val winMsg = "EXPEDITION SURVIVED (${100 - effectiveDeathChance}%)$gearNote: Returned from ${expType.title} with +$expArmorIncrement Dweller Armor & +$expWeaponsIncrement Weapon(s) (+$extraDefGained Extra DEF), +${expGoldAward.toInt()} Gold, +${expFoodAward.toInt()} Food & +${expWaterAward.toInt()} Water$relicNote!"
                             overlayFlow.update { it.copy(activeExpedition = null, lastExpeditionFeedback = winMsg) }
                             repository.logEvent("EXPEDITION", winMsg)
                         }
@@ -1001,6 +1008,8 @@ class OutpostViewModel(
                         totalSurvivors = (state.totalSurvivors + expSurvivorDelta).coerceAtLeast(0),
                         totalDwellersLost = state.totalDwellersLost + expLostIncrement,
                         totalExpeditionsCompleted = state.totalExpeditionsCompleted + expCompletedIncrement,
+                        dwellerArmorCount = state.dwellerArmorCount + expArmorIncrement,
+                        dwellerWeaponsCount = state.dwellerWeaponsCount + expWeaponsIncrement,
                         discoveredRelicsCount = state.discoveredRelicsCount + expRelicsIncrement,
                         blastDoorLevel = newBlastDoorLevelFromTimer ?: state.blastDoorLevel,
                         defenseIntegrityPercent = if (newBlastDoorLevelFromTimer != null) 100 else nextIntegrity,
@@ -1518,6 +1527,11 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val snap = current.production
+            if (snap.isStoreRoomFull) {
+                val msg = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                overlayFlow.update { it.copy(lastDefenseDamageFeedback = msg, lastSalvageFeedback = msg) }
+                return@launch
+            }
             val preview = OutpostCalculator.computeHuntPreview(
                 target = target,
                 state = state,
@@ -1592,6 +1606,12 @@ class OutpostViewModel(
         viewModelScope.launch {
             val current = uiState.value
             val state = current.state
+            val snap = current.production
+            if (snap.isStoreRoomFull) {
+                val msg = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                overlayFlow.update { it.copy(lastDefenseDamageFeedback = msg, lastSalvageFeedback = msg) }
+                return@launch
+            }
             val preview = OutpostCalculator.computeFishingPreview(spot, state, current.skillsMap, current.buildingsMap)
             if (!preview.canFish) return@launch
 
@@ -2407,6 +2427,14 @@ class OutpostViewModel(
             val slot = current.salvageNodes.getOrNull(slotIndex) ?: return@launch
             val state = current.state
             val snap = current.production
+            if (snap.isStoreRoomFull) {
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                    )
+                }
+                return@launch
+            }
 
             val newCombo = (state.salvageComboCount + 1).coerceAtMost(15)
             // Hardcore Mining: Pickaxe Durability (-3% per swing), Shaft Heat (+7% per swing), and Cave-In Hazard!
@@ -2554,7 +2582,16 @@ class OutpostViewModel(
         viewModelScope.launch {
             val current = uiState.value
             val state = current.state
+            val snap = current.production
             if (state.rawSalvageCaches <= 0) return@launch
+            if (snap.isStoreRoomFull) {
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Cannot unpack caches until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                    )
+                }
+                return@launch
+            }
 
             val countToOpen = if (dismantleAll) state.rawSalvageCaches.coerceAtMost(10) else 1
             val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
@@ -3025,23 +3062,15 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             if (state.pickaxeDurabilityPercent >= 100) return@launch
-            val scrapCost = (10.0 + state.salvageRigLevel * 3.0).roundToInt().toDouble()
-            if (state.scrap < scrapCost) {
-                overlayFlow.update {
-                    it.copy(lastSalvageFeedback = "Need ${scrapCost.toInt()} Scrap to sharpen & re-tip Pickaxe!")
-                }
-                return@launch
-            }
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
-                    scrap = state.scrap - scrapCost,
                     pickaxeDurabilityPercent = 100
                 ),
                 xpDelta = 12.0,
                 storageCap = current.production.storageCap
             )
             repository.updateOutpostState(updated)
-            val msg = "PICKAXE SHARPENED: Restored Pickaxe Durability to 100% (-${scrapCost.toInt()} Scrap, +12 XP)!"
+            val msg = "PICKAXE SHARPENED: Restored Pickaxe Durability to 100% (FREE • 0 Scrap, +12 XP)!"
             overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
             repository.logEvent("MINING", msg)
         }
@@ -3080,16 +3109,8 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             if (!state.activeCaveInHazard) return@launch
-            val scrapCost = 14.0
-            if (state.scrap < scrapCost) {
-                overlayFlow.update {
-                    it.copy(lastSalvageFeedback = "Need 14 Scrap for steel shoring beams to clear the Cave-In!")
-                }
-                return@launch
-            }
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
-                    scrap = state.scrap - scrapCost,
                     activeCaveInHazard = false,
                     miningShaftHeatPercent = (state.miningShaftHeatPercent - 35).coerceAtLeast(0)
                 ),
@@ -3097,7 +3118,7 @@ class OutpostViewModel(
                 storageCap = current.production.storageCap
             )
             repository.updateOutpostState(updated)
-            val msg = "CAVE-IN SHORED UP: Cleared rubble collapse & restored 100% vein mining access (-14 Scrap, +18 XP)!"
+            val msg = "CAVE-IN SHORED UP: Cleared rubble collapse & restored 100% vein mining access (FREE • 0 Scrap, +18 XP)!"
             overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
             repository.logEvent("MINING", msg)
         }
@@ -3934,14 +3955,13 @@ class OutpostViewModel(
                 totalXp += 12.0
             }
 
-            // 2. Clear Cave-In Hazard
-            if (working.activeCaveInHazard && working.scrap >= 14.0) {
+            // 2. Clear Cave-In Hazard (Free manual mining maintenance - 0 Scrap)
+            if (working.activeCaveInHazard) {
                 working = working.copy(
-                    scrap = working.scrap - 14.0,
                     activeCaveInHazard = false,
                     miningShaftHeatPercent = (working.miningShaftHeatPercent - 35).coerceAtLeast(0)
                 )
-                actions.add("Cleared Cave-In")
+                actions.add("Cleared Cave-In (0S)")
                 totalXp += 18.0
             }
 
@@ -3980,14 +4000,12 @@ class OutpostViewModel(
                 totalXp += 14.0
             }
 
-            // 6. Sharpen Pickaxe
-            val sharpenCost = (10.0 + working.salvageRigLevel * 3.0).roundToInt().toDouble()
-            if (working.pickaxeDurabilityPercent < 80 && working.scrap >= sharpenCost) {
+            // 6. Sharpen Pickaxe (Free manual mining maintenance - 0 Scrap)
+            if (working.pickaxeDurabilityPercent < 100) {
                 working = working.copy(
-                    scrap = working.scrap - sharpenCost,
                     pickaxeDurabilityPercent = 100
                 )
-                actions.add("Sharpened Pickaxe")
+                actions.add("Sharpened Pickaxe (0S)")
                 totalXp += 10.0
             }
 
@@ -4331,19 +4349,27 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val snap = current.production
-            if (state.activeCaveInHazard) {
+            if (snap.isStoreRoomFull) {
                 overlayFlow.update {
-                    it.copy(lastSalvageFeedback = "DEEP BOREHOLE BLOCKED BY CAVE-IN! Shore up the Cave-In first (-14 Scrap).")
+                    it.copy(
+                        lastSalvageFeedback = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                    )
                 }
                 return@launch
             }
-            val scrapCost = if (state.scrap >= 8.0) 8.0 else 0.0
+            if (state.activeCaveInHazard) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "DEEP BOREHOLE BLOCKED BY CAVE-IN! Clear the Cave-In first (FREE • 0 Scrap).")
+                }
+                return@launch
+            }
+            val scrapCost = 0.0
             val waterCost = if (state.water >= 4.0) 4.0 else 0.0
             val drillBonusMeters = if (snap.activeGridBreakerMode == GridLoadBreakerMode.DRILL_OVERDRIVE) 100 else 75
             val newDepth = state.deepCoreDepthMeters + drillBonusMeters
             val depthTier = 1 + (newDepth / 300)
             val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
-            val scrapYield = (8.0 + depthTier * 3.2) * snap.uniqueDwellerBonusMultiplier
+            val scrapYield = (8.0 + depthTier * 3.2) * OutpostCalculator.SCRAP_GATHER_RATE_MULTIPLIER * snap.uniqueDwellerBonusMultiplier
             val goldYield = ((2.2 + depthTier * 1.1 + yardLv * 0.8) * snap.uniqueDwellerBonusMultiplier * 10.0).roundToInt() / 10.0
             val fuelYield = ((0.6 + yardLv * 0.35 + depthTier * 0.25) * 10.0).roundToInt() / 10.0
             val foundRelic = Random.nextInt(100) < (24 + depthTier * 4).coerceAtMost(55)
@@ -4485,16 +4511,75 @@ class OutpostViewModel(
             required = CommandLevelProgression.xpRequiredForLevel(newLevel)
         }
 
+        // When Store Room is full, ALL positive resource gathering halts (0.0 positive gain), while spending/deductions still apply!
+        val storeRoomAlreadyFull = OutpostCalculator.isStoreRoomFull(baseState, storageCap)
+        val effScrapDelta = if (storeRoomAlreadyFull && scrapDelta > 0.0) 0.0 else scrapDelta
+        val effWaterDelta = if (storeRoomAlreadyFull && waterDelta > 0.0) 0.0 else waterDelta
+        val effRationsDelta = if (storeRoomAlreadyFull && rationsDelta > 0.0) 0.0 else rationsDelta
+        val effFuelDelta = if (storeRoomAlreadyFull && fuelDelta > 0.0) 0.0 else fuelDelta
+        val effResearchDelta = if (storeRoomAlreadyFull && researchDelta > 0.0) 0.0 else researchDelta
+        val effGoldDelta = if (storeRoomAlreadyFull && goldDelta > 0.0) 0.0 else goldDelta
+        val effCoresDelta = if (storeRoomAlreadyFull && coresDelta > 0.0) 0.0 else coresDelta
+
+        // Also ensure total stored resources across the Store Room do not exceed storageCap when adding positive resources
+        var nextScrap = (baseState.scrap + effScrapDelta).coerceIn(0.0, storageCap)
+        var nextWater = (baseState.water + effWaterDelta).coerceIn(0.0, storageCap)
+        var nextRations = (baseState.rations + effRationsDelta).coerceIn(0.0, storageCap)
+        var nextFuel = (baseState.bioFuel + effFuelDelta).coerceIn(0.0, storageCap)
+        var nextResearch = (baseState.researchData + effResearchDelta).coerceIn(0.0, storageCap)
+
+        val nextTotal = nextScrap + nextWater + nextRations + nextFuel + nextResearch
+        if (nextTotal > storageCap && storageCap > 0.0) {
+            val baseTotal = OutpostCalculator.computeTotalStoredResources(baseState)
+            val availableRoom = (storageCap - baseTotal).coerceAtLeast(0.0)
+            val positiveAdded = (nextScrap - baseState.scrap).coerceAtLeast(0.0) +
+                (nextWater - baseState.water).coerceAtLeast(0.0) +
+                (nextRations - baseState.rations).coerceAtLeast(0.0) +
+                (nextFuel - baseState.bioFuel).coerceAtLeast(0.0) +
+                (nextResearch - baseState.researchData).coerceAtLeast(0.0)
+            if (positiveAdded > 0.0) {
+                val scale = (availableRoom / positiveAdded).coerceIn(0.0, 1.0)
+                if (nextScrap > baseState.scrap) nextScrap = baseState.scrap + (nextScrap - baseState.scrap) * scale
+                if (nextWater > baseState.water) nextWater = baseState.water + (nextWater - baseState.water) * scale
+                if (nextRations > baseState.rations) nextRations = baseState.rations + (nextRations - baseState.rations) * scale
+                if (nextFuel > baseState.bioFuel) nextFuel = baseState.bioFuel + (nextFuel - baseState.bioFuel) * scale
+                if (nextResearch > baseState.researchData) nextResearch = baseState.researchData + (nextResearch - baseState.researchData) * scale
+            }
+        }
+
+        val finalScrap = nextScrap.coerceIn(0.0, storageCap)
+        val finalWater = nextWater.coerceIn(0.0, storageCap)
+        val finalRations = nextRations.coerceIn(0.0, storageCap)
+        val finalFuel = nextFuel.coerceIn(0.0, storageCap)
+        val finalResearch = nextResearch.coerceIn(0.0, storageCap)
+        val finalTotalStored = finalScrap + finalWater + finalRations + finalFuel + finalResearch
+        val halfCapThreshold = OutpostCalculator.computeStoreRoomResumeThreshold(storageCap)
+        val reachedFullNow = storageCap > 0.0 && (
+            finalTotalStored >= storageCap ||
+                finalScrap >= storageCap ||
+                finalWater >= storageCap ||
+                finalRations >= storageCap ||
+                finalFuel >= storageCap ||
+                finalResearch >= storageCap
+            )
+        // Latch halted = true when full, and keep halted = true until stored resources drop to or below half (50% of storageCap)!
+        val nextStoreRoomHalted = when {
+            reachedFullNow -> true
+            baseState.isStoreRoomGatheringHalted || storeRoomAlreadyFull -> finalTotalStored > halfCapThreshold
+            else -> false
+        }
+
         return baseState.copy(
             commandLevel = newLevel,
             currentXp = newXp,
-            scrap = (baseState.scrap + scrapDelta).coerceIn(0.0, storageCap),
-            water = (baseState.water + waterDelta).coerceIn(0.0, storageCap),
-            rations = (baseState.rations + rationsDelta).coerceIn(0.0, storageCap),
-            bioFuel = (baseState.bioFuel + fuelDelta).coerceIn(0.0, storageCap),
-            researchData = (baseState.researchData + researchDelta).coerceIn(0.0, storageCap),
-            gold = (baseState.gold + goldDelta).coerceAtLeast(0.0),
-            mutagenCores = (baseState.mutagenCores + coresDelta).coerceAtLeast(0.0)
+            scrap = finalScrap,
+            water = finalWater,
+            rations = finalRations,
+            bioFuel = finalFuel,
+            researchData = finalResearch,
+            gold = (baseState.gold + effGoldDelta).coerceAtLeast(0.0),
+            mutagenCores = (baseState.mutagenCores + effCoresDelta).coerceAtLeast(0.0),
+            isStoreRoomGatheringHalted = nextStoreRoomHalted
         )
     }
 

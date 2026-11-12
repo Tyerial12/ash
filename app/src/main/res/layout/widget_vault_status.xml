@@ -52,7 +52,7 @@
             android:paddingTop="4dp"
             android:paddingRight="8dp"
             android:paddingBottom="4dp"
-            android:text="↻ SYNC"
+            android:text="↻ 10S AUTO"
             android:textColor="#4DD0E1"
             android:textSize="10sp"
             android:textStyle="bold" />

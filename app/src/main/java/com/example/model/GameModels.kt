@@ -392,13 +392,15 @@ enum class WastelandExpeditionType(
     val scrapReward: Double,
     val fuelReward: Double,
     val coresReward: Double = 0.0,
+    val armorReward: Int = 1, // Dweller Armor salvaged on expedition (+12 DEF each)
+    val weaponsReward: Int = 1, // Dweller Weapons salvaged on expedition (+15 DEF each)
     val xpReward: Double,
     val accentColor: Color
 ) {
     SUPERMARKET_SUPPLY_RUN(
         id = "SUPERMARKET_SUPPLY_RUN",
         title = "RuinedSupermarket Scavenge",
-        subtitle = "Send 1 Dweller for scarce Food, Water & Gold (10% Chance Dweller Dies!)",
+        subtitle = "Send 1 Dweller for Dweller Armor/Weapons (+27 DEF), Food, Water & Gold (10% Risk)",
         durationSeconds = 12,
         deathChancePercent = 10,
         goldReward = 12.0,
@@ -406,13 +408,15 @@ enum class WastelandExpeditionType(
         waterReward = 12.0,
         scrapReward = 11.0,
         fuelReward = 4.5,
+        armorReward = 1,
+        weaponsReward = 1,
         xpReward = 40.0,
         accentColor = SurplusGreen
     ),
     OLD_BANK_VAULT_HEIST(
         id = "OLD_BANK_VAULT_HEIST",
         title = "Collapsed Bank & Foundry Run",
-        subtitle = "Send 1 Dweller for Gold Bullion, Scrap & Reactor Fuel (10% Chance Dweller Dies!)",
+        subtitle = "Send 1 Dweller for Guard Armor & Weapons (+27 DEF), Gold, Scrap & Fuel (10% Risk)",
         durationSeconds = 16,
         deathChancePercent = 10,
         goldReward = 26.0,
@@ -420,13 +424,15 @@ enum class WastelandExpeditionType(
         waterReward = 7.0,
         scrapReward = 28.0,
         fuelReward = 11.0,
+        armorReward = 1,
+        weaponsReward = 1,
         xpReward = 65.0,
         accentColor = XpGold
     ),
     GLOWING_CRATER_CORE_RAID(
         id = "GLOWING_CRATER_CORE_RAID",
         title = "Ground-Zero Reactor Core Raid",
-        subtitle = "Send 1 Dweller into deep radiation for Gold, Fuel & Mutagen Core (10% Chance Dweller Dies!)",
+        subtitle = "Send 1 Dweller for +2 Armor & +1 Weapon (+39 DEF), Gold, Fuel & Core (10% Risk)",
         durationSeconds = 20,
         deathChancePercent = 10,
         goldReward = 42.0,
@@ -435,13 +441,15 @@ enum class WastelandExpeditionType(
         scrapReward = 35.0,
         fuelReward = 20.0,
         coresReward = 1.0,
+        armorReward = 2,
+        weaponsReward = 1,
         xpReward = 110.0,
         accentColor = BioluminescentViolet
     ),
     SUNKEN_SUBMARINE_REACTOR(
         id = "SUNKEN_SUBMARINE_REACTOR",
         title = "Sunken Ballistic Sub Salvage",
-        subtitle = "Deep trench dive for Scrap, Bio-Fuel, Gold & +2 Mutagen Cores (10% Base Death Risk)",
+        subtitle = "Deep trench dive for +2 Armor & +2 Weapons (+54 DEF), Gold & +2 Cores (10% Risk)",
         durationSeconds = 25,
         deathChancePercent = 10,
         goldReward = 62.0,
@@ -450,6 +458,8 @@ enum class WastelandExpeditionType(
         scrapReward = 55.0,
         fuelReward = 32.0,
         coresReward = 2.0,
+        armorReward = 2,
+        weaponsReward = 2,
         xpReward = 160.0,
         accentColor = CryoCyan
     );

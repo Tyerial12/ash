@@ -119,7 +119,11 @@ data class ProductionSnapshot(
     val relicDefenseBonus: Int = 0,
     val relicMegawattBonus: Double = 0.0,
     val relicStorageBonus: Double = 0.0,
-    val relicAutoRepairDiscountPercent: Int = 0
+    val relicAutoRepairDiscountPercent: Int = 0,
+    val isStoreRoomFull: Boolean = false,
+    val totalStoredResources: Double = 0.0,
+    val storeRoomResumeThreshold: Double = 0.0,
+    val dwellerGearDefenseBonus: Int = 0
 )
 
 data class AutomatedDailyRepairPlan(
@@ -343,6 +347,15 @@ object OutpostCalculator {
     const val RELIC_STORAGE_BONUS_PER_RELIC = 15.0 // +15 Storage Capacity per Relic
     const val RELIC_MORALE_BONUS_PER_RELIC = 0.01 // +1% Crew Morale per Relic
     const val RELIC_AUTO_REPAIR_DISCOUNT_PER_RELIC = 0.01 // -1% Daily Auto-Repair Scrap Cost per Relic
+    const val SCRAP_GATHER_RATE_MULTIPLIER = 0.80 // 20% lower Scrap gather rate across automated & manual gathering
+    const val STORE_ROOM_RESUME_THRESHOLD_RATIO = 0.50 // Resources do not restart gaining until Store Room drops to half (50%) capacity
+    const val DWELLER_ARMOR_DEFENSE_BONUS = 12 // +12 Extra Vault Defense per Dweller Armor salvaged on Expeditions
+    const val DWELLER_WEAPON_DEFENSE_BONUS = 15 // +15 Extra Vault Defense per Dweller Weapon salvaged on Expeditions
+
+    fun computeDwellerGearDefenseBonus(state: OutpostStateEntity): Int {
+        return state.dwellerArmorCount.coerceAtLeast(0) * DWELLER_ARMOR_DEFENSE_BONUS +
+            state.dwellerWeaponsCount.coerceAtLeast(0) * DWELLER_WEAPON_DEFENSE_BONUS
+    }
 
     /**
      * Slower early room scaling: Rooms start at Level 0 in a degraded trickle state (15% efficiency),
@@ -416,6 +429,49 @@ object OutpostCalculator {
         if (storeRoomLevel <= 0) return 0.0
         val extraLevels = storeRoomLevel - 1
         return storeRoomLevel * BuildingType.VAULT_STORE_ROOM.storageBonusPerLevel * (1.0 + extraLevels * 0.25)
+    }
+
+    /**
+     * Total primary resources currently stored in the Vault Supply Store Room.
+     */
+    fun computeTotalStoredResources(state: OutpostStateEntity): Double {
+        val s = if (state.scrap.isFinite()) state.scrap.coerceAtLeast(0.0) else 0.0
+        val w = if (state.water.isFinite()) state.water.coerceAtLeast(0.0) else 0.0
+        val r = if (state.rations.isFinite()) state.rations.coerceAtLeast(0.0) else 0.0
+        val f = if (state.bioFuel.isFinite()) state.bioFuel.coerceAtLeast(0.0) else 0.0
+        val t = if (state.researchData.isFinite()) state.researchData.coerceAtLeast(0.0) else 0.0
+        return ((s + w + r + f + t) * 100.0).roundToInt() / 100.0
+    }
+
+    /**
+     * Half-capacity threshold (50% of storageCap) at or below which Store Room gathering restarts after filling up.
+     */
+    fun computeStoreRoomResumeThreshold(storageCap: Double): Double {
+        if (!storageCap.isFinite() || storageCap <= 0.0) return 0.0
+        return ((storageCap * STORE_ROOM_RESUME_THRESHOLD_RATIO) * 100.0).roundToInt() / 100.0
+    }
+
+    /**
+     * Returns true when the Vault Supply Store Room gathering is halted:
+     * 1) Immediately halts when total stored resources >= storageCap (or any single shelf >= storageCap).
+     * 2) Once halted (state.isStoreRoomGatheringHalted == true), stays halted until stored resources drop
+     *    to or below HALF capacity (<= storageCap * 0.50), preventing the alert banner from flickering on and off!
+     */
+    fun isStoreRoomFull(state: OutpostStateEntity, storageCap: Double): Boolean {
+        if (!storageCap.isFinite() || storageCap <= 0.0) return false
+        val totalStored = computeTotalStoredResources(state)
+        val reachedFullCap = totalStored >= storageCap ||
+            state.scrap >= storageCap ||
+            state.water >= storageCap ||
+            state.rations >= storageCap ||
+            state.bioFuel >= storageCap ||
+            state.researchData >= storageCap
+        if (reachedFullCap) return true
+        if (state.isStoreRoomGatheringHalted) {
+            val resumeThreshold = computeStoreRoomResumeThreshold(storageCap)
+            return totalStored > resumeThreshold
+        }
+        return false
     }
 
     /**
@@ -663,10 +719,11 @@ object OutpostCalculator {
         val radarLevel = buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0
         val gasMaskReduction = if ((state?.gasMasksCount ?: 0) > 0) 3 else 0
         val hazmatReduction = if ((state?.hazmatSuitsCount ?: 0) > 0) 4 else 0
+        val armorReduction = ((state?.dwellerArmorCount ?: 0) / 2).coerceAtMost(2)
         val isDangerousNight = state != null && DayNightPhase.fromCycleProgress(state.cycleProgress) == DayNightPhase.RAD_NIGHT
         val nightHazardAdder = if (isDangerousNight) 6 else 0
-        val minFloor = if (gasMaskReduction > 0 || hazmatReduction > 0) 2 else 3
-        return (type.deathChancePercent + nightHazardAdder - radarLevel - gasMaskReduction - hazmatReduction).coerceAtLeast(minFloor)
+        val minFloor = if (gasMaskReduction > 0 || hazmatReduction > 0 || armorReduction > 0) 2 else 3
+        return (type.deathChancePercent + nightHazardAdder - radarLevel - gasMaskReduction - hazmatReduction - armorReduction).coerceAtLeast(minFloor)
     }
 
     fun computeProductionSnapshot(
@@ -817,14 +874,16 @@ object OutpostCalculator {
         val combinedRationDiscount = habUpkeepDiscount * cryoUpkeepDiscount * legacyRationDiscount
         val isWorkersStarvingOrDehydrated = state.totalSurvivors > 0 && (state.rations <= 0.0 || state.water <= 0.0)
 
-        // 2. Daily Base Defense Rating, Bulkhead Silo Bonus, Ammo-Fed Turrets, Cryo Traps, Relics (+2 DEF each) & Door Integrity Scaling
+        // 2. Daily Base Defense Rating, Bulkhead Silo Bonus, Ammo-Fed Turrets, Cryo Traps, Relics (+2 DEF each), Expedition Dweller Armor & Weapons & Door Integrity Scaling
         val rankHighOctane = skillsMap["IND_HIGH_OCTANE_CRACKING"] ?: 0
         val cryoTrapBonusDef = state.activeCryoTrapsCount.coerceAtLeast(0) * 14
         val relicBonusDef = relicsCount * RELIC_DEFENSE_BONUS_PER_RELIC
+        val dwellerGearBonusDef = computeDwellerGearDefenseBonus(state)
         val unpoweredDefense = state.blastDoorLevel * 20 +
             state.craftedShrapnelMines * CraftableItemType.SHRAPNEL_MINE.defenseRatingBonus +
             cryoTrapBonusDef +
             relicBonusDef +
+            dwellerGearBonusDef +
             (if (isWorkersStarvingOrDehydrated) 0 else (scrapperCount * 10 + stalkerCount * 16))
         val turretAmmoFactor = if (state.ammoRounds > 0) 1.0 else 0.55
         val hasBuiltAutoDefenses = state.sentryTurretCount > 0 || state.plasmaCannonCount > 0
@@ -868,30 +927,33 @@ object OutpostCalculator {
         val maxWorkerCapacity = (BASE_MAX_CITIZENS + habLevel * BuildingType.SURVIVOR_HAB_BLOCK.populationBonusPerLevel)
             .coerceAtMost(MAX_VAULT_DWELLERS)
         val maxPickaxeLevelAllowed = computeMaxPickaxeLevel(buildingsMap)
+        val totalStoredResources = computeTotalStoredResources(state)
+        val storeRoomResumeThreshold = computeStoreRoomResumeThreshold(storageCap)
+        val isStoreRoomFull = isStoreRoomFull(state, storageCap)
 
-        // Daily Powered Room Supply Bonuses (scarce ~50-60% reduced daily room yields)
-        val dailyRoomFoodBonus = if (isVaultBlackout) {
+        // Daily Powered Room Supply Bonuses (scarce ~50-60% reduced daily room yields; 0.0 when Store Room is full!)
+        val dailyRoomFoodBonus = if (isVaultBlackout || isStoreRoomFull) {
             0.0
         } else {
             ((farmLevel * 3.8 * computeRoomLevelOutputMultiplier(farmLevel) +
                 cryoVaultLevel * 2.4 * computeRoomLevelOutputMultiplier(cryoVaultLevel)) * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomWaterBonus = if (isVaultBlackout) {
+        val dailyRoomWaterBonus = if (isVaultBlackout || isStoreRoomFull) {
             0.0
         } else {
             ((condenserLevel * 2.8 * computeRoomLevelOutputMultiplier(condenserLevel)) * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomScrapBonus = if (isVaultBlackout) {
+        val dailyRoomScrapBonus = if (isVaultBlackout || isStoreRoomFull) {
             0.0
         } else {
-            ((smelteryLevel * 4.5 * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
+            ((smelteryLevel * 4.5 * SCRAP_GATHER_RATE_MULTIPLIER * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomGoldBonus = if (isVaultBlackout) {
+        val dailyRoomGoldBonus = if (isVaultBlackout || isStoreRoomFull) {
             0.0
         } else {
             ((smelteryLevel * 1.4 * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomFuelBonus = if (isVaultBlackout) {
+        val dailyRoomFuelBonus = if (isVaultBlackout || isStoreRoomFull) {
             0.0
         } else {
             ((smelteryLevel * 0.75 * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
@@ -994,7 +1056,7 @@ object OutpostCalculator {
 
         // STRICT ZERO-DWELLER, WORKER STARVATION/DEHYDRATION, OR VAULT BLACKOUT RULE:
         if (state.totalSurvivors <= 0 || totalAssigned <= 0 || isVaultBlackout || isWorkersStarvingOrDehydrated) {
-            val haltedDeficit = totalVaultResourceDrainPerSec > 0.05 && !isEarlyBunkerGraceActive
+            val haltedDeficit = !isStoreRoomFull && totalVaultResourceDrainPerSec > 0.05 && !isEarlyBunkerGraceActive
             val haltedDefenseRating = if (haltedDeficit) 0 else totalDefenseRating
             val haltedNetBalance = ((-totalVaultResourceDrainPerSec) * 100.0).roundToInt() / 100.0
             return ProductionSnapshot(
@@ -1084,7 +1146,11 @@ object OutpostCalculator {
                 relicDefenseBonus = relicBonusDef,
                 relicMegawattBonus = relicMegawattBonus,
                 relicStorageBonus = relicStorageBonus,
-                relicAutoRepairDiscountPercent = relicAutoRepairDiscountPercent
+                relicAutoRepairDiscountPercent = relicAutoRepairDiscountPercent,
+                isStoreRoomFull = isStoreRoomFull,
+                totalStoredResources = totalStoredResources,
+                storeRoomResumeThreshold = storeRoomResumeThreshold,
+                dwellerGearDefenseBonus = dwellerGearBonusDef
             )
         }
 
@@ -1271,26 +1337,32 @@ object OutpostCalculator {
         val rankHydroFiltration = skillsMap["IND_HYDRO_FILTRATION"] ?: 0
         val rankSovereign = skillsMap["WRK_SOVEREIGN_COMMAND"] ?: 0
 
-        val passiveFoodFromTraps = (
-            state.craftedSnareTraps * CraftableItemType.SNARE_TRAP.passiveFoodPerSec * 0.5 +
-            state.aetherCrossbowLevel * CraftableItemType.AETHER_CROSSBOW.passiveFoodPerSec * 0.5
-        ) * (1.0 + rankHydroFiltration * 0.22) * (1.0 + farmLevel * 0.25)
+        val passiveFoodFromTraps = if (isStoreRoomFull) {
+            0.0
+        } else {
+            (
+                state.craftedSnareTraps * CraftableItemType.SNARE_TRAP.passiveFoodPerSec * 0.5 +
+                state.aetherCrossbowLevel * CraftableItemType.AETHER_CROSSBOW.passiveFoodPerSec * 0.5
+            ) * (1.0 + rankHydroFiltration * 0.22) * (1.0 + farmLevel * 0.25)
+        }
 
-        val grossScrapPerSec = scrapBase * (1.0 + rankRotarySaws * 0.18) * effectiveScrapPhase * daylightSkillMult * nightSkillMult * globalMult
+        // ALL RESOURCES DO NOT GATHER WHEN STORE ROOM IS FULL:
+        val storeRoomGatherGate = if (isStoreRoomFull) 0.0 else 1.0
+        val grossScrapPerSec = storeRoomGatherGate * scrapBase * SCRAP_GATHER_RATE_MULTIPLIER * (1.0 + rankRotarySaws * 0.18) * effectiveScrapPhase * daylightSkillMult * nightSkillMult * globalMult
         val scrapPerSec = (grossScrapPerSec - totalRoomScrapUpkeepPerSec).coerceAtLeast(-2.5)
-        val grossWaterPerSec = waterBase * (1.0 + rankHydroFiltration * 0.22) * effectiveWaterPhase * daylightSkillMult * nightSkillMult * globalMult
+        val grossWaterPerSec = storeRoomGatherGate * waterBase * (1.0 + rankHydroFiltration * 0.22) * effectiveWaterPhase * daylightSkillMult * nightSkillMult * globalMult
         val waterPerSec = (grossWaterPerSec - totalRoomWaterUpkeepPerSec - citizenWaterUpkeep).coerceAtLeast(-2.5)
 
-        val grossRationsPerSec = rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + passiveFoodFromTraps
+        val grossRationsPerSec = storeRoomGatherGate * (rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + passiveFoodFromTraps)
         val rationsPerSec = (grossRationsPerSec - citizenFoodUpkeep).coerceAtLeast(-2.5)
 
-        val goldMineSmallFuelPerSec = ((goldMineFuelTrickle) * 100.0).roundToInt() / 100.0
-        val grossFuelPerSec = bioFuelBase * (1.0 + rankHighOctane * 0.25) * daylightSkillMult * nightSkillMult * globalMult + goldMineSmallFuelPerSec
+        val goldMineSmallFuelPerSec = if (isStoreRoomFull) 0.0 else ((goldMineFuelTrickle) * 100.0).roundToInt() / 100.0
+        val grossFuelPerSec = storeRoomGatherGate * (bioFuelBase * (1.0 + rankHighOctane * 0.25) * daylightSkillMult * nightSkillMult * globalMult + goldMineSmallFuelPerSec)
         val bioFuelPerSec = if (bioFuelBase > 0.0 || goldMineSmallFuelPerSec > 0.0 || totalRoomFuelUpkeepPerSec > 0.0 || reactorFuelUpkeep > 0.0) {
             (grossFuelPerSec - reactorFuelUpkeep - totalRoomFuelUpkeepPerSec)
                 .coerceAtLeast(-4.0)
         } else 0.0
-        val goldPerSec = ((goldBase * (1.0 + rankSovereign * 0.20) * daylightSkillMult * nightSkillMult * globalMult) * 100.0).roundToInt() / 100.0
+        val goldPerSec = if (isStoreRoomFull) 0.0 else ((goldBase * (1.0 + rankSovereign * 0.20) * daylightSkillMult * nightSkillMult * globalMult) * 100.0).roundToInt() / 100.0
 
         val totalGrossResourceGainPerSec =
             ((grossScrapPerSec + grossWaterPerSec + grossRationsPerSec + grossFuelPerSec) * 100.0).roundToInt() / 100.0
@@ -1298,14 +1370,15 @@ object OutpostCalculator {
             ((totalGrossResourceGainPerSec - totalVaultResourceDrainPerSec) * 100.0).roundToInt() / 100.0
         val isMakingPositiveResources = totalGrossResourceGainPerSec >= totalVaultResourceDrainPerSec
         val isVaultResourceDeficit = !isEarlyBunkerGraceActive &&
+            !isStoreRoomFull &&
             totalVaultResourceDrainPerSec > 0.05 &&
             totalVaultResourceDrainPerSec > totalGrossResourceGainPerSec
         val isDefenseShutDownByDeficit = isVaultResourceDeficit
         val effectiveTotalDefenseRating = if (isDefenseShutDownByDeficit) 0 else totalDefenseRating
         val effectiveAutoDefenseActive = if (isDefenseShutDownByDeficit) false else isAutoDefenseActive
 
-        val researchPerSec = researchBase * (1.0 + rankSovereign * 0.25) * effectiveResearchPhase * daylightSkillMult * nightSkillMult * globalMult
-        val mutagenCoresPerSec = mutagenBase * (1.0 + rankBiolumSensors * 0.20) * effectiveMutagenPhase * nightSkillMult * globalMult
+        val researchPerSec = storeRoomGatherGate * researchBase * (1.0 + rankSovereign * 0.25) * effectiveResearchPhase * daylightSkillMult * nightSkillMult * globalMult
+        val mutagenCoresPerSec = storeRoomGatherGate * mutagenBase * (1.0 + rankBiolumSensors * 0.20) * effectiveMutagenPhase * nightSkillMult * globalMult
 
         val arrayLevel = buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0
         val xpFromWorkers = totalAssigned * 0.55
@@ -1413,7 +1486,11 @@ object OutpostCalculator {
             relicDefenseBonus = relicBonusDef,
             relicMegawattBonus = relicMegawattBonus,
             relicStorageBonus = relicStorageBonus,
-            relicAutoRepairDiscountPercent = relicAutoRepairDiscountPercent
+            relicAutoRepairDiscountPercent = relicAutoRepairDiscountPercent,
+            isStoreRoomFull = isStoreRoomFull,
+            totalStoredResources = totalStoredResources,
+            storeRoomResumeThreshold = storeRoomResumeThreshold,
+            dwellerGearDefenseBonus = dwellerGearBonusDef
         )
     }
 
@@ -1847,7 +1924,7 @@ object OutpostCalculator {
         val scrapperPerkMult = if ((scrapperEntity?.assignedCount ?: 0) > 0 && (scrapperEntity?.classLevel ?: 1) >= 5) 1.20 else 1.0
 
         fun bonusForResource(res: ResourceType): Double = when (res) {
-            ResourceType.SCRAP -> (1.0 + yardLv * 0.25) * scrapperPerkMult * activePhase.scrapMultiplier
+            ResourceType.SCRAP -> SCRAP_GATHER_RATE_MULTIPLIER * (1.0 + yardLv * 0.25) * scrapperPerkMult * activePhase.scrapMultiplier
             ResourceType.WATER -> (1.0 + condenserLv * 0.25) * activePhase.waterMultiplier
             ResourceType.RATIONS -> (1.0 + hydroLv * 0.25) * activePhase.rationsMultiplier
             ResourceType.BIO_FUEL -> (1.0 + refineryLv * 0.30)
@@ -1902,7 +1979,8 @@ object OutpostCalculator {
     }
 
     fun computeSalvageRigUpgradeCost(rigLevel: Int): Pair<Double, Double> {
-        val scrapCost = (36.0 * 1.58.pow((rigLevel - 1).toDouble())).roundToInt().toDouble()
+        // Manual mining and Pickaxe upgrades cost 0 Scrap (gated by Smeltery room level and small Bio-Fuel at Lv.2+)
+        val scrapCost = 0.0
         val fuelCost = if (rigLevel >= 2) (14.0 * 1.48.pow((rigLevel - 2).toDouble())).roundToInt().toDouble() else 0.0
         return scrapCost to fuelCost
     }

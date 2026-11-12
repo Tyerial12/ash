@@ -649,7 +649,7 @@ private fun DwellerExpeditionsCard(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Send a hired Dweller into the wasteland — Gas Masks (-3% risk), Hazmat Suits (-4% risk) & Ammo (+25% loot) auto-equip!",
+                            text = "Send a Dweller on expeditions to scavenge Dweller Armor (+12 DEF) & Weapons (+15 DEF) for permanent extra Outpost Defense!",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -668,6 +668,22 @@ private fun DwellerExpeditionsCard(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
+            }
+
+            val totalGearDefBonus = OutpostCalculator.computeDwellerGearDefenseBonus(state)
+            Surface(
+                color = RadTeal.copy(alpha = 0.14f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, RadTeal.copy(alpha = 0.65f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "🛡 Dweller Armor: ${state.dwellerArmorCount} (+${state.dwellerArmorCount * OutpostCalculator.DWELLER_ARMOR_DEFENSE_BONUS} DEF) • 🔫 Dweller Weapons: ${state.dwellerWeaponsCount} (+${state.dwellerWeaponsCount * OutpostCalculator.DWELLER_WEAPON_DEFENSE_BONUS} DEF) • Total Extra DEF: +$totalGearDefBonus",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = RadTeal,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             }
 
             Text(
@@ -765,8 +781,10 @@ private fun DwellerExpeditionsCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
+                            val expDefBonus = exp.armorReward * OutpostCalculator.DWELLER_ARMOR_DEFENSE_BONUS +
+                                exp.weaponsReward * OutpostCalculator.DWELLER_WEAPON_DEFENSE_BONUS
                             Text(
-                                text = "Haul: +${exp.foodReward.toInt()} Food • +${exp.waterReward.toInt()} Water • +${exp.scrapReward.toInt()} Scrap • +${exp.goldReward.toInt()} Gold • +${exp.xpReward.toInt()} XP",
+                                text = "Combat Gear Haul: +${exp.armorReward} Armor & +${exp.weaponsReward} Weapon(s) (+$expDefBonus Extra DEF) • +${exp.foodReward.toInt()}F • +${exp.waterReward.toInt()}W • +${exp.scrapReward.toInt()}S • +${exp.goldReward.toInt()}G",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = XpGold
                             )

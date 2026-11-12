@@ -63,6 +63,9 @@ data class OutpostStateEntity(
     val uniqueDwellersCount: Int = 0, // Rare 8% Unique Vault Dwellers with +40% resource gathering ability each!
     val totalDwellersLost: Int = 0,
     val totalExpeditionsCompleted: Int = 0,
+    val dwellerArmorCount: Int = 0, // Salvaged Dweller Armor from Expeditions (+12 Extra Defense each & -1% expedition death risk up to -3%)
+    val dwellerWeaponsCount: Int = 0, // Salvaged Dweller Weapons from Expeditions (+15 Extra Defense each & +10% expedition loot security up to +30%)
+    val isStoreRoomGatheringHalted: Boolean = false, // Latches true when Store Room is full; stays true until stored resources drop to half (<= 50% cap)
     val cycleProgress: Float = 0.15f,
     val dayCounter: Int = 1,
     val lastAttackDayResolved: Int = 0,

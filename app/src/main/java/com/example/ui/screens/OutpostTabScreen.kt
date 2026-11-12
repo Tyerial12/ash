@@ -103,11 +103,11 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private enum class VaultSubView(val label: String, val tag: String) {
-    MAP_AND_MINE("2D & Mine", "vault_subtab_map"),
-    VAULT_3D_MAP("3D Map", "vault_subtab_3d_map"),
-    VAULT_ROOMS("Rooms #1-#11", "vault_subtab_rooms"),
-    POWER_AND_CLOCKS("Power & Clocks", "vault_subtab_power"),
-    ALL("All Systems", "vault_subtab_all")
+    MAP_AND_MINE("⛏ Mine (0S)", "vault_subtab_map"),
+    VAULT_3D_MAP("🗺 3D Map", "vault_subtab_3d_map"),
+    VAULT_ROOMS("🏗 Rooms", "vault_subtab_rooms"),
+    POWER_AND_CLOCKS("⚡ Power", "vault_subtab_power"),
+    ALL("📋 All", "vault_subtab_all")
 }
 
 @Composable
@@ -250,19 +250,6 @@ fun OutpostTabScreen(
                 }
             }
 
-            if (show2dVaultMap) {
-                // Interactive 2D Underground Cutaway Vault Map (Walk to click each room to upgrade, mine, or fish!)
-                item(key = "interactive_2d_vault_cutaway_map") {
-                    Interactive2dVaultCutawayCard(
-                        uiState = uiState,
-                        onWalkToStation = onWalkToStation,
-                        onMineOreAtStation = { onHarvestNode(0) },
-                        onFishAtStation = { onFishSpot(FishingSpot.CRATER_SHALLOWS_TROUT) },
-                        onUpgradeRoomAtStation = onUpgradeBuilding
-                    )
-                }
-            }
-
             // Active Vault Room Construction Progress Card (always visible at top when building!)
             uiState.activeConstruction?.let { activeBuild ->
                 item(key = "active_building_construction_banner") {
@@ -276,24 +263,7 @@ fun OutpostTabScreen(
             }
 
             if (showMineAndFix) {
-                item(key = "subterranean_deep_core_drilling_item") {
-                    SubterraneanDeepCoreDrillingCard(
-                        uiState = uiState,
-                        onExecuteDeepCoreDrill = onExecuteDeepCoreDrill,
-                        onStrikeSubterraneanBoss = onStrikeSubterraneanBoss
-                    )
-                }
-
-                item(key = "hardcore_mining_hazards_item") {
-                    HardcoreMiningHazardsCard(
-                        uiState = uiState,
-                        onSharpenPickaxe = onSharpenPickaxe,
-                        onCoolMiningShaft = onCoolMiningShaft,
-                        onClearCaveIn = onClearCaveIn
-                    )
-                }
-
-                // 2. Pickaxe Mining & Bedrock Excavation Deck (Start with nothing but a Pickaxe!)
+                // 1. Primary Action First: Pickaxe Mining & Bedrock Excavation Deck (0 Scrap Cost!)
                 item(key = "salvage_field_deck") {
                     WastelandSalvageFieldDeck(
                         uiState = uiState,
@@ -303,13 +273,45 @@ fun OutpostTabScreen(
                     )
                 }
 
-                // 3. Ore Crates & Gold Bullion Smelter
+                // 2. 1-Tap Free Mining Maintenance (Sharpen Pickaxe & Clear Cave-In cost 0 Scrap!)
+                item(key = "hardcore_mining_hazards_item") {
+                    HardcoreMiningHazardsCard(
+                        uiState = uiState,
+                        onSharpenPickaxe = onSharpenPickaxe,
+                        onCoolMiningShaft = onCoolMiningShaft,
+                        onClearCaveIn = onClearCaveIn
+                    )
+                }
+
+                // 3. Deep-Core Borehole Drilling & Pre-Fall Relics (0 Scrap Cost!)
+                item(key = "subterranean_deep_core_drilling_item") {
+                    SubterraneanDeepCoreDrillingCard(
+                        uiState = uiState,
+                        onExecuteDeepCoreDrill = onExecuteDeepCoreDrill,
+                        onStrikeSubterraneanBoss = onStrikeSubterraneanBoss
+                    )
+                }
+
+                // 4. Ore Crates & Gold Bullion Smelter
                 item(key = "salvage_processing_bench_item") {
                     SalvageProcessingBenchCard(
                         uiState = uiState,
                         onDismantleOne = { onDismantleCaches(false) },
                         onDismantleAll = { onDismantleCaches(true) },
                         onSmeltSalvageForGold = onSmeltSalvageForGold
+                    )
+                }
+            }
+
+            if (show2dVaultMap) {
+                // Interactive 2D Underground Cutaway Vault Map (Walk to click each room to upgrade, mine, or fish!)
+                item(key = "interactive_2d_vault_cutaway_map") {
+                    Interactive2dVaultCutawayCard(
+                        uiState = uiState,
+                        onWalkToStation = onWalkToStation,
+                        onMineOreAtStation = { onHarvestNode(0) },
+                        onFishAtStation = { onFishSpot(FishingSpot.CRATER_SHALLOWS_TROUT) },
+                        onUpgradeRoomAtStation = onUpgradeBuilding
                     )
                 }
             }
@@ -1537,13 +1539,13 @@ private fun WastelandSalvageFieldDeck(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${pickaxeTitle.uppercase()} (LV.${state.salvageRigLevel})",
+                        text = "${pickaxeTitle.uppercase()} (LV.${state.salvageRigLevel} • 0 SCRAP COST)",
                         style = MaterialTheme.typography.titleSmall,
                         color = SolarAmber,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "You start with nothing but a Pickaxe! Swing your Pickaxe to mine Stone/Scrap, Water, Fuel & Gold to build your Vault.",
+                        text = "Manual mining costs 0 Scrap! Swing your Pickaxe for free to gather Scrap, Gold, Water & Fuel while Scrap repairs automated rooms daily.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -1652,12 +1654,12 @@ private fun WastelandSalvageFieldDeck(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    val fuelSuffix = if (rigFuelCost > 0) "+${rigFuelCost.toInt()}F" else ""
+                    val costLabel = if (rigFuelCost > 0) "0S + ${rigFuelCost.toInt()}F" else "FREE • 0S"
                     Text(
                         text = if (isCappedBySmeltery) {
                             "NEED SMELTERY (CAP LV.${prod.maxPickaxeLevelAllowed})"
                         } else {
-                            "UPGRADE PICKAXE LV.${state.salvageRigLevel + 1} (${rigScrapCost.toInt()}S$fuelSuffix)"
+                            "UPGRADE PICKAXE LV.${state.salvageRigLevel + 1} ($costLabel)"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = if (canAffordRig && !isCappedBySmeltery) SolarAmber else TextMuted,
@@ -2473,7 +2475,7 @@ fun SubterraneanDeepCoreDrillingCard(
                         .testTag("execute_deep_core_drill_btn")
                 ) {
                     Text(
-                        text = "DRILL DEEP CORE (+75m • RELIC ROLL)",
+                        text = "DRILL DEEP CORE (+75m • 0 SCRAP • RELIC ROLL)",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.ExtraBold
                     )

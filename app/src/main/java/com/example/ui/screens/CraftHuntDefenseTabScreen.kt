@@ -212,6 +212,9 @@ fun CraftHuntDefenseTabScreen(
                         minesCount = state.craftedShrapnelMines,
                         turretsCount = state.sentryTurretCount,
                         plasmaCount = state.plasmaCannonCount,
+                        dwellerArmorCount = state.dwellerArmorCount,
+                        dwellerWeaponsCount = state.dwellerWeaponsCount,
+                        dwellerGearDefenseBonus = prod.dwellerGearDefenseBonus,
                         ammoRounds = state.ammoRounds,
                         scrapStock = state.scrap,
                         bioFuelStock = state.bioFuel,
@@ -734,6 +737,9 @@ private fun DefensePerimeterCard(
     minesCount: Int,
     turretsCount: Int,
     plasmaCount: Int,
+    dwellerArmorCount: Int = 0,
+    dwellerWeaponsCount: Int = 0,
+    dwellerGearDefenseBonus: Int = 0,
     ammoRounds: Int = 20,
     scrapStock: Double = 0.0,
     bioFuelStock: Double = 0.0,
@@ -804,7 +810,7 @@ private fun DefensePerimeterCard(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Door Lv.$blastDoorLevel • Mines: $minesCount • Turrets: $turretsCount • Plasma: $plasmaCount • Ammo: $ammoRounds Rds",
+                            text = "Door Lv.$blastDoorLevel • Mines: $minesCount • Turrets: $turretsCount • Plasma: $plasmaCount • Dweller Gear: $dwellerArmorCount Armor / $dwellerWeaponsCount Wpn (+$dwellerGearDefenseBonus DEF)",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextMutedAsh
                         )

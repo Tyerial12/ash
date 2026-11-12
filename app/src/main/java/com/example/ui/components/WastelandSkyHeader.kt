@@ -319,17 +319,22 @@ fun WastelandSkyHeader(
                 )
             }
 
-            // Always-Visible Net Resource Balance Readout (Positive Surplus vs Taking More Than Making)
+            // Always-Visible Net Resource Balance Readout (Positive Surplus vs Store Room Halted vs Taking More Than Making)
             val isPositiveBalance = production.isMakingPositiveResources
             val netSign = if (production.netResourceBalancePerSec >= 0.0) "+" else ""
+            val balanceBadgeColor = when {
+                production.isStoreRoomFull -> WarningOrange
+                isPositiveBalance -> SurplusGreen
+                else -> HazardRed
+            }
             Surface(
-                color = (if (isPositiveBalance) SurplusGreen else HazardRed).copy(alpha = 0.16f),
+                color = balanceBadgeColor.copy(alpha = 0.16f),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 2.dp)
                     .testTag("header_net_resource_balance_badge"),
                 shape = RoundedCornerShape(6.dp),
-                border = BorderStroke(1.dp, if (isPositiveBalance) SurplusGreen.copy(alpha = 0.75f) else HazardRed)
+                border = BorderStroke(1.dp, balanceBadgeColor.copy(alpha = 0.85f))
             ) {
                 Row(
                     modifier = Modifier
@@ -339,17 +344,23 @@ fun WastelandSkyHeader(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isPositiveBalance) {
+                        text = if (production.isStoreRoomFull) {
+                            "📦 STORE ROOM HALTED (${production.totalStoredResources.toInt()}/${production.storageCap.toInt()} • Restarts at ≤${production.storeRoomResumeThreshold.toInt()})"
+                        } else if (isPositiveBalance) {
                             "🟢 MAKING POSITIVE RESOURCES ($netSign${formatRate(production.netResourceBalancePerSec)}/s NET)"
                         } else {
                             "🔴 TAKING MORE THAN MAKING (${formatRate(production.netResourceBalancePerSec)}/s NET)"
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isPositiveBalance) SurplusGreen else HazardRed,
+                        color = balanceBadgeColor,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s vs Drain -${formatRate(production.totalVaultResourceDrainPerSec)}/s • Cap ${production.storageCap.toInt()}",
+                        text = if (production.isStoreRoomFull) {
+                            "Spend to ≤${production.storeRoomResumeThreshold.toInt()} (50%) to Resume"
+                        } else {
+                            "Store Rm ${production.totalStoredResources.toInt()}/${production.storageCap.toInt()} • Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold

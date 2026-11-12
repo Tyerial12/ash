@@ -791,6 +791,48 @@ class ExampleUnitTest {
             "Effective total room output multiplier is worst at Level 0 (> 0.0) and increases every level",
             eff0 > 0.0 && eff0 < eff1 && eff1 < eff2 && eff2 < eff3
         )
+
+        // 7. All resources stop gathering when the Store Room is full, and do NOT restart gaining until resources drop to HALF (<= 50%)!
+        val fullStoreState = positiveState.copy(
+            scrap = positiveSnap.storageCap - 80.0,
+            water = 50.0,
+            rations = 50.0,
+            bioFuel = 50.0,
+            isStoreRoomGatheringHalted = true
+        )
+        val fullStoreSnap = OutpostCalculator.computeProductionSnapshot(fullStoreState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
+        assertTrue("Store Room is marked full when total stored resources reach storageCap", fullStoreSnap.isStoreRoomFull)
+        assertEquals("Store Room resume threshold is exactly half (50%) of storageCap", positiveSnap.storageCap * 0.50, fullStoreSnap.storeRoomResumeThreshold, 0.01)
+        assertEquals("When Store Room is full, total gross resource gathering per sec is 0.0", 0.0, fullStoreSnap.totalGrossResourceGainPerSec, 0.001)
+        assertEquals("When Store Room is full, Gold/s gathering is 0.0", 0.0, fullStoreSnap.goldPerSec, 0.001)
+        assertEquals("When Store Room is full, Research/s gathering is 0.0", 0.0, fullStoreSnap.researchPerSec, 0.001)
+        assertEquals("When Store Room is full, Mutagen/s gathering is 0.0", 0.0, fullStoreSnap.mutagenCoresPerSec, 0.001)
+        assertEquals("When Store Room is full, Daily Room Scrap Bonus is 0.0", 0.0, fullStoreSnap.dailyRoomScrapBonus, 0.001)
+        assertFalse("Full Store Room does not trigger a false resource deficit shutdown", fullStoreSnap.isVaultResourceDeficit)
+
+        // Dropping slightly below full (e.g. 80% full, still above 50% half threshold) keeps gathering HALTED so alert doesn't flicker!
+        val aboveHalfState = fullStoreState.copy(
+            scrap = positiveSnap.storageCap * 0.65,
+            water = 30.0,
+            rations = 30.0,
+            bioFuel = 20.0,
+            isStoreRoomGatheringHalted = true
+        )
+        val aboveHalfSnap = OutpostCalculator.computeProductionSnapshot(aboveHalfState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
+        assertTrue("Resources above half capacity (50%) stay halted once Store Room was full", aboveHalfSnap.isStoreRoomFull)
+        assertEquals("Gathering remains 0.0/s while resources are still above half capacity", 0.0, aboveHalfSnap.totalGrossResourceGainPerSec, 0.001)
+
+        // Once stored resources drop to or below half capacity (<= 50%), gathering restarts!
+        val atHalfState = fullStoreState.copy(
+            scrap = positiveSnap.storageCap * 0.25,
+            water = 20.0,
+            rations = 20.0,
+            bioFuel = 10.0,
+            isStoreRoomGatheringHalted = true
+        )
+        val atHalfSnap = OutpostCalculator.computeProductionSnapshot(atHalfState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
+        assertFalse("Once stored resources drop to or below half capacity, Store Room is no longer halted", atHalfSnap.isStoreRoomFull)
+        assertTrue("Once resources are at half capacity or below, resources restart gathering", atHalfSnap.totalGrossResourceGainPerSec > 0.0 && atHalfSnap.scrapPerSec > 0.0)
     }
 
     @Test
@@ -1025,6 +1067,7 @@ class ExampleUnitTest {
         assertEquals(2, widgetSnap.totalSurvivors)
         assertEquals(4, widgetSnap.maxWorkerCapacity)
         assertEquals(1, widgetSnap.onlineRoomsCount)
+        assertEquals("Widget auto-refresh interval is 10 seconds (10,000 ms)", 10_000L, com.example.widget.VaultStatusAppWidgetProvider.AUTO_REFRESH_INTERVAL_MILLIS)
     }
 
     @Test
@@ -1087,6 +1130,21 @@ class ExampleUnitTest {
         assertTrue("Relics give a small boost to Outpost MW generated", snap3Relics.totalMegawattGenerated > snap0Relics.totalMegawattGenerated)
         assertTrue("Relics give a small boost to Outpost Storage Capacity", snap3Relics.storageCap > snap0Relics.storageCap)
         assertTrue("Relics slightly reduce daily auto-repair Scrap cost", snap3Relics.dailyAutoRepairScrapCost < snap0Relics.dailyAutoRepairScrapCost)
+
+        // Verify manual mining Pickaxe upgrades cost 0.0 Scrap at all levels & Scrap gather rate is lowered by 20% (0.80x)
+        val (rigLv1ScrapCost, _) = OutpostCalculator.computeSalvageRigUpgradeCost(1)
+        val (rigLv4ScrapCost, _) = OutpostCalculator.computeSalvageRigUpgradeCost(4)
+        assertEquals("Manual mining Pickaxe Lv.1->2 upgrade costs 0 Scrap", 0.0, rigLv1ScrapCost, 0.001)
+        assertEquals("Manual mining Pickaxe Lv.4->5 upgrade costs 0 Scrap", 0.0, rigLv4ScrapCost, 0.001)
+        assertEquals("Scrap gather rate multiplier is lowered by 20% (0.80)", 0.80, OutpostCalculator.SCRAP_GATHER_RATE_MULTIPLIER, 0.001)
+
+        // Verify Wasteland Expeditions reward Dweller Armor & Weapons that add extra Outpost Defense
+        val expType = com.example.model.WastelandExpeditionType.SUPERMARKET_SUPPLY_RUN
+        assertTrue("Expeditions grant Dweller Armor and Weapons", expType.armorReward >= 1 && expType.weaponsReward >= 1)
+        val stateWithExpeditionGear = intactAutomatedState.copy(dwellerArmorCount = 2, dwellerWeaponsCount = 2)
+        val snapWithGear = OutpostCalculator.computeProductionSnapshot(stateWithExpeditionGear, buildingsLv3, workers, emptyMap(), 1000L)
+        assertEquals("2 Armor (24 DEF) + 2 Weapons (30 DEF) = +54 Extra Defense", 54, snapWithGear.dwellerGearDefenseBonus)
+        assertTrue("Dweller Armor and Weapons salvaged from expeditions increase total Outpost Defense", snapWithGear.totalDefenseRating > intactSnap.totalDefenseRating)
     }
 }
 

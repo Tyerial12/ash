@@ -350,7 +350,8 @@ fun AshfallOutpostApp(
     val state = uiState.state
     val prod = uiState.production
 
-    // Keep the installed Home Screen Phone Widget synchronized as resources and status change
+    // Keep the installed Home Screen Phone Widget synchronized as resources and status change,
+    // AND automatically refresh the widget every 10 seconds!
     LaunchedEffect(
         state.dayCounter,
         state.commandLevel,
@@ -362,6 +363,7 @@ fun AshfallOutpostApp(
         state.ammoRounds,
         prod.isVaultBlackout,
         prod.isDefenseShutDownByDeficit,
+        prod.isStoreRoomFull,
         prod.totalDefenseRating,
         state.dwellerHealthPercent,
         state.dwellerStaminaPercent,
@@ -372,6 +374,18 @@ fun AshfallOutpostApp(
             state = state,
             production = prod
         )
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(VaultStatusAppWidgetProvider.AUTO_REFRESH_INTERVAL_MILLIS)
+            val snapshotState = latestUiState
+            VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+                context = context,
+                state = snapshotState.state,
+                production = snapshotState.production
+            )
+        }
     }
 
     if (state.isGameOver) {
