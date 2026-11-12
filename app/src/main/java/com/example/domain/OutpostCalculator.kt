@@ -134,13 +134,16 @@ data class ProductionSnapshot(
     val hasWaterPurifierRoom: Boolean = false,
     val hasHydroponicsRoom: Boolean = false,
     val isRoomsLackingScrap: Boolean = false,
-    val roomScrapOperationalMultiplier: Double = 1.0
+    val roomScrapOperationalMultiplier: Double = 1.0,
+    val roomUpgradesStorageBonus: Double = 0.0
 )
 
 data class AutomatedDailyRepairPlan(
     val totalRoomLevels: Int = 0,
     val needsAutomatedRepair: Boolean = false,
     val scrapCost: Double = 0.0,
+    val waterCost: Double = 0.0,
+    val fuelCost: Double = 0.0,
     val doorIntegrityRestore: Int = 0,
     val generatorWearReduction: Int = 0,
     val roomWearReduction: Int = 0,
@@ -262,6 +265,10 @@ data class BuildingUpgradeCost(
     val additionalMegawattDraw: Double = 0.0,
     val currentRoomUpkeep: RoomResourceUpkeep = RoomResourceUpkeep(),
     val nextLevelRoomUpkeep: RoomResourceUpkeep = RoomResourceUpkeep(),
+    val storageCapBonusCurrent: Double = 0.0,
+    val storageCapBonusNextLevel: Double = 0.0,
+    val additionalStorageCapGain: Double = 0.0,
+    val exceedsCurrentStorageCap: Boolean = false,
     val buildTimeSeconds: Int = 8,
     val nextLevelBuildTimeSeconds: Int = 20,
     val rushGoldCost: Double = 10.0,
@@ -342,7 +349,7 @@ data class SalvageYieldPreview(
 
 object OutpostCalculator {
 
-    private const val BASE_STORAGE_CAP = 500.0
+    const val BASE_STORAGE_CAP = 150.0
     private const val BASE_MAX_CITIZENS = 4
     const val MAX_VAULT_DWELLERS = 30 // Maximum Dwellers allowed in the Vault (30 Max • +4 per Hab Block level)
     const val DWELLER_FEED_INTERVAL_SECONDS = 60 // Every 60 seconds real-time feeding cycle
@@ -445,6 +452,33 @@ object OutpostCalculator {
         if (storeRoomLevel <= 0) return 0.0
         val extraLevels = storeRoomLevel - 1
         return storeRoomLevel * BuildingType.VAULT_STORE_ROOM.storageBonusPerLevel * (1.0 + extraLevels * 0.25)
+    }
+
+    /**
+     * Every room upgrade in the Vault adds structural resource shelving (+45 at Lv.1, +110 at Lv.2, +205 at Lv.3, +330 at Lv.4, +485 at Lv.5),
+     * plus the dedicated storage bonus for Vault Store Room, Silo, and Cryo-Stasis Vault.
+     */
+    fun computeSingleRoomStorageCapContribution(buildingType: BuildingType, level: Int): Double {
+        if (level <= 0) return 0.0
+        val extraLevels = level - 1
+        val structuralRoomShelving = level * 45.0 + extraLevels * extraLevels * 20.0
+        val dedicatedStorage = when (buildingType) {
+            BuildingType.VAULT_STORE_ROOM -> computeStoreRoomStorageBonus(level)
+            else -> level * buildingType.storageBonusPerLevel
+        }
+        return structuralRoomShelving + dedicatedStorage
+    }
+
+    fun computeRoomUpgradesStorageBonus(buildingsMap: Map<String, Int>): Double {
+        var total = 0.0
+        for (bType in BuildingType.entries) {
+            val lv = buildingsMap[bType.id] ?: 0
+            if (lv > 0) {
+                val extraLevels = lv - 1
+                total += lv * 45.0 + extraLevels * extraLevels * 20.0
+            }
+        }
+        return total
     }
 
     /**
@@ -556,51 +590,55 @@ object OutpostCalculator {
     }
 
     /**
-     * Non-linear / Exponential Vault Resource Upkeep at Higher Room Levels AND Higher Vault Levels:
-     * The higher level your Vault and Vault rooms are, the more resources (Scrap maintenance, Cooling Water,
-     * and Industrial Bio-Fuel) they consume per second and per day to stay operational.
+     * Non-linear / Exponential Vault Room Maintenance at Higher Room Levels, Higher Vault Levels, AND Each Passing Day:
+     * Room maintenance takes significantly more resources (Scrap, Cooling Water, and Bio-Fuel) per level each day
+     * to keep rooms operational.
      */
     fun computeBuildingResourceUpkeep(
         buildingType: BuildingType,
         level: Int,
         hydroDiscountMult: Double = 1.0,
-        commandLevel: Int = 1
+        commandLevel: Int = 1,
+        dayCounter: Int = 1
     ): RoomResourceUpkeep {
         if (level <= 0) return RoomResourceUpkeep()
         val extraLevels = (level - 1).coerceAtLeast(0)
         val vaultLevelScale = computeVaultLevelUpkeepMultiplier(commandLevel)
-        // Steep super-linear escalation for Lv.2, Lv.3, Lv.4, Lv.5+ multiplied by Vault Level
+        val elapsedDays = (dayCounter.coerceAtLeast(1) - 1)
+        val dayMaintenanceScale = 1.0 + elapsedDays * 0.06
+        // Steep super-linear escalation for Lv.1, Lv.2, Lv.3, Lv.4, Lv.5+ multiplied by Vault Level & Day Counter
         val highLevelScale = (
-            level * (1.0 + extraLevels * 0.85) +
-                extraLevels * extraLevels * 0.55 +
-                extraLevels * extraLevels * extraLevels * 0.18
+            level * (1.0 + extraLevels * 0.95) +
+                extraLevels * extraLevels * 0.65 +
+                extraLevels * extraLevels * extraLevels * 0.22
             ) * vaultLevelScale
 
         val baseWater = buildingType.waterUpkeepPerLevel * highLevelScale * hydroDiscountMult
         val highLevelCoolantWater = if (level >= 2) {
-            extraLevels * (0.09 + extraLevels * 0.06 + extraLevels * extraLevels * 0.02) * vaultLevelScale * hydroDiscountMult
+            extraLevels * (0.11 + extraLevels * 0.075 + extraLevels * extraLevels * 0.025) * vaultLevelScale * hydroDiscountMult
         } else 0.0
         val waterPerSec = ((baseWater + highLevelCoolantWater) * 100.0).roundToInt() / 100.0
 
         val scrapPerSec = if (level >= 2 && buildingType != BuildingType.SALVAGE_YARD) {
-            ((extraLevels * (0.10 + extraLevels * 0.07 + extraLevels * extraLevels * 0.025) * vaultLevelScale) * 100.0).roundToInt() / 100.0
+            ((extraLevels * (0.12 + extraLevels * 0.085 + extraLevels * extraLevels * 0.03) * vaultLevelScale) * 100.0).roundToInt() / 100.0
         } else 0.0
 
         val fuelPerSec = if (level >= 2 && buildingType != BuildingType.BIO_SLUDGE_REFINERY) {
-            ((extraLevels * (0.06 + extraLevels * 0.045 + extraLevels * extraLevels * 0.015) * vaultLevelScale) * 100.0).roundToInt() / 100.0
+            ((extraLevels * (0.08 + extraLevels * 0.055 + extraLevels * extraLevels * 0.02) * vaultLevelScale) * 100.0).roundToInt() / 100.0
         } else 0.0
 
         val dailyScrap = (
-            level * (1.5 + extraLevels * 2.8 + extraLevels * extraLevels * 1.4 + extraLevels * extraLevels * extraLevels * 0.35) *
-                vaultLevelScale * 10.0
+            level * (3.5 + extraLevels * 6.2 + extraLevels * extraLevels * 3.4 + extraLevels * extraLevels * extraLevels * 0.90) *
+                vaultLevelScale * dayMaintenanceScale * 10.0
             ).roundToInt() / 10.0
         val dailyWater = (
-            level * (1.2 + extraLevels * 2.2 + extraLevels * extraLevels * 1.1 + extraLevels * extraLevels * extraLevels * 0.25) *
-                vaultLevelScale * hydroDiscountMult * 10.0
+            level * (2.6 + extraLevels * 4.8 + extraLevels * extraLevels * 2.6 + extraLevels * extraLevels * extraLevels * 0.70) *
+                vaultLevelScale * dayMaintenanceScale * hydroDiscountMult * 10.0
             ).roundToInt() / 10.0
-        val dailyFuel = if (level >= 2) {
-            ((extraLevels * (1.4 + extraLevels * 1.9 + extraLevels * extraLevels * 0.75) * vaultLevelScale) * 10.0).roundToInt() / 10.0
-        } else 0.0
+        val dailyFuel = (
+            level * (1.2 + extraLevels * 3.4 + extraLevels * extraLevels * 2.1 + extraLevels * extraLevels * extraLevels * 0.60) *
+                vaultLevelScale * dayMaintenanceScale * 10.0
+            ).roundToInt() / 10.0
 
         return RoomResourceUpkeep(
             scrapPerSec = scrapPerSec,
@@ -613,9 +651,9 @@ object OutpostCalculator {
     }
 
     /**
-     * Scrap is required every day depending on built Room Levels (each higher level takes more Scrap per day)
-     * to keep rooms 100% fully operational AND to automatically repair automated systems
-     * (Automated Defense/Blast Door, Automated Power Generators, and Room Machinery / Coolant Pipes / Sabotage).
+     * Room maintenance resources (Scrap, Cooling Water, and Bio-Fuel) are required every day depending on built Room Levels
+     * (each higher level takes more resources per day) to keep rooms 100% fully operational AND to automatically repair
+     * automated systems (Automated Defense/Blast Door, Automated Power Generators, and Room Machinery / Coolant Pipes / Sabotage).
      */
     fun computeDailyAutomatedRepairPlan(
         state: OutpostStateEntity,
@@ -634,24 +672,31 @@ object OutpostCalculator {
             return AutomatedDailyRepairPlan(
                 totalRoomLevels = totalRoomLevels,
                 needsAutomatedRepair = false,
-                scrapCost = 0.0
+                scrapCost = 0.0,
+                waterCost = 0.0,
+                fuelCost = 0.0
             )
         }
 
         val relicsCount = state.discoveredRelicsCount.coerceAtLeast(0)
         val relicDiscountMult = (1.0 - (relicsCount * RELIC_AUTO_REPAIR_DISCOUNT_PER_RELIC).coerceAtMost(0.25))
-        val baseRoomLevelScrap = rawDailyRoomScrapBudget ?: run {
-            var sum = 0.0
-            for (bType in BuildingType.entries) {
-                val lv = buildingsMap[bType.id] ?: 0
-                if (lv > 0) {
-                    sum += computeBuildingResourceUpkeep(bType, lv, 1.0, state.commandLevel).dailyScrap
-                }
+        var calcWaterSum = 0.0
+        var calcFuelSum = 0.0
+        var calcScrapSum = 0.0
+        for (bType in BuildingType.entries) {
+            val lv = buildingsMap[bType.id] ?: 0
+            if (lv > 0) {
+                val up = computeBuildingResourceUpkeep(bType, lv, 1.0, state.commandLevel, state.dayCounter)
+                calcScrapSum += up.dailyScrap
+                calcWaterSum += up.dailyWater
+                calcFuelSum += up.dailyFuel
             }
-            if (sum <= 0.0) 1.5 else sum
         }
+        val baseRoomLevelScrap = rawDailyRoomScrapBudget ?: if (calcScrapSum <= 0.0) 3.5 else calcScrapSum
 
-        val effectiveScrapCost = ((baseRoomLevelScrap.coerceAtLeast(1.5) * relicDiscountMult) * 10.0).roundToInt() / 10.0
+        val effectiveScrapCost = ((baseRoomLevelScrap.coerceAtLeast(3.5) * relicDiscountMult) * 10.0).roundToInt() / 10.0
+        val effectiveWaterCost = ((calcWaterSum * relicDiscountMult) * 10.0).roundToInt() / 10.0
+        val effectiveFuelCost = ((calcFuelSum * relicDiscountMult) * 10.0).roundToInt() / 10.0
         val effectiveLv = totalRoomLevels.coerceAtLeast(1)
 
         val doorRestore = if (doorDamaged) (10 + effectiveLv * 4).coerceAtMost(100) else 0
@@ -664,6 +709,8 @@ object OutpostCalculator {
             totalRoomLevels = totalRoomLevels,
             needsAutomatedRepair = true,
             scrapCost = effectiveScrapCost,
+            waterCost = effectiveWaterCost,
+            fuelCost = effectiveFuelCost,
             doorIntegrityRestore = doorRestore,
             generatorWearReduction = genWearReduce,
             roomWearReduction = roomWearReduce,
@@ -943,13 +990,16 @@ object OutpostCalculator {
         val tomorrowRequiredDefense = computeDailyRaidRequiredDefense(currentDay + 1, DayNightPhase.SCORCHING_DAY)
 
         val hydroStorageBonus = if (hydroCount > 0 && hydroLv >= 20) 1.15 else 1.0
+        val roomUpgradesStorageBonus = computeRoomUpgradesStorageBonus(buildingsMap)
+        val commandLevelStorageBonus = (state.commandLevel.coerceAtLeast(1) - 1) * 45.0
         val storageCap = (
             BASE_STORAGE_CAP +
+                roomUpgradesStorageBonus +
                 siloLevel * BuildingType.REINFORCED_SILO.storageBonusPerLevel +
                 cryoVaultLevel * BuildingType.CRYO_STASIS_VAULT.storageBonusPerLevel +
                 storeRoomStorageBonus +
                 relicStorageBonus +
-                state.commandLevel * 140.0
+                commandLevelStorageBonus
             ) * (1.0 + rankForgeOverdrive * 0.25) * hydroStorageBonus
 
         val maxWorkerCapacity = (BASE_MAX_CITIZENS + habLevel * BuildingType.SURVIVOR_HAB_BLOCK.populationBonusPerLevel)
@@ -1066,7 +1116,7 @@ object OutpostCalculator {
         for (bType in BuildingType.entries) {
             val bLevel = buildingsMap[bType.id] ?: 0
             if (bLevel <= 0) continue
-            val roomUpkeep = computeBuildingResourceUpkeep(bType, bLevel, hydroUpkeepMult, state.commandLevel)
+            val roomUpkeep = computeBuildingResourceUpkeep(bType, bLevel, hydroUpkeepMult, state.commandLevel, currentDay)
             totalRoomWaterUpkeepPerSec += roomUpkeep.waterPerSec * postureAndGraceUpkeepMult
             totalRoomFuelUpkeepPerSec += roomUpkeep.fuelPerSec * postureAndGraceUpkeepMult
             rawRoomScrapBudget += roomUpkeep.dailyScrap * postureAndGraceUpkeepMult
@@ -1077,7 +1127,7 @@ object OutpostCalculator {
         val dailyAutoRepairPlan = computeDailyAutomatedRepairPlan(
             state = state,
             buildingsMap = buildingsMap,
-            rawDailyRoomScrapBudget = if (rawRoomScrapBudget > 0.0) rawRoomScrapBudget else 1.5
+            rawDailyRoomScrapBudget = if (rawRoomScrapBudget > 0.0) rawRoomScrapBudget else 3.5
         )
         val totalDailyRoomScrapUpkeep = dailyAutoRepairPlan.scrapCost
 
@@ -1207,7 +1257,8 @@ object OutpostCalculator {
                 hasWaterPurifierRoom = hasWaterPurifierRoom,
                 hasHydroponicsRoom = hasHydroponicsRoom,
                 isRoomsLackingScrap = isRoomsLackingScrap,
-                roomScrapOperationalMultiplier = roomScrapOperationalMultiplier
+                roomScrapOperationalMultiplier = roomScrapOperationalMultiplier,
+                roomUpgradesStorageBonus = roomUpgradesStorageBonus
             )
         }
 
@@ -1535,6 +1586,7 @@ object OutpostCalculator {
             isMakingPositiveResources = isMakingPositiveResources,
             reactorFuelUpkeepPerSec = reactorFuelUpkeep,
             storeRoomStorageBonus = storeRoomStorageBonus,
+            roomUpgradesStorageBonus = roomUpgradesStorageBonus,
             isVaultResourceDeficit = isVaultResourceDeficit,
             isDefenseShutDownByDeficit = isDefenseShutDownByDeficit,
             isEarlyBunkerGraceActive = isEarlyBunkerGraceActive,
@@ -2088,33 +2140,33 @@ object OutpostCalculator {
         skillsMap: Map<String, Int>,
         workersMap: Map<String, WorkerClassEntity> = emptyMap(),
         currentTotalMwGenerated: Double = 100.0,
-        currentTotalMwDemand: Double = 4.0
+        currentTotalMwDemand: Double = 4.0,
+        currentStorageCap: Double = Double.MAX_VALUE
     ): BuildingUpgradeCost {
         val rankPrefab = skillsMap["IND_MODULAR_PREFAB"] ?: 0
         val rankNano = skillsMap["LEG_NANO_SCHEMATICS"] ?: 0
         val discount = ((1.0 - rankPrefab * 0.08) * (1.0 - rankNano * 0.06)).coerceAtLeast(0.50)
 
-        // Higher-level rooms require significantly more resources to upgrade (steep cubic + exponential escalation!)
+        // Rebalanced room upgrade cost curve aligned around Vault resource caps unlocked by room upgrades
         val highLevelEscalation = 1.0 +
-            currentLevel * 0.68 +
-            (currentLevel * currentLevel) * 0.42 +
-            (currentLevel * currentLevel * currentLevel) * 0.12
+            currentLevel * 0.35 +
+            (currentLevel * currentLevel) * 0.16
         val factor = buildingType.costGrowthFactor.pow(currentLevel.toDouble()) * highLevelEscalation * discount
 
         val scrapCost = (buildingType.baseScrapCost * factor).roundToInt().toDouble()
         val baseWater = if (buildingType.baseWaterCost > 0.0) {
-            buildingType.baseWaterCost * (1.0 + currentLevel * 0.18)
+            buildingType.baseWaterCost * (1.0 + currentLevel * 0.15)
         } else if (currentLevel >= 1) {
             // Upgrading any room to Lv.2+ requires progressively more Cooling Water per level
-            14.0 + buildingType.ordinal * 3.5 + (currentLevel - 1) * 5.0
+            12.0 + buildingType.ordinal * 2.5 + (currentLevel - 1) * 4.0
         } else 0.0
         val waterCost = (baseWater * factor).roundToInt().toDouble()
 
         val baseFuel = if (buildingType.baseFuelCost > 0.0) {
-            buildingType.baseFuelCost * (1.0 + currentLevel * 0.18)
+            buildingType.baseFuelCost * (1.0 + currentLevel * 0.15)
         } else if (currentLevel >= 2) {
             // Upgrading any room to Lv.3+ requires progressively more Industrial Bio-Fuel per level
-            12.0 + buildingType.ordinal * 3.0 + (currentLevel - 2) * 4.5
+            10.0 + buildingType.ordinal * 2.2 + (currentLevel - 2) * 3.8
         } else 0.0
         val fuelCost = (baseFuel * factor).roundToInt().toDouble()
 
@@ -2129,8 +2181,27 @@ object OutpostCalculator {
         val deltaMw = ((nextMw - currentMw) * 10.0).roundToInt() / 10.0
         val willExceedPowerGrid = (currentTotalMwDemand + deltaMw) > currentTotalMwGenerated
 
-        val currentRoomUpkeep = computeBuildingResourceUpkeep(buildingType, currentLevel, 1.0, state.commandLevel)
-        val nextLevelRoomUpkeep = computeBuildingResourceUpkeep(buildingType, currentLevel + 1, 1.0, state.commandLevel)
+        val currentRoomUpkeep = computeBuildingResourceUpkeep(
+            buildingType = buildingType,
+            level = currentLevel,
+            hydroDiscountMult = 1.0,
+            commandLevel = state.commandLevel,
+            dayCounter = state.dayCounter
+        )
+        val nextLevelRoomUpkeep = computeBuildingResourceUpkeep(
+            buildingType = buildingType,
+            level = currentLevel + 1,
+            hydroDiscountMult = 1.0,
+            commandLevel = state.commandLevel,
+            dayCounter = state.dayCounter
+        )
+
+        val storageCapBonusCurrent = computeSingleRoomStorageCapContribution(buildingType, currentLevel)
+        val storageCapBonusNextLevel = computeSingleRoomStorageCapContribution(buildingType, currentLevel + 1)
+        val additionalStorageCapGain = (storageCapBonusNextLevel - storageCapBonusCurrent).coerceAtLeast(0.0)
+        val exceedsCurrentStorageCap = scrapCost > currentStorageCap ||
+            waterCost > currentStorageCap ||
+            fuelCost > currentStorageCap
 
         val targetRoomLevel = currentLevel + 1
         val roomNumber = buildingType.ordinal + 1
@@ -2169,6 +2240,10 @@ object OutpostCalculator {
             additionalMegawattDraw = deltaMw,
             currentRoomUpkeep = currentRoomUpkeep,
             nextLevelRoomUpkeep = nextLevelRoomUpkeep,
+            storageCapBonusCurrent = storageCapBonusCurrent,
+            storageCapBonusNextLevel = storageCapBonusNextLevel,
+            additionalStorageCapGain = additionalStorageCapGain,
+            exceedsCurrentStorageCap = exceedsCurrentStorageCap,
             buildTimeSeconds = buildTimeSeconds,
             nextLevelBuildTimeSeconds = nextLevelBuildTimeSeconds,
             rushGoldCost = rushGoldCost,

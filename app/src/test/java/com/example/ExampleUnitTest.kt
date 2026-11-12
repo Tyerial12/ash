@@ -437,21 +437,85 @@ class ExampleUnitTest {
             costLv1To2.waterCost > 0.0 && costLv2To3.fuelCost > 0.0 && costLv3To4.fuelCost > costLv2To3.fuelCost
         )
 
-        val upkeepLv1 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 1)
-        val upkeepLv2 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 2)
-        val upkeepLv3 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 3)
-        val upkeepLv4 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 4)
+        // Verify resource caps are rebalanced around room upgrades:
+        // Base storage cap starts at 150.0, and each room upgrade increases total Vault storage cap!
+        assertEquals(150.0, OutpostCalculator.BASE_STORAGE_CAP, 0.01)
+        assertTrue(
+            "Every room upgrade grants additional resource storage capacity (Lv.0->1 < Lv.1->2 < Lv.2->3)",
+            costLv0To1.additionalStorageCapGain > 0.0 &&
+                costLv1To2.additionalStorageCapGain > costLv0To1.additionalStorageCapGain &&
+                costLv2To3.additionalStorageCapGain > costLv1To2.additionalStorageCapGain
+        )
+        val starterState = OutpostStateEntity(commandLevel = 1)
+        val snapNoRooms = OutpostCalculator.computeProductionSnapshot(starterState, emptyMap(), emptyMap(), emptyMap(), 1000L)
+        val snapRoomsLv1 = OutpostCalculator.computeProductionSnapshot(
+            starterState,
+            mapOf(
+                BuildingType.SALVAGE_YARD.id to 1,
+                BuildingType.ATMOSPHERIC_CONDENSER.id to 1,
+                BuildingType.HYDROPONIC_GREENHOUSE.id to 1
+            ),
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        val snapRoomsLv2 = OutpostCalculator.computeProductionSnapshot(
+            starterState,
+            mapOf(
+                BuildingType.SALVAGE_YARD.id to 2,
+                BuildingType.ATMOSPHERIC_CONDENSER.id to 2,
+                BuildingType.HYDROPONIC_GREENHOUSE.id to 2
+            ),
+            emptyMap(),
+            emptyMap(),
+            1000L
+        )
+        assertTrue(
+            "Upgrading standard Vault rooms expands storageCap around room upgrades (0 rooms < Lv.1 rooms < Lv.2 rooms)",
+            snapNoRooms.storageCap < snapRoomsLv1.storageCap &&
+                snapRoomsLv1.storageCap < snapRoomsLv2.storageCap &&
+                snapRoomsLv1.roomUpgradesStorageBonus > 0.0 &&
+                snapRoomsLv2.roomUpgradesStorageBonus > snapRoomsLv1.roomUpgradesStorageBonus
+        )
+        assertTrue(
+            "Lv.1 room upgrades fit within starter base storageCap, and Lv.2/Lv.3 room upgrades fit within the storageCap unlocked by upgrading rooms",
+            costLv0To1.scrapCost <= snapNoRooms.storageCap &&
+                costLv1To2.scrapCost <= snapRoomsLv1.storageCap &&
+                costLv2To3.scrapCost <= snapRoomsLv2.storageCap
+        )
+
+        val upkeepLv1 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 1, dayCounter = 1)
+        val upkeepLv2 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 2, dayCounter = 1)
+        val upkeepLv3 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 3, dayCounter = 1)
+        val upkeepLv4 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 4, dayCounter = 1)
 
         assertTrue(
-            "Higher room levels take super-linearly more daily Scrap & Water upkeep",
+            "Higher room levels take super-linearly more daily Scrap, Water & Bio-Fuel maintenance each day",
             upkeepLv1.dailyScrap < upkeepLv2.dailyScrap &&
                 upkeepLv2.dailyScrap < upkeepLv3.dailyScrap &&
                 upkeepLv3.dailyScrap < upkeepLv4.dailyScrap &&
-                (upkeepLv4.dailyScrap - upkeepLv3.dailyScrap) > (upkeepLv2.dailyScrap - upkeepLv1.dailyScrap)
+                (upkeepLv4.dailyScrap - upkeepLv3.dailyScrap) > (upkeepLv2.dailyScrap - upkeepLv1.dailyScrap) &&
+                upkeepLv1.dailyWater > 0.0 &&
+                upkeepLv1.dailyWater < upkeepLv2.dailyWater &&
+                upkeepLv2.dailyWater < upkeepLv3.dailyWater &&
+                upkeepLv1.dailyFuel > 0.0 &&
+                upkeepLv1.dailyFuel < upkeepLv2.dailyFuel &&
+                upkeepLv2.dailyFuel < upkeepLv3.dailyFuel &&
+                upkeepLv3.dailyFuel < upkeepLv4.dailyFuel
         )
+
+        // Verify room maintenance takes more resources per level as each day passes (Day 1 < Day 5 < Day 10)
+        val upkeepLv2Day1 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 2, dayCounter = 1)
+        val upkeepLv2Day5 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 2, dayCounter = 5)
+        val upkeepLv2Day10 = OutpostCalculator.computeBuildingResourceUpkeep(BuildingType.SALVAGE_YARD, 2, dayCounter = 10)
         assertTrue(
-            "Rooms at Level 2+ require daily Cooling Water & Rooms at Level 3+ require Bio-Fuel upkeep",
-            upkeepLv2.dailyWater > upkeepLv1.dailyWater && upkeepLv3.dailyFuel > 0.0 && upkeepLv4.dailyFuel > upkeepLv3.dailyFuel
+            "Room maintenance takes more Scrap, Water, and Fuel per level each passing day (Day 1 < Day 5 < Day 10)",
+            upkeepLv2Day1.dailyScrap < upkeepLv2Day5.dailyScrap &&
+                upkeepLv2Day5.dailyScrap < upkeepLv2Day10.dailyScrap &&
+                upkeepLv2Day1.dailyWater < upkeepLv2Day5.dailyWater &&
+                upkeepLv2Day5.dailyWater < upkeepLv2Day10.dailyWater &&
+                upkeepLv2Day1.dailyFuel < upkeepLv2Day5.dailyFuel &&
+                upkeepLv2Day5.dailyFuel < upkeepLv2Day10.dailyFuel
         )
     }
 

@@ -441,7 +441,8 @@ fun OutpostTabScreen(
                         skillsMap = uiState.skillsMap,
                         workersMap = uiState.workersMap,
                         currentTotalMwGenerated = uiState.production.totalMegawattGenerated,
-                        currentTotalMwDemand = uiState.production.totalMegawattDemand
+                        currentTotalMwDemand = uiState.production.totalMegawattDemand,
+                        currentStorageCap = uiState.production.storageCap
                     )
                     val assignedSynergyWorkers = buildingType.favoredWorkerClass?.let {
                         uiState.workersMap[it.id]?.assignedCount ?: 0
@@ -2049,11 +2050,25 @@ private fun BuildingStructureCard(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Higher-Level Room Drain (Lv.$level -> Lv.${level + 1}): -${cost.currentRoomUpkeep.dailyWater.toInt()}W/-${cost.currentRoomUpkeep.dailyFuel.toInt()}Fuel (-${cost.currentRoomUpkeep.dailyScrap.toInt()}S Auto-Repair) -> -${cost.nextLevelRoomUpkeep.dailyWater.toInt()}W/-${cost.nextLevelRoomUpkeep.dailyFuel.toInt()}Fuel (-${cost.nextLevelRoomUpkeep.dailyScrap.toInt()}S Auto-Repair)/Day",
+                            text = "📦 Resource Cap Bonus: +${cost.storageCapBonusCurrent.toInt()} -> +${cost.storageCapBonusNextLevel.toInt()} (+${cost.additionalStorageCapGain.toInt()} Resource Cap at Lv.${level + 1})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SurplusGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Daily Room Maintenance (Lv.$level -> Lv.${level + 1}, +6%/Day): -${cost.currentRoomUpkeep.dailyScrap.toInt()}S/-${cost.currentRoomUpkeep.dailyWater.toInt()}W/-${cost.currentRoomUpkeep.dailyFuel.toInt()}Fuel -> -${cost.nextLevelRoomUpkeep.dailyScrap.toInt()}S/-${cost.nextLevelRoomUpkeep.dailyWater.toInt()}W/-${cost.nextLevelRoomUpkeep.dailyFuel.toInt()}Fuel/Day",
                             style = MaterialTheme.typography.labelSmall,
                             color = WarningOrange,
                             fontWeight = FontWeight.SemiBold
                         )
+                        if (cost.exceedsCurrentStorageCap) {
+                            Text(
+                                text = "📦 STORAGE CAP GATED: Upgrade other rooms or Vault Store Room to raise Resource Cap for this Lv.${level + 1} upgrade!",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SolarAmber,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Text(
                             text = type.description,
                             style = MaterialTheme.typography.bodySmall,
