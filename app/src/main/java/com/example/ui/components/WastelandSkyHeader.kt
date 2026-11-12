@@ -730,9 +730,9 @@ private fun CurrentSystemsOnlineDrawerPanel(
                     VaultStatusAppWidgetProvider.pushLiveStateToWidgets(context, state, production)
                     val pinned = VaultStatusAppWidgetProvider.requestPinVaultWidget(context)
                     widgetFeedback = if (pinned) {
-                        "Phone Home-Screen Widget pin requested & synced!"
+                        "v22.0 3-Row Widget pin requested & synced (Quick Mine & Stabilize ready)!"
                     } else {
-                        "Widget telemetry synced! Long-press your Phone Home Screen -> Widgets -> Vault City to place it."
+                        "v22.0 Widget synced! Long-press Home Screen -> Widgets -> Vault City v22.0 Command."
                     }
                 }
                 .testTag("pin_phone_widget_btn")
@@ -743,7 +743,7 @@ private fun CurrentSystemsOnlineDrawerPanel(
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "📱 PIN / SYNC VAULT PHONE WIDGET (HOME SCREEN RESOURCES & STATUS)",
+                    text = "📱 PIN / SYNC VAULT WIDGET v22.0 (3-ROW • 10D PREP, 6D CLOCKS & QUICK ACTIONS)",
                     style = MaterialTheme.typography.labelSmall,
                     color = SolarAmber,
                     fontWeight = FontWeight.Bold
