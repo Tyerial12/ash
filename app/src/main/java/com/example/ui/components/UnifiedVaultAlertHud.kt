@@ -57,7 +57,19 @@ import com.example.ui.theme.WarningOrange
 
 import com.example.ui.theme.SurplusGreen
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.ElevatedSlate
+import com.example.ui.theme.PanelBorder
+import com.example.ui.theme.RadTeal
+import com.example.ui.theme.SteelPanel
+import com.example.viewmodel.OutpostUiState
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.NotificationsActive
+import java.util.Locale
+import kotlin.math.roundToInt
 
 data class VaultCrisisAlert(
     val id: String,
@@ -89,6 +101,8 @@ fun countActiveVaultAlerts(
     if (state.oxygenPercent < 55 || state.radiationMillisieverts >= 100) count++
     if (production.activeSubterraneanBoss != null && state.subterraneanBossHpPercent > 0) count++
     if (state.dwellerStaminaPercent < 35 || state.sickDwellersCount > 0) count++
+    if (production.isRoomsLackingScrap) count++
+    if (!production.hasWaterPurifierRoom || !production.hasHydroponicsRoom) count++
     return count
 }
 
@@ -330,6 +344,49 @@ fun UnifiedVaultAlertHud(
         )
     }
 
+    // 13. Rooms Lacking Daily Scrap Operational Upkeep
+    if (production.isRoomsLackingScrap) {
+        activeCrises.add(
+            VaultCrisisAlert(
+                id = "crisis_rooms_lacking_scrap",
+                title = "ROOMS LACKING DAILY SCRAP (${state.scrap.toInt()}/${production.dailyRoomScrapUpkeep.toInt()} SCRAP/DAY)",
+                subtitle = "Rooms require ${production.dailyRoomScrapUpkeep.toInt()} Scrap/day across all room levels to stay 100% operational (currently ${(production.roomScrapOperationalMultiplier * 100).roundToInt()}% output).",
+                icon = Icons.Default.Build,
+                accentColor = WarningOrange,
+                actionLabel = "MINE SCRAP",
+                onAction = { onNavigateToCrisis("operations_matrix") }
+            )
+        )
+    }
+
+    // 14. Water Purifier / Hydroponics Room Missing (Manual-Only Gathering Alert)
+    if (!production.hasWaterPurifierRoom || !production.hasHydroponicsRoom) {
+        val missingRoomsTitle = when {
+            !production.hasWaterPurifierRoom && !production.hasHydroponicsRoom -> "WATER & FOOD IN MANUAL-ONLY MODE"
+            !production.hasWaterPurifierRoom -> "WATER IN MANUAL-ONLY MODE (BUILD WATER PURIFIER)"
+            else -> "FOOD IN MANUAL-ONLY MODE (BUILD HYDROPONICS ROOM)"
+        }
+        val missingRoomsSubtitle = when {
+            !production.hasWaterPurifierRoom && !production.hasHydroponicsRoom ->
+                "Build Water Purifier (Atmospheric Condenser) & Hydroponics Room for automated Water/Food. Until built, gather Water & Food manually!"
+            !production.hasWaterPurifierRoom ->
+                "Automated Water is locked until you build the Water Purifier room. Boil water or salvage manually!"
+            else ->
+                "Automated Food is locked until you build the Hydroponics Greenhouse room. Forage, fish, or hunt manually!"
+        }
+        activeCrises.add(
+            VaultCrisisAlert(
+                id = "crisis_manual_water_food_only",
+                title = missingRoomsTitle,
+                subtitle = missingRoomsSubtitle,
+                icon = if (!production.hasWaterPurifierRoom) Icons.Default.Opacity else Icons.Default.Restaurant,
+                accentColor = SolarAmber,
+                actionLabel = "BUILD ROOMS",
+                onAction = { onNavigateToCrisis("operations_matrix") }
+            )
+        )
+    }
+
     if (alwaysShowAllInTab && activeCrises.isEmpty()) {
         Surface(
             color = ObsidianCharcoal,
@@ -564,4 +621,342 @@ fun UnifiedVaultAlertHud(
         }
     }
 }
+
+@Composable
+fun VaultAlertsTabScreen(
+    uiState: OutpostUiState,
+    onNavigateToCrisis: (String) -> Unit,
+    onQuickRepairSabotage: () -> Unit,
+    onQuickCrankDynamo: () -> Unit,
+    onQuickTuneGenerators: () -> Unit,
+    onQuickStabilizeAll: () -> Unit,
+    onForageRations: () -> Unit,
+    onBoilWater: () -> Unit,
+    onScrubAir: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val state = uiState.state
+    val production = uiState.production
+    val activeAlertCount = countActiveVaultAlerts(state, production, uiState.activeRaidThreat)
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("vault_alerts_tab_screen"),
+        contentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // 1. Dedicated Alerts Center Header Card
+        item {
+            Surface(
+                color = SteelPanel,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(
+                    1.5.dp,
+                    if (activeAlertCount > 0) WarningOrange else SurplusGreen.copy(alpha = 0.7f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("alerts_tab_summary_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = "Vault Alerts Center",
+                            tint = if (activeAlertCount > 0) WarningOrange else SurplusGreen,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (activeAlertCount > 0) {
+                                    "VAULT ALERTS CENTER ($activeAlertCount ACTIVE)"
+                                } else {
+                                    "VAULT ALERTS CENTER (ALL CLEAR)"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (activeAlertCount > 0) WarningOrange else SurplusGreen,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = "All Vault warnings, storage shelf halts, room scrap upkeep alerts, and crisis actions are consolidated here.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onQuickStabilizeAll,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SolarAmber,
+                            contentColor = BunkerCharcoal
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .height(48.dp)
+                            .testTag("alerts_tab_fix_all_button")
+                    ) {
+                        Text(
+                            text = "FIX ALL",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Net Resource Balance & Store Room Shelf Status Banner (Moved from Top Header)
+        item {
+            val isStoreFull = production.isStoreRoomFull
+            val isShelfHalted = production.isAnyStoreRoomResourceHalted
+            val isPositiveBalance = production.isMakingPositiveResources
+            val netSign = if (production.netResourceBalancePerSec >= 0.0) "+" else ""
+            val balanceColor = when {
+                isStoreFull -> WarningOrange
+                isShelfHalted -> SolarAmber
+                isPositiveBalance -> SurplusGreen
+                else -> HazardRed
+            }
+
+            Surface(
+                color = balanceColor.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, balanceColor.copy(alpha = 0.85f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("header_net_resource_balance_badge")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = when {
+                                isStoreFull ->
+                                    "STORE ROOM FULL (${production.storageCap.toInt()} CAP/RES): Auto-resumes at ≤${production.storeRoomResumeThreshold.toInt()} (50%)"
+                                isShelfHalted ->
+                                    "SHELF CAP (${production.haltedResourcesSummary}): Paused until ≤${production.storeRoomResumeThreshold.toInt()} (50% of ${production.storageCap.toInt()})"
+                                isPositiveBalance ->
+                                    "MAKING POSITIVE: $netSign${String.format(Locale.US, "%.2f", production.netResourceBalancePerSec)}/s Net (+${String.format(Locale.US, "%.1f", production.totalGrossResourceGainPerSec)} vs -${String.format(Locale.US, "%.1f", production.totalVaultResourceDrainPerSec)}/s)"
+                                else ->
+                                    "TAKING MORE THAN MAKING: ${String.format(Locale.US, "%.2f", production.netResourceBalancePerSec)}/s Deficit (+${String.format(Locale.US, "%.1f", production.totalGrossResourceGainPerSec)} vs -${String.format(Locale.US, "%.1f", production.totalVaultResourceDrainPerSec)}/s)"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = balanceColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Daily Room Operational Scrap Upkeep: ${production.dailyRoomScrapUpkeep.toInt()} Scrap/day (${(production.roomScrapOperationalMultiplier * 100).roundToInt()}% Room Efficiency) • Water: ${if (production.hasWaterPurifierRoom) "Auto+Manual" else "Manual Only"} • Food: ${if (production.hasHydroponicsRoom) "Auto+Manual" else "Manual Only"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "CAP ${production.storageCap.toInt()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        // 3. Emergency Blackout / Deficit / Starvation Alert Box (Moved from Top Header)
+        if (production.isVaultBlackout || production.isDefenseShutDownByDeficit || production.isWorkersStarvingOrDehydrated) {
+            item {
+                Surface(
+                    color = HazardRed.copy(alpha = 0.22f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.5.dp, HazardRed),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("alerts_tab_emergency_deficit_card")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = when {
+                                production.isDefenseShutDownByDeficit && production.isVaultBlackout ->
+                                    "BLACKOUT (${state.blackoutDaysCount}/6D) & DEFICIT (${state.deficitDaysCount}/2D): ALL ROOMS & DEFENSES SHUT DOWN!"
+                                production.isDefenseShutDownByDeficit ->
+                                    "RESOURCE DEFICIT (${state.deficitDaysCount}/2D): VAULT TAKES MORE TO RUN THAN GAINING — DEFENSES SHUT DOWN!"
+                                production.isVaultBlackout ->
+                                    "POWER BLACKOUT (${state.blackoutDaysCount}/6D): ALL AUTOMATED ROOMS & TURRETS HALTED! CRANK DYNAMO OR ADD FUEL!"
+                                else ->
+                                    "DWELLER STARVATION / DEHYDRATION: ALL WORKER PRODUCTION HALTED! FORAGE FOOD OR BOIL WATER!"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = HazardRed,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onForageRations,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SurplusGreen,
+                                    contentColor = BunkerCharcoal
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("alerts_tab_forage_food_btn")
+                            ) {
+                                Text("FORAGE FOOD", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = onBoilWater,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = RadTeal,
+                                    contentColor = BunkerCharcoal
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("alerts_tab_boil_water_btn")
+                            ) {
+                                Text("BOIL WATER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = onScrubAir,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = CryoCyan,
+                                    contentColor = BunkerCharcoal
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("alerts_tab_scrub_air_btn")
+                            ) {
+                                Text("SCRUB O2", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. All Active Vault Crises & System Alerts (Always Expanded in Alerts Tab)
+        item {
+            UnifiedVaultAlertHud(
+                state = state,
+                production = production,
+                activeRaid = uiState.activeRaidThreat,
+                onNavigateToCrisis = onNavigateToCrisis,
+                onQuickRepairSabotage = onQuickRepairSabotage,
+                onQuickCrankDynamo = onQuickCrankDynamo,
+                onQuickTuneGenerators = onQuickTuneGenerators,
+                onQuickStabilizeAll = onQuickStabilizeAll,
+                alwaysShowAllInTab = true
+            )
+        }
+
+        // 5. Latest Action & Dispatch Alerts
+        val feedbackItems = listOfNotNull(
+            uiState.lastSalvageFeedback,
+            uiState.lastDefenseDamageFeedback,
+            uiState.lastExpeditionFeedback
+        )
+        if (feedbackItems.isNotEmpty()) {
+            item {
+                Surface(
+                    color = SteelPanel,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, PanelBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("alerts_tab_recent_feedback_card")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "RECENT DISPATCH & FIELD ALERTS",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = SolarAmber,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        feedbackItems.forEach { msg ->
+                            Text(
+                                text = "• $msg",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6. Vault Event & Alert Log History
+        if (uiState.eventLogs.isNotEmpty()) {
+            item {
+                Text(
+                    text = "VAULT ALERT & EVENT LOG FEED",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = RadTeal,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            items(uiState.eventLogs.take(20), key = { it.id }) { logEntry ->
+                Surface(
+                    color = ElevatedSlate,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, PanelBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = logEntry.category,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = SolarAmber,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = logEntry.message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 

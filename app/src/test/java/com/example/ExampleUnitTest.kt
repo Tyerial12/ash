@@ -1216,6 +1216,11 @@ class ExampleUnitTest {
         val snapWithGear = OutpostCalculator.computeProductionSnapshot(stateWithExpeditionGear, buildingsLv3, workers, emptyMap(), 1000L)
         assertEquals("2 Armor (24 DEF) + 2 Weapons (30 DEF) = +54 Extra Defense", 54, snapWithGear.dwellerGearDefenseBonus)
         assertTrue("Dweller Armor and Weapons salvaged from expeditions increase total Outpost Defense", snapWithGear.totalDefenseRating > intactSnap.totalDefenseRating)
+
+        // Verify dedicated Alerts tab destination and active alert counter
+        assertEquals("nav_tab_alerts", OutpostDestination.ALERTS.tag)
+        val alertCountWithoutRooms = com.example.ui.components.countActiveVaultAlerts(intactAutomatedState, noWaterOrFoodRoomsSnap, null)
+        assertTrue("Alerts counter includes missing Water Purifier / Hydroponics room manual-only alert", alertCountWithoutRooms > 0)
     }
 }
 

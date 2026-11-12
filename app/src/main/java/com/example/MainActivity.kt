@@ -41,12 +41,14 @@ import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MilitaryTech
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.outlined.Apartment
 import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -98,8 +100,9 @@ import com.example.model.LevelUpBannerState
 import com.example.model.OfflineReport
 import com.example.model.ResourceType
 import com.example.notifications.VaultNotificationHelper
-import com.example.ui.components.UnifiedVaultAlertHud
+import com.example.ui.components.VaultAlertsTabScreen
 import com.example.ui.components.WastelandSkyHeader
+import com.example.ui.components.countActiveVaultAlerts
 import com.example.ui.components.formatCompact
 import com.example.widget.VaultStatusAppWidgetProvider
 import com.example.ui.screens.CraftHuntDefenseTabScreen
@@ -142,7 +145,8 @@ enum class OutpostDestination(
     OPERATIONS(R.string.tab_operations, Icons.Filled.Gavel, Icons.Outlined.Gavel, "nav_tab_operations"),
     CREW(R.string.tab_dwellers_expeditions, Icons.Filled.Groups, Icons.Outlined.Groups, "nav_tab_crew"),
     DEFENSE(R.string.tab_defense_security, Icons.Filled.Security, Icons.Outlined.Security, "nav_tab_defense"),
-    LOGISTICS(R.string.tab_logistics_trade, Icons.Filled.Inventory2, Icons.Outlined.Inventory2, "nav_tab_logistics")
+    LOGISTICS(R.string.tab_logistics_trade, Icons.Filled.Inventory2, Icons.Outlined.Inventory2, "nav_tab_logistics"),
+    ALERTS(R.string.tab_alerts, Icons.Filled.NotificationsActive, Icons.Outlined.Notifications, "nav_tab_alerts")
 }
 
 class MainActivity : ComponentActivity() {
@@ -442,6 +446,7 @@ fun AshfallOutpostApp(
     val idleSurvivors = (state.totalSurvivors - prod.totalAssignedWorkers).coerceAtLeast(0)
     val canHireCandidate = state.totalSurvivors < prod.maxWorkerCapacity &&
         uiState.hireableCandidates.any { state.gold >= it.goldSigningFee }
+    val activeAlertCount = countActiveVaultAlerts(state, prod, uiState.activeRaidThreat)
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -463,34 +468,22 @@ fun AshfallOutpostApp(
                                 badge = {
                                     when (dest) {
                                         OutpostDestination.VAULT -> {
-                                            if (prod.isVaultBlackout || prod.isVaultResourceDeficit || state.availableSkillPoints > 0) {
+                                            if (state.availableSkillPoints > 0) {
                                                 Badge(
-                                                    containerColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit) HazardRed else RadTeal,
-                                                    contentColor = if (prod.isVaultBlackout || prod.isVaultResourceDeficit) TextPrimary else BunkerCharcoal
+                                                    containerColor = RadTeal,
+                                                    contentColor = BunkerCharcoal
                                                 ) {
-                                                    Text(
-                                                        when {
-                                                            prod.isVaultBlackout -> "MW!"
-                                                            prod.isVaultResourceDeficit -> "DEF!"
-                                                            else -> "${state.availableSkillPoints}SP"
-                                                        }
-                                                    )
+                                                    Text("${state.availableSkillPoints}SP")
                                                 }
                                             }
                                         }
                                         OutpostDestination.OPERATIONS -> {
-                                            if (state.activePipeLeaksCount > 0 || uiState.activeConstruction != null || state.activeCaveInHazard) {
+                                            if (uiState.activeConstruction != null) {
                                                 Badge(
-                                                    containerColor = if (state.activePipeLeaksCount > 0 || state.activeCaveInHazard) HazardRed else SolarAmber,
-                                                    contentColor = if (state.activePipeLeaksCount > 0 || state.activeCaveInHazard) TextPrimary else BunkerCharcoal
+                                                    containerColor = SolarAmber,
+                                                    contentColor = BunkerCharcoal
                                                 ) {
-                                                    Text(
-                                                        when {
-                                                            state.activePipeLeaksCount > 0 -> "LEAK"
-                                                            state.activeCaveInHazard -> "CAVE!"
-                                                            else -> "${uiState.activeConstruction?.remainingSeconds ?: 0}s"
-                                                        }
-                                                    )
+                                                    Text("${uiState.activeConstruction?.remainingSeconds ?: 0}s")
                                                 }
                                             }
                                         }
@@ -515,30 +508,31 @@ fun AshfallOutpostApp(
                                             }
                                         }
                                         OutpostDestination.DEFENSE -> {
-                                            if (uiState.activeRaidThreat != null || state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 || state.needsDefenseRepair) {
-                                                Badge(containerColor = HazardRed, contentColor = TextPrimary) {
+                                            if (uiState.activeCrafting != null || uiState.activeDoorUpgrade != null) {
+                                                Badge(containerColor = SolarAmber, contentColor = BunkerCharcoal) {
                                                     Text(
-                                                        when {
-                                                            uiState.activeRaidThreat != null -> "${uiState.activeRaidThreat?.remainingSeconds}s"
-                                                            state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 -> "BLEED"
-                                                            else -> "FIX"
-                                                        }
+                                                        "${uiState.activeCrafting?.remainingSeconds ?: uiState.activeDoorUpgrade?.remainingSeconds ?: 0}s"
                                                     )
                                                 }
                                             }
                                         }
                                         OutpostDestination.LOGISTICS -> {
-                                            if (!prod.isMakingPositiveResources || state.rawSalvageCaches > 0) {
+                                            if (state.rawSalvageCaches > 0) {
                                                 Badge(
-                                                    containerColor = if (!prod.isMakingPositiveResources) WarningOrange else SurplusGreen,
+                                                    containerColor = SurplusGreen,
                                                     contentColor = BunkerCharcoal
                                                 ) {
-                                                    Text(
-                                                        when {
-                                                            !prod.isMakingPositiveResources -> "-/s"
-                                                            else -> "${state.rawSalvageCaches}"
-                                                        }
-                                                    )
+                                                    Text("${state.rawSalvageCaches}")
+                                                }
+                                            }
+                                        }
+                                        OutpostDestination.ALERTS -> {
+                                            if (activeAlertCount > 0) {
+                                                Badge(
+                                                    containerColor = HazardRed,
+                                                    contentColor = TextPrimary
+                                                ) {
+                                                    Text("$activeAlertCount")
                                                 }
                                             }
                                         }
@@ -589,6 +583,8 @@ fun AshfallOutpostApp(
                     activeCrafting = uiState.activeCrafting,
                     activeDoorUpgrade = uiState.activeDoorUpgrade,
                     activeExpedition = uiState.activeExpedition,
+                    activeAlertCount = activeAlertCount,
+                    onOpenAlertsTab = { currentTab = OutpostDestination.ALERTS },
                     onRequestRestartGame = { showRestartDialog = true },
                     onQuickStabilizeAll = viewModel::quickStabilizeAllHazards,
                     onForageRations = viewModel::forageSubterraneanRations,
@@ -596,26 +592,6 @@ fun AshfallOutpostApp(
                     onFieldPressAmmo = viewModel::fieldPressEmergencyAmmo,
                     onCrankDynamo = viewModel::crankEmergencyDynamo,
                     onScrubAir = viewModel::scrubVaultAirManual
-                )
-
-                // Persistent Unified Vault Alert HUD: live pulse for Blackout, Pipe Leaks, Sabotage, Low Fuel, Raids
-                UnifiedVaultAlertHud(
-                    state = state,
-                    production = prod,
-                    activeRaid = uiState.activeRaidThreat,
-                    onNavigateToCrisis = { target ->
-                        when {
-                            target.startsWith("operations") -> currentTab = OutpostDestination.OPERATIONS
-                            target.startsWith("crew") -> currentTab = OutpostDestination.CREW
-                            target.startsWith("defense") -> currentTab = OutpostDestination.DEFENSE
-                            target.startsWith("logistics") -> currentTab = OutpostDestination.LOGISTICS
-                            else -> currentTab = OutpostDestination.VAULT
-                        }
-                    },
-                    onQuickRepairSabotage = viewModel::repairSabotagedBuilding,
-                    onQuickCrankDynamo = viewModel::crankEmergencyDynamo,
-                    onQuickTuneGenerators = viewModel::maintainGenerators,
-                    onQuickStabilizeAll = viewModel::quickStabilizeAllHazards
                 )
 
                 AnimatedVisibility(
@@ -657,6 +633,7 @@ fun AshfallOutpostApp(
                                     "crew" -> currentTab = OutpostDestination.CREW
                                     "defense" -> currentTab = OutpostDestination.DEFENSE
                                     "logistics" -> currentTab = OutpostDestination.LOGISTICS
+                                    "alerts" -> currentTab = OutpostDestination.ALERTS
                                     else -> currentTab = OutpostDestination.VAULT
                                 }
                             },
@@ -795,6 +772,25 @@ fun AshfallOutpostApp(
                             onIssueEmergencyRations = viewModel::issueEmergencyWorkerRations,
                             onSellResourceToTown = { town, res, amt -> viewModel.sellResourceToTown(town, res, amt) },
                             onBuyRareSyndicateItem = viewModel::buyRareSyndicateItem
+                        )
+                        OutpostDestination.ALERTS -> VaultAlertsTabScreen(
+                            uiState = uiState,
+                            onNavigateToCrisis = { target ->
+                                when {
+                                    target.startsWith("operations") -> currentTab = OutpostDestination.OPERATIONS
+                                    target.startsWith("crew") -> currentTab = OutpostDestination.CREW
+                                    target.startsWith("defense") -> currentTab = OutpostDestination.DEFENSE
+                                    target.startsWith("logistics") -> currentTab = OutpostDestination.LOGISTICS
+                                    else -> currentTab = OutpostDestination.VAULT
+                                }
+                            },
+                            onQuickRepairSabotage = viewModel::repairSabotagedBuilding,
+                            onQuickCrankDynamo = viewModel::crankEmergencyDynamo,
+                            onQuickTuneGenerators = viewModel::maintainGenerators,
+                            onQuickStabilizeAll = viewModel::quickStabilizeAllHazards,
+                            onForageRations = viewModel::forageSubterraneanRations,
+                            onBoilWater = viewModel::boilAquiferWater,
+                            onScrubAir = viewModel::scrubVaultAirManual
                         )
                     }
                 }

@@ -762,7 +762,7 @@ fun VaultStatsTabScreen(
                 ) {
                     Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("VAULT TELEMETRY & ALERTS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
+                    Text("VAULT TELEMETRY & CORE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
                 }
 
                 FilledTonalButton(

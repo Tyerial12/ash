@@ -87,6 +87,8 @@ fun WastelandSkyHeader(
     onFieldPressAmmo: () -> Unit = {},
     onCrankDynamo: () -> Unit = {},
     onScrubAir: () -> Unit = {},
+    activeAlertCount: Int = 0,
+    onOpenAlertsTab: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(HeaderTelemetryTab.COMPACT) }
@@ -192,24 +194,26 @@ fun WastelandSkyHeader(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            val siegeBadgeColor = when {
-                                production.isDefenseShutDownByDeficit || isBlackout || production.isWorkersStarvingOrDehydrated -> HazardRed
-                                production.daysUntilDay10Siege == 0 || isNightDanger -> WarningOrange
-                                else -> SolarAmber
+                            if (onOpenAlertsTab != null) {
+                                val alertChipColor = if (activeAlertCount > 0) WarningOrange else SurplusGreen
+                                Surface(
+                                    color = alertChipColor.copy(alpha = 0.22f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, alertChipColor.copy(alpha = 0.85f)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable(onClick = onOpenAlertsTab)
+                                        .testTag("header_open_alerts_tab_button")
+                                ) {
+                                    Text(
+                                        text = "ALERTS ($activeAlertCount)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = alertChipColor,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
-                            Text(
-                                text = when {
-                                    production.isDefenseShutDownByDeficit -> "DEFICIT ${state.deficitDaysCount}/2D!"
-                                    isBlackout -> "NO POWER ${state.blackoutDaysCount}/6D!"
-                                    production.isWorkersStarvingOrDehydrated -> "CREW STARVING!"
-                                    production.daysUntilDay10Siege == 0 -> "10D MEGA-SIEGE!"
-                                    isNightDanger -> "NIGHT SWARM +35%"
-                                    else -> "10D SIEGE: ${production.daysUntilDay10Siege}D"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = siegeBadgeColor,
-                                fontWeight = FontWeight.Bold
-                            )
 
                             Surface(
                                 color = HazardRed.copy(alpha = 0.22f),
@@ -317,85 +321,6 @@ fun WastelandSkyHeader(
                     text = "🍖 60S FEED: ${state.dwellerFeedCycleSecondsRemaining}s (+$appetitePct%/2m)",
                     color = if (state.dwellerFeedCycleSecondsRemaining <= 15 && state.totalSurvivors > 0) WarningOrange else CryoCyan
                 )
-            }
-
-            // Always-Visible Net Resource Balance Readout (Positive Surplus vs Store Room Halted vs Taking More Than Making)
-            val isPositiveBalance = production.isMakingPositiveResources
-            val netSign = if (production.netResourceBalancePerSec >= 0.0) "+" else ""
-            val balanceBadgeColor = when {
-                production.isStoreRoomFull -> WarningOrange
-                production.isAnyStoreRoomResourceHalted -> SolarAmber
-                isPositiveBalance -> SurplusGreen
-                else -> HazardRed
-            }
-            Surface(
-                color = balanceBadgeColor.copy(alpha = 0.16f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                    .testTag("header_net_resource_balance_badge"),
-                shape = RoundedCornerShape(6.dp),
-                border = BorderStroke(1.dp, balanceBadgeColor.copy(alpha = 0.85f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = when {
-                            production.isStoreRoomFull ->
-                                "📦 STORE ROOM FULL (Each Resource Resumes at ≤${production.storeRoomResumeThreshold.toInt()} / 50%)"
-                            production.isAnyStoreRoomResourceHalted ->
-                                "📦 ${production.haltedResourcesSummary.uppercase()} AT CAP (Resumes at ≤${production.storeRoomResumeThreshold.toInt()} • Others Producing)"
-                            isPositiveBalance ->
-                                "🟢 MAKING POSITIVE RESOURCES ($netSign${formatRate(production.netResourceBalancePerSec)}/s NET)"
-                            else ->
-                                "🔴 TAKING MORE THAN MAKING (${formatRate(production.netResourceBalancePerSec)}/s NET)"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = balanceBadgeColor,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = if (production.isAnyStoreRoomResourceHalted) {
-                            "Auto-Resumes ≤${production.storeRoomResumeThreshold.toInt()} (50%) • +${formatRate(production.totalGrossResourceGainPerSec)}/s"
-                        } else {
-                            "Cap ${production.storageCap.toInt()}/ea • Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            if (production.isDefenseShutDownByDeficit || isBlackout) {
-                Surface(
-                    color = HazardRed.copy(alpha = 0.18f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    border = BorderStroke(1.dp, HazardRed)
-                ) {
-                    Text(
-                        text = when {
-                            isBlackout && production.isDefenseShutDownByDeficit ->
-                                "🚨 BLACKOUT (${state.blackoutDaysCount}/6D) & DEFICIT (${state.deficitDaysCount}/2D): Defenses SHUT DOWN (0 DEF)! Crank Dynamo or build Power & Resource rooms before Game Over!"
-                            production.isDefenseShutDownByDeficit ->
-                                "🚨 RESOURCE DEFICIT (${state.deficitDaysCount}/2D): Vault takes ${formatRate(production.totalVaultResourceDrainPerSec)}/s vs +${formatRate(production.totalGrossResourceGainPerSec)}/s gained! Defenses SHUT DOWN (0 DEF) — Game Over in ${production.deficitDaysRemainingBeforeGameOver}D!"
-                            else ->
-                                "🚨 POWER BLACKOUT (${state.blackoutDaysCount}/6D): Out of Power! Game ends in ${production.blackoutDaysRemainingBeforeGameOver} Day(s) unless MW is restored!"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = HazardRed,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
             }
 
             // ROW 2: Mobile-Friendly Collapsible Telemetry Drawer Tab Switcher
@@ -705,18 +630,10 @@ private fun ResourcesGatheredDrawerPanel(
             )
         }
 
-        val upkeepColor = when {
-            production.isWorkersStarvingOrDehydrated || production.isDefenseShutDownByDeficit || !production.isMakingPositiveResources -> HazardRed
-            else -> SurplusGreen
-        }
         Text(
-            text = if (production.isWorkersStarvingOrDehydrated) {
-                "ALERT: Workers need Food & Water daily and every 60 seconds! Stock is 0 — All worker rooms & automated turrets are HALTED until fed!"
-            } else {
-                "Vault Drain: -${formatRate(production.totalVaultResourceDrainPerSec)}/s (Reactors -${formatRate(production.reactorFuelUpkeepPerSec)}/s Fuel) vs Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s • 60s Feed (${state.dwellerFeedCycleSecondsRemaining}s): -${production.fiveMinDwellerFoodCost.roundToInt()}F/-${production.fiveMinDwellerWaterCost.roundToInt()}W (2m Tier ${production.dwellerUpkeepEscalationTier})"
-            },
+            text = "Vault Drain: -${formatRate(production.totalVaultResourceDrainPerSec)}/s (Reactors -${formatRate(production.reactorFuelUpkeepPerSec)}/s Fuel) vs Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s • 60s Feed (${state.dwellerFeedCycleSecondsRemaining}s): -${production.fiveMinDwellerFoodCost.roundToInt()}F/-${production.fiveMinDwellerWaterCost.roundToInt()}W (2m Tier ${production.dwellerUpkeepEscalationTier})",
             style = MaterialTheme.typography.labelSmall,
-            color = upkeepColor,
+            color = if (production.isMakingPositiveResources) SurplusGreen else WarningOrange,
             fontWeight = FontWeight.Bold
         )
     }

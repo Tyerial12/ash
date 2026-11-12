@@ -16,6 +16,7 @@
     <string name="tab_dwellers_expeditions">Dwellers</string>
     <string name="tab_defense_security">Defend &amp; Hunt</string>
     <string name="tab_logistics_trade">Trade &amp; Net</string>
+    <string name="tab_alerts">Alerts</string>
     <string name="action_scavenge">Swing Pickaxe</string>
     <string name="action_recruit">Hire with Gold</string>
     <string name="action_train_class">Train Dwellers</string>
