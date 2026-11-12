@@ -684,7 +684,7 @@ object OutpostCalculator {
     fun computeReactorFuelUpkeepForStation(station: PowerStationType, level: Int): Double {
         if (level <= 0 || station.fuelUpkeepPerLevel <= 0.0) return 0.0
         val extraLevels = level - 1
-        val escalation = level * (1.0 + extraLevels * 0.65) + extraLevels * extraLevels * 0.30
+        val escalation = level * (1.0 + extraLevels * 0.25) + extraLevels * extraLevels * 0.10
         return ((station.fuelUpkeepPerLevel * escalation) * 100.0).roundToInt() / 100.0
     }
 
@@ -797,7 +797,7 @@ object OutpostCalculator {
     fun computeVaultLevelUpkeepMultiplier(commandLevel: Int): Double {
         if (commandLevel <= 1) return 1.0
         val extraLv = commandLevel - 1
-        return 1.0 + extraLv * 0.22 + extraLv * extraLv * 0.04
+        return 1.0 + extraLv * 0.14 + extraLv * extraLv * 0.025
     }
 
     /**
@@ -809,16 +809,16 @@ object OutpostCalculator {
     ): RoomResourceUpkeep {
         if (commandLevel <= 1) return RoomResourceUpkeep()
         val extraLv = commandLevel - 1
-        val scrapPerSec = ((extraLv * (0.08 + extraLv * 0.035)) * 100.0).roundToInt() / 100.0
-        val waterPerSec = ((extraLv * (0.06 + extraLv * 0.025) * hydroDiscountMult) * 100.0).roundToInt() / 100.0
+        val scrapPerSec = ((extraLv * (0.05 + extraLv * 0.02)) * 100.0).roundToInt() / 100.0
+        val waterPerSec = ((extraLv * (0.04 + extraLv * 0.018) * hydroDiscountMult) * 100.0).roundToInt() / 100.0
         val fuelPerSec = if (commandLevel >= 3) {
-            (((extraLv - 1) * (0.04 + (extraLv - 1) * 0.02)) * 100.0).roundToInt() / 100.0
+            (((extraLv - 1) * (0.015 + (extraLv - 1) * 0.008)) * 100.0).roundToInt() / 100.0
         } else 0.0
 
-        val dailyScrap = ((extraLv * (2.2 + extraLv * 1.1)) * 10.0).roundToInt() / 10.0
-        val dailyWater = ((extraLv * (1.8 + extraLv * 0.9) * hydroDiscountMult) * 10.0).roundToInt() / 10.0
+        val dailyScrap = ((extraLv * (1.6 + extraLv * 0.8)) * 10.0).roundToInt() / 10.0
+        val dailyWater = ((extraLv * (1.3 + extraLv * 0.65) * hydroDiscountMult) * 10.0).roundToInt() / 10.0
         val dailyFuel = if (commandLevel >= 3) {
-            (((extraLv - 1) * (1.4 + (extraLv - 1) * 0.7)) * 10.0).roundToInt() / 10.0
+            (((extraLv - 1) * (0.5 + (extraLv - 1) * 0.25)) * 10.0).roundToInt() / 10.0
         } else 0.0
 
         return RoomResourceUpkeep(
@@ -833,20 +833,19 @@ object OutpostCalculator {
 
     /**
      * Non-linear / Exponential Power Draw at Higher Room Levels:
-     * Higher room levels require significantly more Megawatts (MW) per level due to high-voltage
+     * Higher room levels require progressively more Megawatts (MW) per level due to high-voltage
      * industrial machinery, UV crop lamps, and deep-core life support.
-     * Lv.1 = 1.0x base, Lv.2 = 2.76x base (+1.76x step), Lv.3 = 5.28x base (+2.52x step), etc.
      */
     fun computeBuildingTotalMegawatts(buildingType: BuildingType, level: Int): Double {
         if (level <= 0) return 0.0
-        val highLevelEscalation = 1.0 + (level - 1) * 0.38
+        val highLevelEscalation = 1.0 + (level - 1) * 0.16
         return (buildingType.megawattDemandPerLevel * level * highLevelEscalation * 10.0).roundToInt() / 100.0 * 10.0
     }
 
     /**
      * Non-linear / Exponential Vault Room Maintenance at Higher Room Levels, Higher Vault Levels, AND Each Passing Day:
-     * Room maintenance takes significantly more resources (Scrap, Cooling Water, and Bio-Fuel) per level each day
-     * to keep rooms operational.
+     * Room maintenance takes progressively more resources (Scrap, Cooling Water, and Bio-Fuel) per level each day
+     * to keep rooms operational while staying balanced for hardcore play.
      */
     fun computeBuildingResourceUpkeep(
         buildingType: BuildingType,
@@ -859,38 +858,38 @@ object OutpostCalculator {
         val extraLevels = (level - 1).coerceAtLeast(0)
         val vaultLevelScale = computeVaultLevelUpkeepMultiplier(commandLevel)
         val elapsedDays = (dayCounter.coerceAtLeast(1) - 1)
-        val dayMaintenanceScale = 1.0 + elapsedDays * 0.06
-        // Steep super-linear escalation for Lv.1, Lv.2, Lv.3, Lv.4, Lv.5+ multiplied by Vault Level & Day Counter
+        val dayMaintenanceScale = 1.0 + elapsedDays * 0.04
+        // Super-linear escalation for Lv.1, Lv.2, Lv.3, Lv.4, Lv.5+ multiplied by Vault Level & Day Counter
         val highLevelScale = (
-            level * (1.0 + extraLevels * 0.95) +
-                extraLevels * extraLevels * 0.65 +
-                extraLevels * extraLevels * extraLevels * 0.22
+            level * (1.0 + extraLevels * 0.55) +
+                extraLevels * extraLevels * 0.35 +
+                extraLevels * extraLevels * extraLevels * 0.12
             ) * vaultLevelScale
 
         val baseWater = buildingType.waterUpkeepPerLevel * highLevelScale * hydroDiscountMult
         val highLevelCoolantWater = if (level >= 2) {
-            extraLevels * (0.11 + extraLevels * 0.075 + extraLevels * extraLevels * 0.025) * vaultLevelScale * hydroDiscountMult
+            extraLevels * (0.06 + extraLevels * 0.04 + extraLevels * extraLevels * 0.015) * vaultLevelScale * hydroDiscountMult
         } else 0.0
         val waterPerSec = ((baseWater + highLevelCoolantWater) * 100.0).roundToInt() / 100.0
 
         val scrapPerSec = if (level >= 2 && buildingType != BuildingType.SALVAGE_YARD) {
-            ((extraLevels * (0.12 + extraLevels * 0.085 + extraLevels * extraLevels * 0.03) * vaultLevelScale) * 100.0).roundToInt() / 100.0
+            ((extraLevels * (0.07 + extraLevels * 0.045 + extraLevels * extraLevels * 0.015) * vaultLevelScale) * 100.0).roundToInt() / 100.0
         } else 0.0
 
         val fuelPerSec = if (level >= 2 && buildingType != BuildingType.BIO_SLUDGE_REFINERY) {
-            ((extraLevels * (0.08 + extraLevels * 0.055 + extraLevels * extraLevels * 0.02) * vaultLevelScale) * 100.0).roundToInt() / 100.0
+            ((extraLevels * (0.02 + extraLevels * 0.015 + extraLevels * extraLevels * 0.006) * vaultLevelScale) * 100.0).roundToInt() / 100.0
         } else 0.0
 
         val dailyScrap = (
-            level * (3.5 + extraLevels * 6.2 + extraLevels * extraLevels * 3.4 + extraLevels * extraLevels * extraLevels * 0.90) *
+            level * (2.6 + extraLevels * 4.2 + extraLevels * extraLevels * 2.2 + extraLevels * extraLevels * extraLevels * 0.55) *
                 vaultLevelScale * dayMaintenanceScale * 10.0
             ).roundToInt() / 10.0
         val dailyWater = (
-            level * (2.6 + extraLevels * 4.8 + extraLevels * extraLevels * 2.6 + extraLevels * extraLevels * extraLevels * 0.70) *
+            level * (1.8 + extraLevels * 3.1 + extraLevels * extraLevels * 1.6 + extraLevels * extraLevels * extraLevels * 0.40) *
                 vaultLevelScale * dayMaintenanceScale * hydroDiscountMult * 10.0
             ).roundToInt() / 10.0
         val dailyFuel = (
-            level * (1.2 + extraLevels * 3.4 + extraLevels * extraLevels * 2.1 + extraLevels * extraLevels * extraLevels * 0.60) *
+            level * (0.4 + extraLevels * 1.1 + extraLevels * extraLevels * 0.65 + extraLevels * extraLevels * extraLevels * 0.18) *
                 vaultLevelScale * dayMaintenanceScale * 10.0
             ).roundToInt() / 10.0
 
@@ -1111,8 +1110,8 @@ object OutpostCalculator {
         val activeAmmoType = TurretAmmoType.fromId(state.selectedAmmoTypeId)
 
         // 1. Calculate Vault Power Supply (MW) vs Escalating Room Demand (MW) & Generator Wear
-        // Mothballed (Standby) rooms draw 0 MW!
-        var rawMegawattDemand = 4.0 // Base Vault Airlock & Life-Support load
+        // Mothballed (Standby) rooms draw 0 MW, and an empty Vault (0 active rooms & 0 powered turrets) has 0 MW room demand!
+        var rawMegawattDemand = 0.0
         var totalBuiltRoomsCount = 0
         var mothballedRoomsCount = 0
         var mothballedMwSavedRaw = 0.0
@@ -1130,13 +1129,17 @@ object OutpostCalculator {
         }
         val mothballedMwSaved = mothballedMwSavedRaw.roundToInt()
         // Powered defense emplacements also draw MW
-        rawMegawattDemand += state.sentryTurretCount * 3.0 + state.plasmaCannonCount * 6.0
+        val turretMwDemand = state.sentryTurretCount * 2.5 + state.plasmaCannonCount * 5.0
+        rawMegawattDemand += turretMwDemand
+        if (rawMegawattDemand > 0.0) {
+            rawMegawattDemand += 2.0 // Base Vault Airlock & Life-Support load when rooms/turrets are active
+        }
         val megawattDemand = ((rawMegawattDemand * operationalPosture.megawattDemandMultiplier * breakerMode.megawattDemandMultiplier) * 10.0).roundToInt() / 10.0
 
         val solarPhaseFactor = (if (solarFlareActive) 1.65 else activePhase.solarPowerMultiplier) *
             (if (activeSeason == WastelandSeason.SCORCHING_FALLOUT) 1.0 else activeSeason.solarMwMultiplier)
-        // Realistic Fuel Burn: Bio-Sludge Turbine generates full MW when Bio-Fuel is available (or 45% backup vapor mode if dry)
-        val turbineFuelFactor = if (state.bioTurbineLevel <= 0 || state.bioFuel > 0.1) 1.0 else 0.45
+        // Realistic Fuel Burn: Bio-Sludge Turbine generates 100% MW with Bio-Fuel, or 80% backup methane-vapor MW if fuel dips to 0!
+        val turbineFuelFactor = if (state.bioTurbineLevel <= 0 || state.bioFuel > 0.1) 1.0 else 0.80
         val bioTurbineMw = state.bioTurbineLevel * PowerStationType.BIO_SLUDGE_TURBINE.baseMegawattsPerLevel * turbineFuelFactor
         val solarTowerMw = state.solarTowerLevel * PowerStationType.SOLAR_HELIOSTAT_TOWER.baseMegawattsPerLevel * solarPhaseFactor
         val thoriumReactorMw = state.thoriumReactorLevel * PowerStationType.THORIUM_FISSION_REACTOR.baseMegawattsPerLevel *
@@ -1144,23 +1147,35 @@ object OutpostCalculator {
         val aetherSubstationMw = state.aetherSubstationLevel * PowerStationType.AETHER_RESONANCE_SUBSTATION.baseMegawattsPerLevel
         val legacyFusionMw = rankLegacyFusion * 10.0
 
-        val refineryGeneratorMw = (buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0) * 8.0
+        val refineryGeneratorMw = (buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0) * 10.0
         val geothermalLevel = buildingsMap[BuildingType.GEOTHERMAL_TAP.id] ?: 0
-        val geothermalBaselineMw = geothermalLevel * 7.5 // Room #9 Deep-Core Geothermal Tap: +7.5 MW/Lv 24/7 clean power!
+        val geothermalBaselineMw = geothermalLevel * 9.0 // Room #9 Deep-Core Geothermal Tap: +9.0 MW/Lv 24/7 clean power!
         val mutagenLabLevel = buildingsMap[BuildingType.NOCTURNAL_EXTRACTION_RIG.id] ?: 0
-        val reactorEngineerMw = savantCount * 5.0
+        val reactorEngineerMw = savantCount * 5.5
         val activeCrankStack = if (thoriumOverdriveActive) {
             state.activeDynamoCrankStack.coerceIn(1, MAX_DYNAMO_CRANKS_PER_BLACKOUT)
         } else 0
         // Generator & Dynamo Wear reduces crank effectiveness if neglected (> 50% wear causes gear slipping)
         val dynamoWearFactor = if (state.generatorWearPercent > 50) {
-            (1.0 - (state.generatorWearPercent - 50) * 0.015).coerceIn(0.50, 1.0)
+            (1.0 - (state.generatorWearPercent - 50) * 0.01).coerceIn(0.65, 1.0)
         } else 1.0
         val emergencyDynamoBoostMw = if (thoriumOverdriveActive) (16.0 * activeCrankStack * dynamoWearFactor) else 0.0
 
-        // Generator Wear reduces MW output by up to -32% until tuned up (mitigated by Room #9 Geothermal Tap -10%/Lv)
+        val hasBuiltPowerGenerator = state.bioTurbineLevel > 0 ||
+            state.solarTowerLevel > 0 ||
+            state.thoriumReactorLevel > 0 ||
+            state.aetherSubstationLevel > 0 ||
+            geothermalLevel > 0 ||
+            refineryGeneratorMw > 0.0
+        val auxiliaryCoreMw = when {
+            hasBuiltPowerGenerator -> 6.0 + (state.commandLevel.coerceAtLeast(1) - 1) * 1.5
+            rawMegawattDemand <= 0.0 && !thoriumOverdriveActive -> 8.0
+            else -> 0.0
+        }
+
+        // Generator Wear reduces MW output by up to -16% until tuned up (mitigated by Room #9 Geothermal Tap -10%/Lv)
         val effectiveWearPercent = (state.generatorWearPercent - geothermalLevel * 8).coerceIn(0, 80)
-        val wearPenaltyMult = (1.0 - effectiveWearPercent * 0.004).coerceIn(0.68, 1.0)
+        val wearPenaltyMult = (1.0 - effectiveWearPercent * 0.002).coerceIn(0.84, 1.0)
 
         val gridStationBonusMult = (1.0 + state.aetherSubstationLevel * 0.20) *
             (1.0 + mutagenLabLevel * 0.12) *
@@ -1176,13 +1191,13 @@ object OutpostCalculator {
         val relicAutoRepairDiscountPercent = (relicsCount * 1).coerceAtMost(25)
 
         val totalMegawattGenerated =
-            (bioTurbineMw + solarTowerMw + thoriumReactorMw + aetherSubstationMw + legacyFusionMw +
+            (auxiliaryCoreMw + bioTurbineMw + solarTowerMw + thoriumReactorMw + aetherSubstationMw + legacyFusionMw +
                 refineryGeneratorMw + geothermalBaselineMw + reactorEngineerMw + emergencyDynamoBoostMw) *
                 gridStationBonusMult + relicMegawattBonus
 
-        // Strict Vault Power Rule: If Generated MW < Required MW, the Vault is in BLACKOUT (or BROWNOUT if partial MW > 0)!
-        val isVaultBlackout = totalMegawattGenerated < megawattDemand
-        val isVaultBrownout = totalMegawattGenerated > 0.0 && totalMegawattGenerated < megawattDemand
+        // Strict Vault Power Rule: If Required MW > 0 and Generated MW < Required MW, the Vault is in BLACKOUT!
+        val isVaultBlackout = megawattDemand > 0.0 && totalMegawattGenerated < megawattDemand
+        val isVaultBrownout = megawattDemand > 0.0 && totalMegawattGenerated > 0.0 && totalMegawattGenerated < megawattDemand
         val rawGridRatio = if (megawattDemand <= 0.0) 1.5 else totalMegawattGenerated / megawattDemand
         val powerGridEfficiencyMultiplier = when {
             isVaultBlackout -> 0.0
@@ -2828,12 +2843,13 @@ object OutpostCalculator {
             }
             if (production.bioFuelPerSec < -0.02 && state.bioFuel > 0.0 && state.bioTurbineLevel > 0) {
                 val fuelDrySecs = (state.bioFuel / (-production.bioFuelPerSec)).roundToInt().toLong().coerceAtLeast(2L)
-                val turbineLossMw = state.bioTurbineLevel * PowerStationType.BIO_SLUDGE_TURBINE.baseMegawattsPerLevel * 0.55
-                if (production.totalMegawattGenerated - turbineLossMw < production.totalMegawattDemand) {
-                    powerOutCandidates.add(
-                        fuelDrySecs to "Reactor Bio-Fuel depleted — Vault Power dropped below ${production.totalMegawattDemand.roundToInt()} MW!"
-                    )
+                val turbineLossMw = state.bioTurbineLevel * PowerStationType.BIO_SLUDGE_TURBINE.baseMegawattsPerLevel * 0.20
+                val reason = if (production.totalMegawattGenerated - turbineLossMw < production.totalMegawattDemand) {
+                    "Reactor Bio-Fuel depleted — Vault Power dropped below ${production.totalMegawattDemand.roundToInt()} MW!"
+                } else {
+                    "Reactor Bio-Fuel tank dry — Bio-Sludge Turbine running on 80% backup vapor mode!"
                 }
+                powerOutCandidates.add(fuelDrySecs to reason)
             }
             val earliestOutage = powerOutCandidates.minByOrNull { it.first }
             if (earliestOutage != null) {

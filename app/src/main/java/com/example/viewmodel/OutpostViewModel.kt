@@ -2129,11 +2129,12 @@ class OutpostViewModel(
             val nextStack = (currentStack + 1).coerceIn(1, OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT)
             val totalCrankMw = nextStack * 16.0
             val restoresPower = (prod.totalMegawattGenerated + 16.0) >= prod.totalMegawattDemand
-            // Manual cranking does NOT burn fuel, but gears take wear (+10% wear per crank cycle, max 80%)
-            val nextWear = (state.generatorWearPercent + 10).coerceAtMost(80)
+            // Manual cranking does NOT burn fuel and siphons +3.0 emergency Bio-Fuel vapor, with only +4% gear wear per crank
+            val nextWear = (state.generatorWearPercent + 4).coerceAtMost(80)
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
-                    thoriumOverdriveUntilMillis = now + 45_000L,
+                    bioFuel = (state.bioFuel + 3.0).coerceIn(0.0, prod.storageCap),
+                    thoriumOverdriveUntilMillis = now + 75_000L,
                     manualDynamoCranksRemaining = nextCranksLeft,
                     activeDynamoCrankStack = nextStack,
                     generatorWearPercent = nextWear,
@@ -2146,7 +2147,7 @@ class OutpostViewModel(
             repository.updateOutpostState(updated)
             val usedCount = OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT - nextCranksLeft
             val wearWarning = if (nextWear >= 50) " (Dynamo Wear: $nextWear% — service with Scrap!)" else ""
-            val msg = "Emergency Hand-Crank Dynamo ($usedCount/${OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT} Cranks • $nextCranksLeft left • Zero Fuel): +${totalCrankMw.toInt()} MW for 45s!$wearWarning"
+            val msg = "Emergency Hand-Crank Dynamo ($usedCount/${OutpostCalculator.MAX_DYNAMO_CRANKS_PER_BLACKOUT} Cranks • $nextCranksLeft left • +3.0 Fuel): +${totalCrankMw.toInt()} MW for 75s!$wearWarning"
             overlayFlow.update {
                 it.copy(lastSalvageFeedback = msg)
             }

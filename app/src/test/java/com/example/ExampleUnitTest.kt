@@ -1154,7 +1154,7 @@ class ExampleUnitTest {
             ),
             snapLv3
         )
-        assertEquals("v22.0", widgetSnap.versionName)
+        assertEquals("v23.0", widgetSnap.versionName)
         assertEquals(88.0, widgetSnap.scrap, 0.01)
         assertEquals(42.0, widgetSnap.gold, 0.01)
         assertTrue("Phone widget snapshot includes Gold/s rate", widgetSnap.goldPerSec > 0.0)
@@ -1163,7 +1163,7 @@ class ExampleUnitTest {
         assertEquals(2, widgetSnap.totalSurvivors)
         assertEquals(4, widgetSnap.maxWorkerCapacity)
         assertEquals(1, widgetSnap.onlineRoomsCount)
-        assertTrue("v22.0 widget tracks 10-day preparation peace window and daily room Scrap upkeep", widgetSnap.isPreparationPeaceWindow && widgetSnap.dailyRoomScrapUpkeep > 0.0)
+        assertTrue("v23.0 widget tracks 10-day preparation peace window and daily room Scrap upkeep", widgetSnap.isPreparationPeaceWindow && widgetSnap.dailyRoomScrapUpkeep > 0.0)
         assertEquals("Widget auto-refresh interval is 10 seconds (10,000 ms)", 10_000L, com.example.widget.VaultStatusAppWidgetProvider.AUTO_REFRESH_INTERVAL_MILLIS)
 
         val quickMineResult = com.example.widget.VaultStatusAppWidgetProvider.applyWidgetQuickMine(baseState, snapLv3, 2000L)

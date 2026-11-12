@@ -7,7 +7,7 @@
     android:orientation="vertical"
     android:padding="8dp">
 
-    <!-- ROW 1: Compact v22.0 Header, 10-Day Prep Countdown, Dual 6-Day Game Over Clocks & Daily Room Scrap Upkeep -->
+    <!-- ROW 1: Compact v23.0 Header, 10-Day Prep Countdown, Dual 6-Day Game Over Clocks & Daily Room Scrap Upkeep -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -31,7 +31,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="VAULT CITY v22.0 • DAY 1 • LV.1"
+                android:text="VAULT CITY v23.0 • DAY 1 • LV.1"
                 android:textColor="#FFD54F"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -293,7 +293,7 @@
                 android:paddingTop="5dp"
                 android:paddingRight="8dp"
                 android:paddingBottom="5dp"
-                android:text="↻ v22.0"
+                android:text="↻ v23.0"
                 android:textColor="#4DD0E1"
                 android:textSize="9.5sp"
                 android:textStyle="bold" />

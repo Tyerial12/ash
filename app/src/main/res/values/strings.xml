@@ -25,6 +25,6 @@
     <string name="offline_report_title">Vault City Overseer Report</string>
     <string name="offline_report_claim">Claim Vault Supplies &amp; XP</string>
     <string name="hero_banner_desc">Vault City Nuclear Shelter</string>
-    <string name="widget_vault_status_title">Vault City v22.0 Command</string>
-    <string name="widget_vault_status_description">v22.0 Compact 3-Row Widget: 10-Day Prep Countdown, Dual 6-Day Game Over Clocks, Daily Room Scrap Upkeep, Live Resources &amp; Out-of-Game Survival Actions.</string>
+    <string name="widget_vault_status_title">Vault City v23.0 Command</string>
+    <string name="widget_vault_status_description">v23.0 Compact 3-Row Widget: 10-Day Prep Countdown, Dual 6-Day Game Over Clocks, Daily Room Scrap Upkeep, Live Resources &amp; Out-of-Game Survival Actions.</string>
 </resources>
