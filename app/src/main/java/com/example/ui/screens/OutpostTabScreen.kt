@@ -987,12 +987,18 @@ private fun VaultPowerAndDayControlCard(
                         fontWeight = FontWeight.Bold
                     )
                     val autoRepairText = if (prod.needsAutomatedSystemRepair) {
-                        "-${prod.dailyRoomScrapUpkeep.toInt()}S Auto-Repair"
+                        "-${prod.dailyRoomScrapUpkeep.toInt()}S Room Ops/Repair"
                     } else {
-                        "0S Auto-Repair (Intact)"
+                        "0S Room Ops"
+                    }
+                    val manualGateSuffix = when {
+                        !prod.hasWaterPurifierRoom && !prod.hasHydroponicsRoom -> " • Water & Food: Manual Only (Need Purifier & Hydroponics)"
+                        !prod.hasWaterPurifierRoom -> " • Water: Manual Only (Need Water Purifier)"
+                        !prod.hasHydroponicsRoom -> " • Food: Manual Only (Need Hydroponics)"
+                        else -> ""
                     }
                     Text(
-                        text = "Vault Lv.${state.commandLevel} + $builtRoomsCount Rooms Drain -${String.format(Locale.US, "%.1f", prod.totalVaultResourceDrainPerSec)}/s vs Gain +${String.format(Locale.US, "%.1f", prod.totalGrossResourceGainPerSec)}/s • Daily: -${prod.dailyFoodUpkeepPerDay.toInt()}F, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()}W, $autoRepairText, -${prod.dailyRoomFuelUpkeep.toInt()}Fuel",
+                        text = "Vault Lv.${state.commandLevel} + $builtRoomsCount Rooms Drain -${String.format(Locale.US, "%.1f", prod.totalVaultResourceDrainPerSec)}/s vs Gain +${String.format(Locale.US, "%.1f", prod.totalGrossResourceGainPerSec)}/s • Daily: -${prod.dailyFoodUpkeepPerDay.toInt()}F, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()}W, $autoRepairText, -${prod.dailyRoomFuelUpkeep.toInt()}Fuel$manualGateSuffix",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextPrimary
                     )

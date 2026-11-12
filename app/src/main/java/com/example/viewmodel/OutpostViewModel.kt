@@ -584,10 +584,13 @@ class OutpostViewModel(
                     cachesBrokenThisTick = minOf(state.rawSalvageCaches, 1 + hiredScrappers / 3)
                     val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
                     val storeLv = current.buildingsMap[BuildingType.VAULT_STORE_ROOM.id] ?: 0
+                    val condenserLv = current.buildingsMap[BuildingType.ATMOSPHERIC_CONDENSER.id] ?: 0
+                    val farmLv = current.buildingsMap[BuildingType.HYDROPONIC_GREENHOUSE.id] ?: 0
                     val mult = (1.0 + yardLv * 0.20 + (state.salvageRigLevel - 1) * 0.18) * (1.0 + storeLv * 0.08)
                     cacheScrapBonus = cachesBrokenThisTick * 2.4 * mult
-                    cacheWaterBonus = cachesBrokenThisTick * 1.4 * mult
-                    cacheRationsBonus = cachesBrokenThisTick * 1.4 * mult
+                    // Automated Water requires Water Purifier Room; Automated Food requires Hydroponics Room!
+                    cacheWaterBonus = if (condenserLv >= 1) cachesBrokenThisTick * 1.4 * mult else 0.0
+                    cacheRationsBonus = if (farmLv >= 1) cachesBrokenThisTick * 1.4 * mult else 0.0
                     cacheGoldBonus = ((cachesBrokenThisTick * (0.8 + yardLv * 0.3) * mult) * 10.0).roundToInt() / 10.0
                     cacheFuelBonus = cachesBrokenThisTick * (0.3 + yardLv * 0.18)
                 }
@@ -899,8 +902,9 @@ class OutpostViewModel(
                     }
                 }
 
-                // Daily Room-Level Automated System Repair:
-                // Scrap is automatically used ONCE PER DAY depending on built Room Levels to repair automated systems ONLY!
+                // Daily Room-Level Operational Scrap & Automated System Repair:
+                // Scrap is required ONCE PER DAY depending on built Room Levels (each higher level takes more Scrap/day)
+                // to keep rooms 100% fully operational and repair automated systems!
                 if (wrapped) {
                     val stateForAutoRepair = state.copy(
                         defenseIntegrityPercent = nextIntegrity,
@@ -915,27 +919,34 @@ class OutpostViewModel(
                         buildingsMap = current.buildingsMap
                     )
                     val availableScrapForRepair = (state.scrap + snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus).coerceAtLeast(0.0)
-                    if (autoRepairPlan.needsAutomatedRepair && availableScrapForRepair > 0.0) {
+                    if (autoRepairPlan.needsAutomatedRepair) {
                         newDayScrapDeduct = minOf(availableScrapForRepair, autoRepairPlan.scrapCost)
                         val repairRatio = if (autoRepairPlan.scrapCost > 0.0) {
                             (newDayScrapDeduct / autoRepairPlan.scrapCost).coerceIn(0.0, 1.0)
                         } else 0.0
-                        nextIntegrity = (nextIntegrity + (autoRepairPlan.doorIntegrityRestore * repairRatio).roundToInt()).coerceAtMost(100)
-                        if (nextIntegrity >= 100) {
-                            nextNeedsRepair = false
+                        if (repairRatio < 0.99 && autoRepairPlan.totalRoomLevels > 0) {
+                            nextRoomWear = (nextRoomWear + 10).coerceAtMost(80)
+                            val lowScrapMsg = "LOW OPERATIONAL SCRAP (Room Lv.${autoRepairPlan.totalRoomLevels}): Needed ${String.format(java.util.Locale.US, "%.1f", autoRepairPlan.scrapCost)} Scrap/day to keep rooms fully operational (used -${String.format(java.util.Locale.US, "%.1f", newDayScrapDeduct)} Scrap) — Room Wear rose to $nextRoomWear%!"
+                            overlayFlow.update { it.copy(lastDefenseDamageFeedback = lowScrapMsg) }
+                            repository.logEvent("ROOM SCRAP SHORTAGE", lowScrapMsg)
+                        } else if (newDayScrapDeduct > 0.0) {
+                            nextIntegrity = (nextIntegrity + (autoRepairPlan.doorIntegrityRestore * repairRatio).roundToInt()).coerceAtMost(100)
+                            if (nextIntegrity >= 100) {
+                                nextNeedsRepair = false
+                            }
+                            nextGeneratorWear = (nextGeneratorWear - (autoRepairPlan.generatorWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
+                            nextRoomWear = (nextRoomWear - (autoRepairPlan.roomWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
+                            if (repairRatio >= 0.5 && autoRepairPlan.pipeLeaksSealed > 0) {
+                                nextPipeLeaks = (nextPipeLeaks - autoRepairPlan.pipeLeaksSealed).coerceAtLeast(0)
+                            }
+                            if (repairRatio >= 0.75 && autoRepairPlan.clearsSabotage) {
+                                nextSabotagedBuildingId = ""
+                                nextSabotagedPenalty = 0
+                            }
+                            val autoRepairMsg = "DAILY ROOM SCRAP UPKEEP & AUTO-REPAIR (Room Lv.${autoRepairPlan.totalRoomLevels}): Used -${String.format(java.util.Locale.US, "%.1f", newDayScrapDeduct)} Scrap/day to keep rooms fully operational (Door $nextIntegrity%, Gen Wear $nextGeneratorWear%, Room Wear $nextRoomWear%)!"
+                            overlayFlow.update { it.copy(lastDefenseDamageFeedback = autoRepairMsg) }
+                            repository.logEvent("DAILY AUTO-REPAIR", autoRepairMsg)
                         }
-                        nextGeneratorWear = (nextGeneratorWear - (autoRepairPlan.generatorWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
-                        nextRoomWear = (nextRoomWear - (autoRepairPlan.roomWearReduction * repairRatio).roundToInt()).coerceAtLeast(0)
-                        if (repairRatio >= 0.5 && autoRepairPlan.pipeLeaksSealed > 0) {
-                            nextPipeLeaks = (nextPipeLeaks - autoRepairPlan.pipeLeaksSealed).coerceAtLeast(0)
-                        }
-                        if (repairRatio >= 0.75 && autoRepairPlan.clearsSabotage) {
-                            nextSabotagedBuildingId = ""
-                            nextSabotagedPenalty = 0
-                        }
-                        val autoRepairMsg = "DAILY AUTO-REPAIR (Room Lv.${autoRepairPlan.totalRoomLevels}): Used -${String.format(java.util.Locale.US, "%.1f", newDayScrapDeduct)} Scrap to repair automated systems (Door $nextIntegrity%, Gen Wear $nextGeneratorWear%, Room Wear $nextRoomWear%)!"
-                        overlayFlow.update { it.copy(lastDefenseDamageFeedback = autoRepairMsg) }
-                        repository.logEvent("DAILY AUTO-REPAIR", autoRepairMsg)
                     } else {
                         newDayScrapDeduct = 0.0
                     }
@@ -2437,10 +2448,10 @@ class OutpostViewModel(
             }
 
             val newCombo = (state.salvageComboCount + 1).coerceAtMost(15)
-            // Hardcore Mining: Pickaxe Durability (-3% per swing), Shaft Heat (+7% per swing), and Cave-In Hazard!
+            // Swinging Pickaxe does NOT cause heat!
             val nextDurability = (state.pickaxeDurabilityPercent - 3).coerceAtLeast(0)
-            val nextHeat = (state.miningShaftHeatPercent + 7).coerceAtMost(100)
-            val triggeredCaveIn = state.activeCaveInHazard || (nextHeat >= 80 && Random.nextInt(100) < 25)
+            val nextHeat = OutpostCalculator.computePickaxeSwingNextHeat(state.miningShaftHeatPercent)
+            val triggeredCaveIn = state.activeCaveInHazard
 
             val stateWithCombo = state.copy(
                 salvageComboCount = newCombo,
@@ -2479,7 +2490,6 @@ class OutpostViewModel(
                 )
                 repository.updateOutpostState(updatedState)
                 val hazardSuffix = when {
-                    triggeredCaveIn && !state.activeCaveInHazard -> " • CAVE-IN TRIGGERED (80%+ Heat)!"
                     nextDurability <= 20 -> " • Pickaxe Dull ($nextDurability%)!"
                     else -> ""
                 }

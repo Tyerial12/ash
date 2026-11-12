@@ -1084,6 +1084,7 @@ class ExampleUnitTest {
         val intactAutomatedState = OutpostStateEntity(
             commandLevel = 2,
             totalSurvivors = 2,
+            scrap = 100.0,
             rations = 50.0,
             water = 50.0,
             bioFuel = 50.0,
@@ -1098,14 +1099,73 @@ class ExampleUnitTest {
         val buildingsLv1 = mapOf(BuildingType.SALVAGE_YARD.id to 1)
         val buildingsLv3 = mapOf(BuildingType.SALVAGE_YARD.id to 3, BuildingType.ATMOSPHERIC_CONDENSER.id to 2)
         val workers = mapOf(
-            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 2, classLevel = 1)
+            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 1, classLevel = 1),
+            WorkerClassType.HYDRO_ENGINEER.id to WorkerClassEntity(WorkerClassType.HYDRO_ENGINEER.id, assignedCount = 1, classLevel = 1)
         )
 
-        val intactPlan = OutpostCalculator.computeDailyAutomatedRepairPlan(intactAutomatedState, buildingsLv3)
+        // When no rooms are built (emptyMap) and no automated systems are damaged, 0 Scrap is needed per day
+        val noRoomsIntactPlan = OutpostCalculator.computeDailyAutomatedRepairPlan(intactAutomatedState, emptyMap())
+        assertFalse("When no rooms are built and systems are intact, no daily Scrap is needed", noRoomsIntactPlan.needsAutomatedRepair)
+        assertEquals("0 Scrap is used daily when no rooms are built and systems are intact", 0.0, noRoomsIntactPlan.scrapCost, 0.001)
+
+        // Built rooms ALWAYS require daily Scrap to stay fully operational, and each higher level takes more Scrap per day!
+        val intactPlanLv1 = OutpostCalculator.computeDailyAutomatedRepairPlan(intactAutomatedState, buildingsLv1)
+        val intactPlanLv3 = OutpostCalculator.computeDailyAutomatedRepairPlan(intactAutomatedState, buildingsLv3)
         val intactSnap = OutpostCalculator.computeProductionSnapshot(intactAutomatedState, buildingsLv3, workers, emptyMap(), 1000L)
-        assertFalse("When all automated systems are intact, no automated repair is needed", intactPlan.needsAutomatedRepair)
-        assertEquals("0 Scrap is used daily when automated systems do not need repair", 0.0, intactPlan.scrapCost, 0.001)
-        assertEquals("Daily room scrap upkeep is 0.0 when automated systems are intact", 0.0, intactSnap.dailyRoomScrapUpkeep, 0.001)
+        assertTrue("Built rooms require daily Scrap to stay fully operational", intactPlanLv1.needsAutomatedRepair && intactPlanLv3.needsAutomatedRepair)
+        assertTrue("Each room level takes more Scrap per day (Lv.3 > Lv.1 > 0)", intactPlanLv3.scrapCost > intactPlanLv1.scrapCost && intactPlanLv1.scrapCost > 0.0)
+        assertTrue("Daily room scrap upkeep is positive when rooms are built", intactSnap.dailyRoomScrapUpkeep > 0.0)
+        assertFalse("Rooms with Scrap in storage are 100% operational", intactSnap.isRoomsLackingScrap)
+        assertEquals(1.0, intactSnap.roomScrapOperationalMultiplier, 0.001)
+
+        // When Scrap runs out (scrap == 0.0), built rooms drop below 100% operational output
+        val noScrapSnap = OutpostCalculator.computeProductionSnapshot(intactAutomatedState.copy(scrap = 0.0), buildingsLv3, workers, emptyMap(), 1000L)
+        assertTrue("Rooms without Scrap are flagged as lacking operational Scrap", noScrapSnap.isRoomsLackingScrap)
+        assertTrue("Rooms without Scrap operate at reduced multiplier (< 1.0)", noScrapSnap.roomScrapOperationalMultiplier < 1.0)
+        assertTrue("Rooms with Scrap produce more Scrap/s than rooms lacking Scrap", intactSnap.scrapPerSec > noScrapSnap.scrapPerSec)
+
+        // Verify Water Purifier Room & Hydroponics Room Gating:
+        // Without Water Purifier Room (ATMOSPHERIC_CONDENSER Lv.0) and Hydroponics Room (HYDROPONIC_GREENHOUSE Lv.0),
+        // automated Water and Food production are 0 (can only get Food and Water manually without the rooms)!
+        val noWaterOrFoodRoomsSnap = OutpostCalculator.computeProductionSnapshot(
+            intactAutomatedState.copy(craftedSnareTraps = 3, aetherCrossbowLevel = 1),
+            mapOf(BuildingType.SALVAGE_YARD.id to 1),
+            workers,
+            emptyMap(),
+            1000L
+        )
+        assertFalse("Water Purifier Room is not built", noWaterOrFoodRoomsSnap.hasWaterPurifierRoom)
+        assertFalse("Hydroponics Room is not built", noWaterOrFoodRoomsSnap.hasHydroponicsRoom)
+        assertEquals("Daily room Water bonus is 0 without Water Purifier room", 0.0, noWaterOrFoodRoomsSnap.dailyRoomWaterBonus, 0.001)
+        assertEquals("Daily room Food bonus is 0 without Hydroponics room", 0.0, noWaterOrFoodRoomsSnap.dailyRoomFoodBonus, 0.001)
+        assertEquals("Passive trap food is 0 without Hydroponics room", 0.0, noWaterOrFoodRoomsSnap.passiveFoodFromTrapsPerSec, 0.001)
+        assertTrue("Net Water/s has 0 gross production without Water Purifier room (only dweller upkeep drain)", noWaterOrFoodRoomsSnap.waterPerSec <= 0.0)
+        assertTrue("Net Food/s has 0 gross production without Hydroponics room (only dweller upkeep drain)", noWaterOrFoodRoomsSnap.rationsPerSec <= 0.0)
+
+        // Meanwhile, manual Water and Food gathering (Fishing, Hunting, Salvage Nodes) still works without the rooms!
+        val manualFish = OutpostCalculator.computeFishingPreview(FishingSpot.CRATER_SHALLOWS_TROUT, intactAutomatedState, emptyMap())
+        val manualDewNode = OutpostCalculator.computeSalvageNodeYield(
+            SalvageNodeType.DEW_VAPOR_GEYSER, intactAutomatedState, emptyMap(), emptyMap(), emptyMap(), DayNightPhase.SCORCHING_DAY
+        )
+        assertTrue("Can still get Water and Food manually via Fishing without rooms", manualFish.waterReward > 0.0 && manualFish.foodReward > 0.0)
+        assertTrue("Can still get Water and Food manually via Salvage Nodes without rooms", manualDewNode.primaryAmount > 0.0 && manualDewNode.secondaryAmount > 0.0)
+
+        // Building Water Purifier & Hydroponics rooms unlocks automated Water & Food production!
+        val withWaterAndFoodRoomsSnap = OutpostCalculator.computeProductionSnapshot(
+            intactAutomatedState.copy(craftedSnareTraps = 3, aetherCrossbowLevel = 1),
+            mapOf(
+                BuildingType.SALVAGE_YARD.id to 1,
+                BuildingType.ATMOSPHERIC_CONDENSER.id to 1,
+                BuildingType.HYDROPONIC_GREENHOUSE.id to 1
+            ),
+            workers,
+            emptyMap(),
+            1000L
+        )
+        assertTrue("Water Purifier Room is built", withWaterAndFoodRoomsSnap.hasWaterPurifierRoom)
+        assertTrue("Hydroponics Room is built", withWaterAndFoodRoomsSnap.hasHydroponicsRoom)
+        assertTrue("Automated Water/s is positive once Water Purifier room is built", withWaterAndFoodRoomsSnap.waterPerSec > 0.0 && withWaterAndFoodRoomsSnap.dailyRoomWaterBonus > 0.0)
+        assertTrue("Automated Food/s is positive once Hydroponics room is built", withWaterAndFoodRoomsSnap.rationsPerSec > 0.0 && withWaterAndFoodRoomsSnap.dailyRoomFoodBonus > 0.0 && withWaterAndFoodRoomsSnap.passiveFoodFromTrapsPerSec > 0.0)
 
         val damagedAutomatedState = intactAutomatedState.copy(
             defenseIntegrityPercent = 70,
@@ -1140,11 +1200,13 @@ class ExampleUnitTest {
         assertTrue("Relics give a small boost to Outpost Storage Capacity", snap3Relics.storageCap > snap0Relics.storageCap)
         assertTrue("Relics slightly reduce daily auto-repair Scrap cost", snap3Relics.dailyAutoRepairScrapCost < snap0Relics.dailyAutoRepairScrapCost)
 
-        // Verify manual mining Pickaxe upgrades cost 0.0 Scrap at all levels & Scrap gather rate is lowered by 20% (0.80x)
+        // Verify manual mining Pickaxe upgrades cost 0.0 Scrap at all levels, swinging Pickaxe causes 0 Heat, & Scrap gather rate is lowered by 20% (0.80x)
         val (rigLv1ScrapCost, _) = OutpostCalculator.computeSalvageRigUpgradeCost(1)
         val (rigLv4ScrapCost, _) = OutpostCalculator.computeSalvageRigUpgradeCost(4)
         assertEquals("Manual mining Pickaxe Lv.1->2 upgrade costs 0 Scrap", 0.0, rigLv1ScrapCost, 0.001)
         assertEquals("Manual mining Pickaxe Lv.4->5 upgrade costs 0 Scrap", 0.0, rigLv4ScrapCost, 0.001)
+        assertEquals("Swinging Pickaxe causes 0 Heat", 0, OutpostCalculator.PICKAXE_SWING_HEAT_DELTA)
+        assertEquals("Swinging Pickaxe does not increase shaft heat", 25, OutpostCalculator.computePickaxeSwingNextHeat(25))
         assertEquals("Scrap gather rate multiplier is lowered by 20% (0.80)", 0.80, OutpostCalculator.SCRAP_GATHER_RATE_MULTIPLIER, 0.001)
 
         // Verify Wasteland Expeditions reward Dweller Armor & Weapons that add extra Outpost Defense

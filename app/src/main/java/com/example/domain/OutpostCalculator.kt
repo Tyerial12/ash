@@ -130,7 +130,11 @@ data class ProductionSnapshot(
     val haltedResourcesSummary: String = "",
     val totalStoredResources: Double = 0.0,
     val storeRoomResumeThreshold: Double = 0.0,
-    val dwellerGearDefenseBonus: Int = 0
+    val dwellerGearDefenseBonus: Int = 0,
+    val hasWaterPurifierRoom: Boolean = false,
+    val hasHydroponicsRoom: Boolean = false,
+    val isRoomsLackingScrap: Boolean = false,
+    val roomScrapOperationalMultiplier: Double = 1.0
 )
 
 data class AutomatedDailyRepairPlan(
@@ -358,6 +362,11 @@ object OutpostCalculator {
     const val STORE_ROOM_RESUME_THRESHOLD_RATIO = 0.50 // Resources do not restart gaining until Store Room drops to half (50%) capacity
     const val DWELLER_ARMOR_DEFENSE_BONUS = 12 // +12 Extra Vault Defense per Dweller Armor salvaged on Expeditions
     const val DWELLER_WEAPON_DEFENSE_BONUS = 15 // +15 Extra Vault Defense per Dweller Weapon salvaged on Expeditions
+    const val PICKAXE_SWING_HEAT_DELTA = 0 // Swinging pickaxe does NOT cause heat!
+
+    fun computePickaxeSwingNextHeat(currentHeat: Int): Int {
+        return (currentHeat + PICKAXE_SWING_HEAT_DELTA).coerceIn(0, 100)
+    }
 
     fun computeDwellerGearDefenseBonus(state: OutpostStateEntity): Int {
         return state.dwellerArmorCount.coerceAtLeast(0) * DWELLER_ARMOR_DEFENSE_BONUS +
@@ -604,10 +613,9 @@ object OutpostCalculator {
     }
 
     /**
-     * Scrap is automatically used once per day depending on built Room Levels
-     * to repair automated systems ONLY (Automated Defense/Blast Door, Automated Power Generators,
-     * and Automated Room Machinery / Coolant Pipes / Sabotage).
-     * If no automated systems are damaged or worn, 0.0 Scrap is used!
+     * Scrap is required every day depending on built Room Levels (each higher level takes more Scrap per day)
+     * to keep rooms 100% fully operational AND to automatically repair automated systems
+     * (Automated Defense/Blast Door, Automated Power Generators, and Room Machinery / Coolant Pipes / Sabotage).
      */
     fun computeDailyAutomatedRepairPlan(
         state: OutpostStateEntity,
@@ -620,7 +628,7 @@ object OutpostCalculator {
         val roomsOrPipesDamaged = state.roomStructuralWearPercent > 0 ||
             state.activePipeLeaksCount > 0 ||
             state.sabotagedBuildingId.isNotEmpty()
-        val needsAutomatedRepair = doorDamaged || generatorsWorn || roomsOrPipesDamaged
+        val needsAutomatedRepair = totalRoomLevels > 0 || doorDamaged || generatorsWorn || roomsOrPipesDamaged
 
         if (!needsAutomatedRepair) {
             return AutomatedDailyRepairPlan(
@@ -964,32 +972,37 @@ object OutpostCalculator {
             if (isResearchHalted) add("Research")
         }.joinToString(", ")
 
-        // Daily Powered Room Supply Bonuses (each resource bonus halts only while that specific resource is halted above 50% cap!)
-        val dailyRoomFoodBonus = if (isVaultBlackout || isRationsHalted) {
+        val hasWaterPurifierRoom = condenserLevel >= 1
+        val hasHydroponicsRoom = farmLevel >= 1
+        val isRoomsLackingScrap = totalBuiltRoomsCount > 0 && state.scrap <= 0.0
+        val roomScrapOperationalMultiplier = if (isRoomsLackingScrap) 0.65 else 1.0
+
+        // Daily Powered Room Supply Bonuses (Water requires Water Purifier Room, Food requires Hydroponics Room!)
+        val dailyRoomFoodBonus = if (isVaultBlackout || isRationsHalted || !hasHydroponicsRoom) {
             0.0
         } else {
             ((farmLevel * 3.8 * computeRoomLevelOutputMultiplier(farmLevel) +
-                cryoVaultLevel * 2.4 * computeRoomLevelOutputMultiplier(cryoVaultLevel)) * 10.0).roundToInt() / 10.0
+                cryoVaultLevel * 2.4 * computeRoomLevelOutputMultiplier(cryoVaultLevel)) * roomScrapOperationalMultiplier * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomWaterBonus = if (isVaultBlackout || isWaterHalted) {
+        val dailyRoomWaterBonus = if (isVaultBlackout || isWaterHalted || !hasWaterPurifierRoom) {
             0.0
         } else {
-            ((condenserLevel * 2.8 * computeRoomLevelOutputMultiplier(condenserLevel)) * 10.0).roundToInt() / 10.0
+            ((condenserLevel * 2.8 * computeRoomLevelOutputMultiplier(condenserLevel) * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
         }
         val dailyRoomScrapBonus = if (isVaultBlackout || isScrapHalted) {
             0.0
         } else {
-            ((smelteryLevel * 4.5 * SCRAP_GATHER_RATE_MULTIPLIER * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
+            ((smelteryLevel * 4.5 * SCRAP_GATHER_RATE_MULTIPLIER * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
         }
         val dailyRoomGoldBonus = if (isVaultBlackout || isStoreRoomFull) {
             0.0
         } else {
-            ((smelteryLevel * 1.4 * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
+            ((smelteryLevel * 1.4 * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
         }
         val dailyRoomFuelBonus = if (isVaultBlackout || isFuelHalted) {
             0.0
         } else {
-            ((smelteryLevel * 0.75 * computeRoomLevelOutputMultiplier(smelteryLevel)) * 10.0).roundToInt() / 10.0
+            ((smelteryLevel * 0.75 * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
         }
 
         // 3. Daily & 5-Minute Food/Water Upkeep per Worker + Forgiving Days 1-10 2-Minute Appetite Escalation
@@ -1190,7 +1203,11 @@ object OutpostCalculator {
                 haltedResourcesSummary = haltedResourcesSummary,
                 totalStoredResources = totalStoredResources,
                 storeRoomResumeThreshold = storeRoomResumeThreshold,
-                dwellerGearDefenseBonus = dwellerGearBonusDef
+                dwellerGearDefenseBonus = dwellerGearBonusDef,
+                hasWaterPurifierRoom = hasWaterPurifierRoom,
+                hasHydroponicsRoom = hasHydroponicsRoom,
+                isRoomsLackingScrap = isRoomsLackingScrap,
+                roomScrapOperationalMultiplier = roomScrapOperationalMultiplier
             )
         }
 
@@ -1269,13 +1286,13 @@ object OutpostCalculator {
                 else -> 0.75 + assignedFavored * 0.65
             }
 
-            // Rooms gradually get better from Level 0 (worst: 20% eff) upward (+18% eff each level), modified by room wear!
+            // Rooms gradually get better from Level 0 (worst: 20% eff) upward (+18% eff each level), modified by room wear & operational Scrap!
             val effectiveRoomUnits = computeRoomEffectiveTotalOutputMultiplier(level)
-            val rawOut = effectiveRoomUnits * bType.baseOutputPerLevel * staffingFactor * roomWearPenaltyMult
+            val rawOut = effectiveRoomUnits * bType.baseOutputPerLevel * staffingFactor * roomWearPenaltyMult * roomScrapOperationalMultiplier
             when (bType.primaryResource) {
                 ResourceType.SCRAP -> scrapBase += rawOut
-                ResourceType.WATER -> waterBase += rawOut
-                ResourceType.RATIONS -> rationsBase += rawOut
+                ResourceType.WATER -> if (hasWaterPurifierRoom) waterBase += rawOut
+                ResourceType.RATIONS -> if (hasHydroponicsRoom) rationsBase += rawOut
                 ResourceType.BIO_FUEL -> bioFuelBase += rawOut
                 ResourceType.RESEARCH_DATA -> researchBase += rawOut
                 ResourceType.MUTAGEN_CORES -> mutagenBase += rawOut
@@ -1284,8 +1301,8 @@ object OutpostCalculator {
 
             // Upgraded Vault Gold Mine & Ore Smeltery (SALVAGE_YARD) gathers real small amounts of Gold & Bio-Fuel per upgrade level!
             if (bType == BuildingType.SALVAGE_YARD && level > 0) {
-                goldBase += (0.06 + level * 0.09 + effectiveRoomUnits * 0.14) * staffingFactor * roomWearPenaltyMult
-                goldMineFuelTrickle += (0.04 + level * 0.05) * roomWearPenaltyMult
+                goldBase += (0.06 + level * 0.09 + effectiveRoomUnits * 0.14) * staffingFactor * roomWearPenaltyMult * roomScrapOperationalMultiplier
+                goldMineFuelTrickle += (0.04 + level * 0.05) * roomWearPenaltyMult * roomScrapOperationalMultiplier
             }
 
             if (level > 0 && bType.waterUpkeepPerLevel > 0.0 && assignedFavored > 0) {
@@ -1345,8 +1362,15 @@ object OutpostCalculator {
                 }
                 WorkerClassType.HYDRO_ENGINEER -> {
                     if (cLevel >= 5) workerOut *= 1.25
-                    waterBase += workerOut
-                    rationsBase += workerOut * 0.55
+                    // Automated Water requires the Water Purifier Room (ATMOSPHERIC_CONDENSER);
+                    // Automated Food requires the Hydroponics Room (HYDROPONIC_GREENHOUSE).
+                    // Without those rooms, you can only get Food and Water manually!
+                    if (hasWaterPurifierRoom) {
+                        waterBase += workerOut * roomScrapOperationalMultiplier
+                    }
+                    if (hasHydroponicsRoom) {
+                        rationsBase += workerOut * 0.55 * roomScrapOperationalMultiplier
+                    }
                     if (cLevel >= 10) bioFuelBase += count * 0.30 * classLevelMult * lowRoomPacingMult
                 }
                 WorkerClassType.NIGHT_STALKER -> {
@@ -1377,11 +1401,15 @@ object OutpostCalculator {
         val rankHydroFiltration = skillsMap["IND_HYDRO_FILTRATION"] ?: 0
         val rankSovereign = skillsMap["WRK_SOVEREIGN_COMMAND"] ?: 0
 
-        val unhaltedPassiveFoodFromTraps = (
-            state.craftedSnareTraps * CraftableItemType.SNARE_TRAP.passiveFoodPerSec * 0.5 +
-                state.aetherCrossbowLevel * CraftableItemType.AETHER_CROSSBOW.passiveFoodPerSec * 0.5
-            ) * (1.0 + rankHydroFiltration * 0.22) * (1.0 + farmLevel * 0.25)
-        val passiveFoodFromTraps = if (isRationsHalted) 0.0 else unhaltedPassiveFoodFromTraps
+        val unhaltedPassiveFoodFromTraps = if (!hasHydroponicsRoom) {
+            0.0
+        } else {
+            (
+                state.craftedSnareTraps * CraftableItemType.SNARE_TRAP.passiveFoodPerSec * 0.5 +
+                    state.aetherCrossbowLevel * CraftableItemType.AETHER_CROSSBOW.passiveFoodPerSec * 0.5
+                ) * (1.0 + rankHydroFiltration * 0.22) * (1.0 + farmLevel * 0.25) * roomScrapOperationalMultiplier
+        }
+        val passiveFoodFromTraps = if (isRationsHalted || !hasHydroponicsRoom) 0.0 else unhaltedPassiveFoodFromTraps
 
         // PER-RESOURCE HALT & 50% CAPACITY RESUME:
         // Each resource halts when it reaches storageCap, and automatically resumes when THAT resource falls to <= 50% of storageCap!
@@ -1389,12 +1417,20 @@ object OutpostCalculator {
         val grossScrapPerSec = if (isScrapHalted) 0.0 else unhaltedScrapPerSec
         val scrapPerSec = (grossScrapPerSec - totalRoomScrapUpkeepPerSec).coerceAtLeast(-2.5)
 
-        val unhaltedWaterPerSec = waterBase * (1.0 + rankHydroFiltration * 0.22) * effectiveWaterPhase * daylightSkillMult * nightSkillMult * globalMult
-        val grossWaterPerSec = if (isWaterHalted) 0.0 else unhaltedWaterPerSec
+        val unhaltedWaterPerSec = if (!hasWaterPurifierRoom) {
+            0.0
+        } else {
+            waterBase * (1.0 + rankHydroFiltration * 0.22) * effectiveWaterPhase * daylightSkillMult * nightSkillMult * globalMult
+        }
+        val grossWaterPerSec = if (isWaterHalted || !hasWaterPurifierRoom) 0.0 else unhaltedWaterPerSec
         val waterPerSec = (grossWaterPerSec - totalRoomWaterUpkeepPerSec - citizenWaterUpkeep).coerceAtLeast(-2.5)
 
-        val unhaltedRationsPerSec = rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + unhaltedPassiveFoodFromTraps
-        val grossRationsPerSec = if (isRationsHalted) 0.0 else (rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + passiveFoodFromTraps)
+        val unhaltedRationsPerSec = if (!hasHydroponicsRoom) {
+            0.0
+        } else {
+            rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + unhaltedPassiveFoodFromTraps
+        }
+        val grossRationsPerSec = if (isRationsHalted || !hasHydroponicsRoom) 0.0 else (rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + passiveFoodFromTraps)
         val rationsPerSec = (grossRationsPerSec - citizenFoodUpkeep).coerceAtLeast(-2.5)
 
         val unhaltedGoldMineFuelPerSec = ((goldMineFuelTrickle) * 100.0).roundToInt() / 100.0
@@ -1546,7 +1582,11 @@ object OutpostCalculator {
             haltedResourcesSummary = haltedResourcesSummary,
             totalStoredResources = totalStoredResources,
             storeRoomResumeThreshold = storeRoomResumeThreshold,
-            dwellerGearDefenseBonus = dwellerGearBonusDef
+            dwellerGearDefenseBonus = dwellerGearBonusDef,
+            hasWaterPurifierRoom = hasWaterPurifierRoom,
+            hasHydroponicsRoom = hasHydroponicsRoom,
+            isRoomsLackingScrap = isRoomsLackingScrap,
+            roomScrapOperationalMultiplier = roomScrapOperationalMultiplier
         )
     }
 

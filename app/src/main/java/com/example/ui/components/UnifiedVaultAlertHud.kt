@@ -55,6 +55,10 @@ import com.example.ui.theme.SolarAmber
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.WarningOrange
 
+import com.example.ui.theme.SurplusGreen
+import com.example.ui.theme.TextSecondary
+import androidx.compose.material.icons.filled.Inventory2
+
 data class VaultCrisisAlert(
     val id: String,
     val title: String,
@@ -64,6 +68,29 @@ data class VaultCrisisAlert(
     val actionLabel: String,
     val onAction: () -> Unit
 )
+
+fun countActiveVaultAlerts(
+    state: OutpostStateEntity,
+    production: ProductionSnapshot,
+    activeRaid: RaiderSiegeThreat?
+): Int {
+    var count = 0
+    if (production.isStoreRoomFull || production.isAnyStoreRoomResourceHalted) count++
+    if (!production.isMakingPositiveResources && !production.isAnyStoreRoomResourceHalted) count++
+    if (production.isVaultBlackout || production.isVaultBrownout) count++
+    if (activeRaid != null) count++
+    if (state.sabotagedBuildingId.isNotEmpty() && state.sabotagedBuildingPenaltyPercent > 0) count++
+    if (state.activePipeLeaksCount > 0) count++
+    if (state.activeCaveInHazard) count++
+    if (state.generatorWearPercent >= 60) count++
+    if (state.bioTurbineLevel > 0 && state.bioFuel <= 2.0 && production.bioFuelPerSec < 0.0) count++
+    if (state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0) count++
+    if (production.isWorkersStarvingOrDehydrated) count++
+    if (state.oxygenPercent < 55 || state.radiationMillisieverts >= 100) count++
+    if (production.activeSubterraneanBoss != null && state.subterraneanBossHpPercent > 0) count++
+    if (state.dwellerStaminaPercent < 35 || state.sickDwellersCount > 0) count++
+    return count
+}
 
 @Composable
 fun UnifiedVaultAlertHud(
@@ -75,10 +102,38 @@ fun UnifiedVaultAlertHud(
     onQuickCrankDynamo: () -> Unit,
     onQuickTuneGenerators: () -> Unit,
     onQuickStabilizeAll: () -> Unit = {},
+    alwaysShowAllInTab: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    var expandAllCrises by rememberSaveable { mutableStateOf(false) }
+    var expandAllCrises by rememberSaveable { mutableStateOf(alwaysShowAllInTab) }
     val activeCrises = mutableListOf<VaultCrisisAlert>()
+
+    // 0. Store Room Full / Individual Resource Shelf At Cap Alert (50% Auto-Resume)
+    if (production.isStoreRoomFull) {
+        activeCrises.add(
+            VaultCrisisAlert(
+                id = "crisis_store_room_full",
+                title = "STORE ROOM FULL (${production.storageCap.toInt()} CAP PER RESOURCE)",
+                subtitle = "All resource shelves are at cap. Each resource automatically resumes production at ≤${production.storeRoomResumeThreshold.toInt()} (50% cap) — no Gold needed!",
+                icon = Icons.Default.Inventory2,
+                accentColor = WarningOrange,
+                actionLabel = "STORAGE",
+                onAction = { onNavigateToCrisis("logistics_ledger") }
+            )
+        )
+    } else if (production.isAnyStoreRoomResourceHalted) {
+        activeCrises.add(
+            VaultCrisisAlert(
+                id = "crisis_resource_shelf_halted",
+                title = "${production.haltedResourcesSummary.uppercase()} AT CAP (RESUMES AT ≤${production.storeRoomResumeThreshold.toInt()})",
+                subtitle = "Paused shelves auto-resume when they drop to ≤${production.storeRoomResumeThreshold.toInt()} (50% of ${production.storageCap.toInt()} cap). Other resources continue producing!",
+                icon = Icons.Default.Inventory2,
+                accentColor = SolarAmber,
+                actionLabel = "STORAGE",
+                onAction = { onNavigateToCrisis("logistics_ledger") }
+            )
+        )
+    }
 
     // 1. Blackout or Brownout Alert (Highest Priority)
     if (production.isVaultBlackout) {
@@ -275,6 +330,40 @@ fun UnifiedVaultAlertHud(
         )
     }
 
+    if (alwaysShowAllInTab && activeCrises.isEmpty()) {
+        Surface(
+            color = ObsidianCharcoal,
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, SurplusGreen.copy(alpha = 0.6f)),
+            modifier = modifier
+                .fillMaxWidth()
+                .testTag("vault_alert_hud_nominal")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "✓ ALL VAULT SYSTEMS & STORAGE SHELVES NOMINAL",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = SurplusGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "No active crises, leaks, or capped storage shelves. Resources pause at ${production.storageCap.toInt()} cap and auto-resume at ≤${production.storeRoomResumeThreshold.toInt()} (50%).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+        return
+    }
+
     var lastNonEmptyCrises by androidx.compose.runtime.remember {
         mutableStateOf<List<VaultCrisisAlert>>(emptyList())
     }
@@ -290,11 +379,12 @@ fun UnifiedVaultAlertHud(
         modifier = modifier.fillMaxWidth()
     ) {
         val topCrisis = displayCrises.firstOrNull() ?: return@AnimatedVisibility
+        val showExpandedList = alwaysShowAllInTab || expandAllCrises
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(horizontal = if (alwaysShowAllInTab) 0.dp else 12.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Surface(
                 color = ObsidianCharcoal,
@@ -335,7 +425,7 @@ fun UnifiedVaultAlertHud(
                                 text = topCrisis.subtitle,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextPrimary,
-                                maxLines = 1
+                                maxLines = 2
                             )
                         }
                     }
@@ -386,42 +476,44 @@ fun UnifiedVaultAlertHud(
             }
 
             if (displayCrises.size > 1) {
-                Surface(
-                    color = BunkerCharcoal,
-                    shape = RoundedCornerShape(6.dp),
-                    border = BorderStroke(1.dp, WarningOrange.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { expandAllCrises = !expandAllCrises }
-                        .testTag("alert_hud_expand_all_pill")
-                ) {
-                    Row(
+                if (!alwaysShowAllInTab) {
+                    Surface(
+                        color = BunkerCharcoal,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, WarningOrange.copy(alpha = 0.5f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .clickable { expandAllCrises = !expandAllCrises }
+                            .testTag("alert_hud_expand_all_pill")
                     ) {
-                        Text(
-                            text = if (expandAllCrises) {
-                                "▼ HIDE ${(displayCrises.size - 1).coerceAtLeast(1)} ADDITIONAL VAULT ALERTS"
-                            } else {
-                                "▶ +${(displayCrises.size - 1).coerceAtLeast(1)} OTHER CRITICAL VAULT ALERTS (Tap to expand all)"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = WarningOrange,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "TAP TO ${if (expandAllCrises) "COLLAPSE" else "INSPECT"}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SolarAmber,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (expandAllCrises) {
+                                    "▼ HIDE ${(displayCrises.size - 1).coerceAtLeast(1)} ADDITIONAL VAULT ALERTS"
+                                } else {
+                                    "▶ +${(displayCrises.size - 1).coerceAtLeast(1)} OTHER CRITICAL VAULT ALERTS (Tap to expand all)"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WarningOrange,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "TAP TO ${if (expandAllCrises) "COLLAPSE" else "INSPECT"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SolarAmber,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
-                AnimatedVisibility(visible = expandAllCrises) {
+                AnimatedVisibility(visible = showExpandedList) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -453,7 +545,7 @@ fun UnifiedVaultAlertHud(
                                             text = crisis.subtitle,
                                             style = MaterialTheme.typography.labelSmall,
                                             color = TextPrimary,
-                                            maxLines = 1
+                                            maxLines = 2
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))

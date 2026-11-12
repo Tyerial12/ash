@@ -142,13 +142,13 @@ fun HardcoreMiningHazardsCard(
                     )
                     Column {
                         Text(
-                            text = "MANUAL MINING TELEMETRY (0 SCRAP COST)",
+                            text = "MANUAL MINING TELEMETRY (0 SCRAP COST • 0 SWING HEAT)",
                             style = MaterialTheme.typography.titleSmall,
                             color = cardAccent,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "Manual mining, Pickaxe sharpening & Cave-In clearing cost 0 Scrap! Scrap is saved for daily room auto-repairs.",
+                            text = "Swinging Pickaxe causes 0 Heat! Manual mining, Pickaxe sharpening & Cave-In clearing cost 0 Scrap.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -392,16 +392,27 @@ fun HardcoreBuildingMaintenanceCard(
                     )
                     Column {
                         Text(
-                            text = "DAILY ROOM-LEVEL SCRAP AUTO-REPAIR & ROOM INTEGRITY",
+                            text = "DAILY ROOM-LEVEL SCRAP UPKEEP & AUTO-REPAIR",
                             style = MaterialTheme.typography.titleSmall,
                             color = borderAccent,
                             fontWeight = FontWeight.ExtraBold
                         )
+                        val waterFoodGateNote = when {
+                            !snap.hasWaterPurifierRoom && !snap.hasHydroponicsRoom ->
+                                " • Water & Food: MANUAL ONLY (Build Water Purifier & Hydroponics for auto production)"
+                            !snap.hasWaterPurifierRoom ->
+                                " • Water: MANUAL ONLY (Build Water Purifier Room for auto Water)"
+                            !snap.hasHydroponicsRoom ->
+                                " • Food: MANUAL ONLY (Build Hydroponics Room for auto Food)"
+                            else -> ""
+                        }
                         Text(
-                            text = if (snap.needsAutomatedSystemRepair) {
-                                "Daily Auto-Repair Active: Uses ${snap.dailyAutoRepairScrapCost.toInt()} Scrap/day (scaled by Room Lv.${uiState.buildingsMap.values.sum()}) to fix Door, Generators & Rooms!"
+                            text = if (snap.isRoomsLackingScrap) {
+                                "LOW SCRAP: Rooms running at ${(snap.roomScrapOperationalMultiplier * 100).roundToInt()}% output! Needs ${snap.dailyAutoRepairScrapCost.toInt()} Scrap/day (Room Lv.${uiState.buildingsMap.values.sum()}) to stay 100% operational$waterFoodGateNote"
+                            } else if (snap.needsAutomatedSystemRepair) {
+                                "Requires ${snap.dailyAutoRepairScrapCost.toInt()} Scrap/day (scaled by Room Lv.${uiState.buildingsMap.values.sum()}; each level takes more Scrap/day) to keep rooms 100% operational & auto-repair!$waterFoodGateNote"
                             } else {
-                                "All Automated Systems Intact (0 Scrap/day used)! When damaged, Scrap is used daily based on Room Levels."
+                                "No Rooms Built Yet (0 Scrap/day). Each built room level takes more Scrap per day to stay fully operational.$waterFoodGateNote"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -414,7 +425,7 @@ fun HardcoreBuildingMaintenanceCard(
                     border = BorderStroke(1.dp, borderAccent.copy(alpha = 0.55f))
                 ) {
                     Text(
-                        text = "EFF ${(snap.roomWearPenaltyMultiplier * 100).roundToInt()}%",
+                        text = "EFF ${(snap.roomWearPenaltyMultiplier * snap.roomScrapOperationalMultiplier * 100).roundToInt()}%",
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.ExtraBold,
