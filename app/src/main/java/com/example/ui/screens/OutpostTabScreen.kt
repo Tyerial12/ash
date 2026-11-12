@@ -78,8 +78,10 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.example.model.FishingSpot
+import com.example.model.VaultCascadeStage
 import com.example.model.VaultMapStation
 import com.example.model.VaultOperationalPosture
+import com.example.model.VaultRationingPolicy
 import com.example.ui.components.Vault3dHologramMapCard
 import com.example.ui.components.formatCompact
 import com.example.ui.theme.BioluminescentViolet
@@ -141,6 +143,11 @@ fun OutpostTabScreen(
     onRepairSabotagedBuilding: () -> Unit = {},
     onExecuteDeepCoreDrill: () -> Unit = {},
     onStrikeSubterraneanBoss: () -> Unit = {},
+    onSelectRationingPolicy: (VaultRationingPolicy) -> Unit = {},
+    onToggleBuildingMothball: (BuildingType) -> Unit = {},
+    onMothballNonEssentialRooms: () -> Unit = {},
+    onResumeAllMothballedRooms: () -> Unit = {},
+    onClaimVaultDirective: () -> Unit = {},
     initialSubViewName: String? = null,
     modifier: Modifier = Modifier
 ) {
@@ -234,6 +241,18 @@ fun OutpostTabScreen(
                         onCallEmergencyReliefDrop = onCallEmergencyReliefDrop,
                         onAdvanceDay = onAdvanceDay,
                         onRequestRestartGame = onRequestRestartGame
+                    )
+                }
+            }
+
+            if (showVaultRooms || showPowerGrid || showMineAndFix) {
+                item(key = "hardcore_vault_governance_and_directives_card") {
+                    HardcoreVaultGovernanceAndDirectivesCard(
+                        uiState = uiState,
+                        onSelectRationingPolicy = onSelectRationingPolicy,
+                        onMothballNonEssentialRooms = onMothballNonEssentialRooms,
+                        onResumeAllMothballedRooms = onResumeAllMothballedRooms,
+                        onClaimVaultDirective = onClaimVaultDirective
                     )
                 }
             }
@@ -454,8 +473,10 @@ fun OutpostTabScreen(
                         cost = costBreakdown,
                         assignedSynergyWorkers = assignedSynergyWorkers,
                         isVaultBlackout = uiState.production.isVaultBlackout,
+                        isMothballed = buildingType.id in uiState.production.mothballedBuildingIds,
                         activeConstruction = uiState.activeConstruction,
-                        onUpgrade = { onUpgradeBuilding(buildingType) }
+                        onUpgrade = { onUpgradeBuilding(buildingType) },
+                        onToggleMothball = { onToggleBuildingMothball(buildingType) }
                     )
                 }
             }
@@ -1945,8 +1966,10 @@ private fun BuildingStructureCard(
     cost: BuildingUpgradeCost,
     assignedSynergyWorkers: Int,
     isVaultBlackout: Boolean,
+    isMothballed: Boolean = false,
     activeConstruction: ActiveBuildingConstruction?,
-    onUpgrade: () -> Unit
+    onUpgrade: () -> Unit,
+    onToggleMothball: () -> Unit = {}
 ) {
     val icon: ImageVector = when (type) {
         BuildingType.SALVAGE_YARD -> Icons.Default.Build
@@ -2038,15 +2061,19 @@ private fun BuildingStructureCard(
                             color = SolarAmber,
                             fontWeight = FontWeight.SemiBold
                         )
-                        val powerTag = if (type.megawattDemandPerLevel > 0) {
-                            "Power Draw: ${cost.currentMegawattDraw} MW -> ${cost.nextLevelMegawattDraw} MW (+${cost.additionalMegawattDraw} MW at Lv.${level + 1})"
-                        } else {
-                            "Backup Generator: +8 MW/Lv Power & -10%/Lv Repair Cost"
+                        val powerTag = when {
+                            isMothballed && level > 0 -> "STANDBY MODE: 0 MW Draw (Shed ${cost.currentMegawattDraw} MW) • -80% Daily Upkeep • 100% Cap Preserved"
+                            type.megawattDemandPerLevel > 0 -> "Power Draw: ${cost.currentMegawattDraw} MW -> ${cost.nextLevelMegawattDraw} MW (+${cost.additionalMegawattDraw} MW at Lv.${level + 1})"
+                            else -> "Backup Generator: +8 MW/Lv Power & -10%/Lv Repair Cost"
                         }
                         Text(
                             text = powerTag,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (cost.willExceedPowerGrid) WarningOrange else CryoCyan,
+                            color = when {
+                                isMothballed && level > 0 -> SolarAmber
+                                cost.willExceedPowerGrid -> WarningOrange
+                                else -> CryoCyan
+                            },
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
@@ -2223,6 +2250,30 @@ private fun BuildingStructureCard(
                             else -> "UPGRADE (${cost.buildTimeSeconds}s)"
                         },
                         style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            if (level > 0) {
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = onToggleMothball,
+                    border = BorderStroke(1.dp, if (isMothballed) SurplusGreen else WarningOrange),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("mothball_building_${type.id.lowercase()}")
+                ) {
+                    Text(
+                        text = if (isMothballed) {
+                            "RESUME SECTOR POWER (RESTORE PRODUCTION • +${cost.currentMegawattDraw} MW)"
+                        } else {
+                            "STANDBY / MOTHBALL ROOM (0 MW • -80% DAILY UPKEEP • KEEP +${cost.storageCapBonusCurrent.toInt()} CAP)"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isMothballed) SurplusGreen else WarningOrange,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -2526,3 +2577,268 @@ fun SubterraneanDeepCoreDrillingCard(
         }
     }
 }
+
+@Composable
+fun HardcoreVaultGovernanceAndDirectivesCard(
+    uiState: OutpostUiState,
+    onSelectRationingPolicy: (VaultRationingPolicy) -> Unit,
+    onMothballNonEssentialRooms: () -> Unit,
+    onResumeAllMothballedRooms: () -> Unit,
+    onClaimVaultDirective: () -> Unit
+) {
+    val prod = uiState.production
+    val season = prod.activeWastelandSeason
+    val nextSeason = prod.nextWastelandSeason
+    val era = prod.vaultTechEra
+    val cascade = prod.vaultCascadeStage
+    val directive = prod.currentDirective
+    val activeRation = prod.activeRationingPolicy
+
+    val cascadeColor = when (cascade) {
+        VaultCascadeStage.STAGE_0_STABLE -> SurplusGreen
+        VaultCascadeStage.STAGE_1_WARNING -> SolarAmber
+        VaultCascadeStage.STAGE_2_SUBSYSTEM_STRAIN -> WarningOrange
+        VaultCascadeStage.STAGE_3_CRITICAL_CASCADE -> HazardRed
+    }
+
+    Surface(
+        color = SteelPanel,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.5.dp, cascadeColor.copy(alpha = 0.85f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("hardcore_vault_governance_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Header: Vault Tech Era & 3-Stage Cascade Status
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${era.title.uppercase()} • ${era.shortBadge}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = XpGold,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = "${cascade.title}: ${prod.cascadeCrisisSummary}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cascadeColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Surface(
+                    color = cascadeColor.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, cascadeColor)
+                ) {
+                    Text(
+                        text = cascade.shortBadge,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = cascadeColor,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Rotating 5-Day Wasteland Season Forecast Banner
+            Surface(
+                color = BunkerCharcoal,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, CryoCyan.copy(alpha = 0.55f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "5-DAY WASTELAND SEASON: ${season.title.uppercase()}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = CryoCyan,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Next: ${nextSeason.shortLabel} in ${prod.daysRemainingInSeason}d",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SolarAmber,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = season.modifierSummary,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextPrimary
+                    )
+                }
+            }
+
+            // Overseer Rationing Decree Selector
+            Text(
+                text = "OVERSEER RATIONING DECREE (${activeRation.title}: ${activeRation.effectSummary})",
+                style = MaterialTheme.typography.labelSmall,
+                color = SolarAmber,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                VaultRationingPolicy.entries.forEach { policy ->
+                    val selected = policy == activeRation
+                    Button(
+                        onClick = { onSelectRationingPolicy(policy) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selected) SolarAmber else ElevatedSlate,
+                            contentColor = if (selected) BunkerCharcoal else TextPrimary
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("ration_policy_${policy.id.lowercase()}")
+                    ) {
+                        Text(
+                            text = policy.shortLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            // Room Mothballing / Sector Standby Load-Shedding Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onMothballNonEssentialRooms,
+                    border = BorderStroke(1.dp, WarningOrange),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("mothball_non_essential_button")
+                ) {
+                    Text(
+                        text = "STANDBY NON-ESSENTIAL (-80% UPKEEP)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WarningOrange,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                OutlinedButton(
+                    onClick = onResumeAllMothballedRooms,
+                    enabled = prod.mothballedRoomsCount > 0,
+                    border = BorderStroke(1.dp, if (prod.mothballedRoomsCount > 0) SurplusGreen else PanelBorder),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("resume_all_mothballed_button")
+                ) {
+                    Text(
+                        text = if (prod.mothballedRoomsCount > 0) {
+                            "RESUME ALL (${prod.mothballedRoomsCount} STANDBY • -${prod.mothballedMwSaved} MW)"
+                        } else {
+                            "ALL ROOMS ONLINE (0 STANDBY)"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (prod.mothballedRoomsCount > 0) SurplusGreen else TextMuted,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // Multi-Day Overseer Directive & Permanent Blueprint Commendation
+            Surface(
+                color = BunkerCharcoal,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (directive.isCompleted) SurplusGreen else XpGold.copy(alpha = 0.6f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "DIRECTIVE TIER ${directive.tierIndex + 1}: ${directive.title.uppercase()}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (directive.isCompleted) SurplusGreen else XpGold,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Blueprints: +${prod.directiveOutputBonusPercent}% Out • +${prod.directiveStorageBonus.toInt()} Cap",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = RadTeal,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "${directive.objectiveDescription} (${directive.progressText}) • Reward: ${directive.rewardSummary}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextPrimary
+                    )
+                    LinearProgressIndicator(
+                        progress = { directive.progressFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = if (directive.isCompleted) SurplusGreen else XpGold,
+                        trackColor = ElevatedSlate
+                    )
+                    Button(
+                        onClick = onClaimVaultDirective,
+                        enabled = directive.isCompleted,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SurplusGreen,
+                            contentColor = BunkerCharcoal,
+                            disabledContainerColor = ElevatedSlate,
+                            disabledContentColor = TextMuted
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("claim_vault_directive_button")
+                    ) {
+                        Text(
+                            text = if (directive.isCompleted) {
+                                "CLAIM DIRECTIVE TIER ${directive.tierIndex + 1} (${directive.rewardSummary.uppercase()})"
+                            } else {
+                                "IN PROGRESS (${directive.progressText}) — COMPLETE TO CLAIM BLUEPRINT"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

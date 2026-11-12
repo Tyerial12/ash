@@ -134,6 +134,10 @@ data class OutpostStateEntity(
     val discoveredRelicsCount: Int = 0, // Permanent Pre-Fall Relics unearthed (+1.5% Output, +2 DEF, +0.3 MW, +15 Storage & -1% Auto-Repair Cost each)
     val lastAttackSucceeded: Boolean = true, // True if the latest Outpost raid/siege was repelled; False if breached
     val lastAttackSummary: String = "Awaiting First Siege • Defenses Ready",
+    // Hardcore Bunker Governance: Rationing Laws, Room Mothballing (Standby) & Overseer Directives
+    val rationingPolicyId: String = "STANDARD_RATIONS", // HALF_RATIONS, STANDARD_RATIONS, DOUBLE_RATIONS
+    val mothballedBuildingsCsv: String = "", // Comma-separated BuildingType IDs placed in Standby (-80% upkeep, 0 MW, 0 output)
+    val claimedDirectiveTier: Int = 0, // Completed & claimed Multi-Day Overseer Directives (+2% Output & +25 Storage Cap per tier)
     val isGameOver: Boolean = false,
     val gameOverReason: String = "",
     val lastSavedTimestampMillis: Long = System.currentTimeMillis()

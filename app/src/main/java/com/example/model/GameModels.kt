@@ -1928,3 +1928,280 @@ enum class SubterraneanBossType(
     }
 }
 
+enum class VaultRationingPolicy(
+    val id: String,
+    val shortLabel: String,
+    val title: String,
+    val summary: String,
+    val foodWaterUpkeepMultiplier: Double,
+    val moraleBonusDelta: Int,
+    val outputMultiplier: Double,
+    val staminaRecoveryDeltaPerTick: Int,
+    val accentColor: Color
+) {
+    HALF_RATIONS(
+        id = "HALF_RATIONS",
+        shortLabel = "HALF RATIONS (-35% FOOD/WATER)",
+        title = "Emergency Half-Rations Decree",
+        summary = "Cuts Dweller 60s & daily Food/Water consumption by -35% during droughts, at the cost of -15% Morale & -10% Output.",
+        foodWaterUpkeepMultiplier = 0.65,
+        moraleBonusDelta = -15,
+        outputMultiplier = 0.90,
+        staminaRecoveryDeltaPerTick = 0,
+        accentColor = WarningOrange
+    ),
+    STANDARD_RATIONS(
+        id = "STANDARD_RATIONS",
+        shortLabel = "STANDARD ISSUE (100%)",
+        title = "Standard Vault Rationing",
+        summary = "Balanced 100% Food & Water rations with steady Crew Morale and normal shift stamina.",
+        foodWaterUpkeepMultiplier = 1.0,
+        moraleBonusDelta = 0,
+        outputMultiplier = 1.0,
+        staminaRecoveryDeltaPerTick = 1,
+        accentColor = RadTeal
+    ),
+    DOUBLE_RATIONS(
+        id = "DOUBLE_RATIONS",
+        shortLabel = "FEAST RATIONS (+22% OUTPUT)",
+        title = "Double Ration & High-Calorie Feast",
+        summary = "Boosts Crew Output by +22%, Morale by +18%, and doubles Stamina recovery, while taking +35% more Food & Water.",
+        foodWaterUpkeepMultiplier = 1.35,
+        moraleBonusDelta = 18,
+        outputMultiplier = 1.22,
+        staminaRecoveryDeltaPerTick = 2,
+        accentColor = SurplusGreen
+    );
+
+    val effectSummary: String
+        get() = summary
+
+    companion object {
+        fun fromId(id: String): VaultRationingPolicy {
+            return entries.firstOrNull { it.id == id } ?: STANDARD_RATIONS
+        }
+    }
+}
+
+enum class WastelandSeason(
+    val id: String,
+    val title: String,
+    val shortLabel: String,
+    val weatherSummary: String,
+    val solarMwMultiplier: Double,
+    val waterCondenserMultiplier: Double,
+    val hydroponicsFoodMultiplier: Double,
+    val scrapSalvageMultiplier: Double,
+    val dailyFuelHeatingMultiplier: Double,
+    val dailyScrapCorrosionMultiplier: Double,
+    val raidThreatMultiplier: Double,
+    val moraleDelta: Int,
+    val accentColor: Color
+) {
+    SCORCHING_FALLOUT(
+        id = "SCORCHING_FALLOUT",
+        title = "Scorching Fallout Glare",
+        shortLabel = "SCORCHING FALLOUT",
+        weatherSummary = "+25% Solar MW, -15% Water Condenser yield • Clear skies supercharge solar arrays but evaporate aquifer vapor.",
+        solarMwMultiplier = 1.25,
+        waterCondenserMultiplier = 0.85,
+        hydroponicsFoodMultiplier = 1.0,
+        scrapSalvageMultiplier = 1.0,
+        dailyFuelHeatingMultiplier = 1.0,
+        dailyScrapCorrosionMultiplier = 1.0,
+        raidThreatMultiplier = 1.0,
+        moraleDelta = 0,
+        accentColor = SolarAmber
+    ),
+    ACID_MONSOON(
+        id = "ACID_MONSOON",
+        title = "Corrosive Acid Monsoon",
+        shortLabel = "ACID MONSOON",
+        weatherSummary = "+35% Water Purifier & +10% Hydroponics, -20% Solar MW, +10% Daily Scrap Maintenance • Heavy downpours flood aquifers.",
+        solarMwMultiplier = 0.80,
+        waterCondenserMultiplier = 1.35,
+        hydroponicsFoodMultiplier = 1.10,
+        scrapSalvageMultiplier = 1.0,
+        dailyFuelHeatingMultiplier = 1.0,
+        dailyScrapCorrosionMultiplier = 1.10,
+        raidThreatMultiplier = 0.95,
+        moraleDelta = -4,
+        accentColor = CryoCyan
+    ),
+    NUCLEAR_WINTER(
+        id = "NUCLEAR_WINTER",
+        title = "Sub-Zero Nuclear Winter",
+        shortLabel = "NUCLEAR WINTER",
+        weatherSummary = "-45% Solar MW, -20% Water Purifier, +35% Daily Heating Fuel Upkeep • Deep freeze taxes bunker heating & solar panels.",
+        solarMwMultiplier = 0.55,
+        waterCondenserMultiplier = 0.80,
+        hydroponicsFoodMultiplier = 0.90,
+        scrapSalvageMultiplier = 1.05,
+        dailyFuelHeatingMultiplier = 1.35,
+        dailyScrapCorrosionMultiplier = 1.05,
+        raidThreatMultiplier = 0.90,
+        moraleDelta = -8,
+        accentColor = CryoCyan
+    ),
+    ASH_STORM_BLACKOUT(
+        id = "ASH_STORM_BLACKOUT",
+        title = "Volcanic Ash-Storm Blackout",
+        shortLabel = "ASH-STORM BLACKOUT",
+        weatherSummary = "+25% Scrap Salvage, -60% Solar MW, +15% Raider Siege Threat • Choking ash clouds hide approaching raider warbands.",
+        solarMwMultiplier = 0.40,
+        waterCondenserMultiplier = 0.95,
+        hydroponicsFoodMultiplier = 1.0,
+        scrapSalvageMultiplier = 1.25,
+        dailyFuelHeatingMultiplier = 1.10,
+        dailyScrapCorrosionMultiplier = 1.12,
+        raidThreatMultiplier = 1.15,
+        moraleDelta = -6,
+        accentColor = WarningOrange
+    ),
+    BIOLUMINESCENT_BLOOM(
+        id = "BIOLUMINESCENT_BLOOM",
+        title = "Bioluminescent Spore Thaw",
+        shortLabel = "BIOLUMINESCENT BLOOM",
+        weatherSummary = "+35% Hydroponics Food, +15% Water Purifier & +10% Crew Morale • Nutrient-rich subterranean bloom revitalizes the Vault.",
+        solarMwMultiplier = 1.05,
+        waterCondenserMultiplier = 1.15,
+        hydroponicsFoodMultiplier = 1.35,
+        scrapSalvageMultiplier = 1.10,
+        dailyFuelHeatingMultiplier = 0.90,
+        dailyScrapCorrosionMultiplier = 0.95,
+        raidThreatMultiplier = 1.05,
+        moraleDelta = 10,
+        accentColor = BioluminescentViolet
+    );
+
+    val modifierSummary: String
+        get() = weatherSummary
+
+    companion object {
+        const val DAYS_PER_SEASON = 5
+
+        fun forDay(dayCounter: Int): WastelandSeason {
+            val safeDay = dayCounter.coerceAtLeast(1)
+            val seasonIndex = ((safeDay - 1) / DAYS_PER_SEASON) % entries.size
+            return entries[seasonIndex]
+        }
+
+        fun nextSeasonForDay(dayCounter: Int): WastelandSeason {
+            val safeDay = dayCounter.coerceAtLeast(1)
+            val nextSeasonIndex = (((safeDay - 1) / DAYS_PER_SEASON) + 1) % entries.size
+            return entries[nextSeasonIndex]
+        }
+
+        fun daysRemainingInSeason(dayCounter: Int): Int {
+            val safeDay = dayCounter.coerceAtLeast(1)
+            return DAYS_PER_SEASON - ((safeDay - 1) % DAYS_PER_SEASON)
+        }
+    }
+}
+
+enum class VaultCascadeStage(
+    val stageNumber: Int,
+    val title: String,
+    val shortBadge: String,
+    val accentColor: Color
+) {
+    STAGE_0_STABLE(
+        stageNumber = 0,
+        title = "Stage 0: All Vault Systems Nominal",
+        shortBadge = "NOMINAL (0 HAZARDS)",
+        accentColor = SurplusGreen
+    ),
+    STAGE_1_WARNING(
+        stageNumber = 1,
+        title = "Stage 1: Early Subsystem Warning",
+        shortBadge = "STAGE 1 WARNING",
+        accentColor = SolarAmber
+    ),
+    STAGE_2_SUBSYSTEM_STRAIN(
+        stageNumber = 2,
+        title = "Stage 2: Compounding Subsystem Strain",
+        shortBadge = "STAGE 2 STRAIN",
+        accentColor = WarningOrange
+    ),
+    STAGE_3_CRITICAL_CASCADE(
+        stageNumber = 3,
+        title = "Stage 3: Critical Failure Cascade",
+        shortBadge = "STAGE 3 CASCADE",
+        accentColor = HazardRed
+    )
+}
+
+enum class VaultTechEra(
+    val eraNumber: Int,
+    val title: String,
+    val shortBadge: String,
+    val milestoneSummary: String,
+    val accentColor: Color
+) {
+    ERA_1_SURVIVAL_BUNKER(
+        eraNumber = 1,
+        title = "Era I: Makeshift Survival Shelter",
+        shortBadge = "ERA I • SHELTER",
+        milestoneSummary = "Mine with Pickaxe (0 Heat/0 Scrap), build Water Purifier & Hydroponics to unlock automated Water & Food.",
+        accentColor = SolarAmber
+    ),
+    ERA_2_HYDRO_INDUSTRIAL(
+        eraNumber = 2,
+        title = "Era II: Hydro-Industrial Grid",
+        shortBadge = "ERA II • HYDRO-GRID",
+        milestoneSummary = "Expand Storage Cap via Room Upgrades, staff Dwellers, and balance per-level daily maintenance.",
+        accentColor = CryoCyan
+    ),
+    ERA_3_DEEP_THERMAL(
+        eraNumber = 3,
+        title = "Era III: Deep-Core Thermal Bunker",
+        shortBadge = "ERA III • DEEP-CORE",
+        milestoneSummary = "Tap Floor B5 Geothermal & Cryo-Stasis, drill past 300m Abyssal Bosses, and survive Nuclear Winter.",
+        accentColor = RadTeal
+    ),
+    ERA_4_ATOMIC_AUTOMATION(
+        eraNumber = 4,
+        title = "Era IV: Atomic Fortress Automation",
+        shortBadge = "ERA IV • ATOMIC",
+        milestoneSummary = "Run Thorium/Aether Reactors, automate Siege Turrets, and master Multi-Season Directives.",
+        accentColor = BioluminescentViolet
+    ),
+    ERA_5_EDEN_METROPOLIS(
+        eraNumber = 5,
+        title = "Era V: Self-Sustaining Eden Metropolis",
+        shortBadge = "ERA V • EDEN CORE",
+        milestoneSummary = "Complete the 4-Phase Eden Core, achieve Tier V Certification, and Ascend for Permanent Prestige.",
+        accentColor = XpGold
+    );
+
+    val subtitle: String
+        get() = milestoneSummary
+}
+
+data class VaultDirectiveStatus(
+    val tier: Int,
+    val title: String,
+    val objectiveSummary: String,
+    val progressText: String,
+    val progressFraction: Float,
+    val isCompleted: Boolean,
+    val goldReward: Double,
+    val researchReward: Double,
+    val coresReward: Double,
+    val permanentBlueprintSummary: String
+) {
+    val tierIndex: Int
+        get() = (tier - 1).coerceAtLeast(0)
+    val objectiveDescription: String
+        get() = objectiveSummary
+    val rewardGold: Double
+        get() = goldReward
+    val rewardResearch: Double
+        get() = researchReward
+    val rewardMutagenCores: Double
+        get() = coresReward
+    val rewardSummary: String
+        get() = "+${goldReward.toInt()} Gold, +${researchReward.toInt()} Tech, +${coresReward.toInt()} Core(s) & $permanentBlueprintSummary"
+}
+
+

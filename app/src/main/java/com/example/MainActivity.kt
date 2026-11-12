@@ -688,7 +688,12 @@ fun AshfallOutpostApp(
                             onWeldRoomPipes = viewModel::weldRoomPipesAndWear,
                             onRepairSabotagedBuilding = viewModel::repairSabotagedBuilding,
                             onExecuteDeepCoreDrill = viewModel::executeDeepCoreDrill,
-                            onStrikeSubterraneanBoss = viewModel::strikeSubterraneanBoss
+                            onStrikeSubterraneanBoss = viewModel::strikeSubterraneanBoss,
+                            onSelectRationingPolicy = viewModel::selectRationingPolicy,
+                            onToggleBuildingMothball = viewModel::toggleBuildingMothball,
+                            onMothballNonEssentialRooms = viewModel::mothballAllNonEssentialRooms,
+                            onResumeAllMothballedRooms = viewModel::resumeAllMothballedRooms,
+                            onClaimVaultDirective = viewModel::claimCurrentVaultDirective
                         )
                         OutpostDestination.CREW -> CrewAndPowerTabScreen(
                             uiState = uiState,
@@ -710,6 +715,14 @@ fun AshfallOutpostApp(
                             onInjectThoriumOverdrive = viewModel::injectThoriumRodOverdrive,
                             onTriggerSolarFlare = viewModel::triggerSolarFlare,
                             onTriggerEclipseShroud = viewModel::triggerEclipseShroud,
+                            onUnlockOrUpgradeSkill = viewModel::unlockOrUpgradeSkill,
+                            onPerformPrestige = {
+                                if (isGoogleSignedIn) {
+                                    viewModel.performOverseerPrestige()
+                                } else {
+                                    onRequestGoogleSignIn()
+                                }
+                            },
                             isAuthenticated = isGoogleSignedIn,
                             userEmail = userEmail,
                             authErrorMessage = authErrorMessage,

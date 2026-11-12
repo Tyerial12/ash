@@ -44,7 +44,9 @@ import com.example.model.TradeTown
 import com.example.model.TurretAmmoType
 import com.example.model.VaultMapStation
 import com.example.model.VaultOperationalPosture
+import com.example.model.VaultRationingPolicy
 import com.example.model.WastelandExpeditionType
+import com.example.model.WastelandSeason
 import com.example.model.WorkerClassType
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
@@ -140,7 +142,7 @@ class OutpostViewModel(
                 SalvageNodeSlot(2, SalvageNodeType.OVERGROWN_BIO_DOME, 0, SalvageNodeType.OVERGROWN_BIO_DOME.maxDurability)
             ),
             hireableCandidates = CaravanCandidateGenerator.generateBoard(0, 1),
-            activeRaidThreat = createDailyRaidThreat(dayNumber = 1, commandLevel = 1, plasmaCount = 0)
+            activeRaidThreat = null
         )
     )
     private var offlineCheckCompleted = false
@@ -354,8 +356,11 @@ class OutpostViewModel(
                         autoRebalanceWorkersForPhase(nextPhase, state.totalSurvivors, current.workersMap)
                     }
                     refreshNodesForPhaseTransition(nextPhase)
-                    // Night Time is much more dangerous: entering RAD_NIGHT spawns a Nocturnal Mutant Swarm Assault!
-                    if (nextPhase == DayNightPhase.RAD_NIGHT && overlayFlow.value.activeRaidThreat == null) {
+                    // Night Time is much more dangerous starting on Day 11+: entering RAD_NIGHT spawns a Nocturnal Mutant Swarm Assault!
+                    if (nextPhase == DayNightPhase.RAD_NIGHT &&
+                        nextDayCounter >= OutpostCalculator.FIRST_ATTACK_DAY &&
+                        overlayFlow.value.activeRaidThreat == null
+                    ) {
                         val nightSwarm = createNightMutantSwarmThreat(
                             dayNumber = nextDayCounter,
                             commandLevel = state.commandLevel,
@@ -730,7 +735,13 @@ class OutpostViewModel(
                 val hasActiveAutoDefenseGrid = snap.isAutoDefenseActive
 
                 val currentRaid = overlayFlow.value.activeRaidThreat
-                if (currentRaid != null) {
+                if (nextDayCounter <= OutpostCalculator.PREPARATION_PEACE_DAYS) {
+                    // Strictly ZERO attacks on Days 1 to 10 (10-Day Vault Preparation Window)
+                    nextLastAttackDay = nextDayCounter
+                    if (currentRaid != null) {
+                        overlayFlow.update { it.copy(activeRaidThreat = null) }
+                    }
+                } else if (currentRaid != null) {
                     val autoInterceptReady = hasActiveAutoDefenseGrid &&
                         currentRaid.remainingSeconds <= 42 &&
                         (snap.totalDefenseRating >= currentRaid.requiredDefenseRating || state.craftedShrapnelMines >= 1)
@@ -809,7 +820,7 @@ class OutpostViewModel(
                         repository.logEvent("DAILY DEFENSE", outcomeSummary)
                         overlayFlow.update {
                             it.copy(
-                                activeRaidThreat = if (wrapped) {
+                                activeRaidThreat = if (wrapped && nextDayCounter >= OutpostCalculator.FIRST_ATTACK_DAY) {
                                     createDailyRaidThreat(nextDayCounter, state.commandLevel, state.plasmaCannonCount)
                                 } else null,
                                 lastDefenseDamageFeedback = outcomeSummary
@@ -820,15 +831,25 @@ class OutpostViewModel(
                             it.copy(activeRaidThreat = currentRaid.copy(remainingSeconds = currentRaid.remainingSeconds - 1))
                         }
                     }
-                } else if (wrapped || nextLastAttackDay < nextDayCounter) {
-                    overlayFlow.update {
-                        it.copy(
-                            activeRaidThreat = createDailyRaidThreat(
-                                dayNumber = nextDayCounter,
-                                commandLevel = state.commandLevel,
-                                plasmaCount = state.plasmaCannonCount
+                } else if (nextDayCounter >= OutpostCalculator.FIRST_ATTACK_DAY && (wrapped || nextLastAttackDay < nextDayCounter)) {
+                    val newThreat = createDailyRaidThreat(
+                        dayNumber = nextDayCounter,
+                        commandLevel = state.commandLevel,
+                        plasmaCount = state.plasmaCannonCount
+                    )
+                    if (wrapped && nextDayCounter == OutpostCalculator.FIRST_ATTACK_DAY) {
+                        val firstAttackWarn = "DAY 11 SIEGE ERA BEGINS: The 10-Day Preparation Window has ended! ${newThreat.title} is attacking (${newThreat.requiredDefenseRating} DEF Req)!"
+                        overlayFlow.update {
+                            it.copy(
+                                activeRaidThreat = newThreat,
+                                lastDefenseDamageFeedback = firstAttackWarn
                             )
-                        )
+                        }
+                        repository.logEvent("SIEGE ERA BEGINS", firstAttackWarn)
+                    } else {
+                        overlayFlow.update {
+                            it.copy(activeRaidThreat = newThreat)
+                        }
                     }
                 }
 
@@ -850,11 +871,12 @@ class OutpostViewModel(
                     nextShaftHeat = (state.miningShaftHeatPercent - 2).coerceAtLeast(0)
 
                     val habLv = current.buildingsMap[BuildingType.SURVIVOR_HAB_BLOCK.id] ?: 0
+                    val rationStaminaDelta = snap.activeRationingPolicy.staminaRecoveryDeltaPerTick
                     if (state.isRestRotationActive) {
-                        nextStamina = (state.dwellerStaminaPercent + 3 + habLv).coerceAtMost(100)
+                        nextStamina = (state.dwellerStaminaPercent + 3 + habLv + rationStaminaDelta).coerceIn(15, 100)
                     } else if (state.totalSurvivors > 0 && tickCounter % 6 == 0) {
-                        val fatigueStep = if (snap.activeGridBreakerMode == GridLoadBreakerMode.DRILL_OVERDRIVE) 2 else 1
-                        nextStamina = (state.dwellerStaminaPercent - fatigueStep).coerceAtLeast(15)
+                        val fatigueStep = (if (snap.activeGridBreakerMode == GridLoadBreakerMode.DRILL_OVERDRIVE) 2 else 1) - rationStaminaDelta
+                        nextStamina = (state.dwellerStaminaPercent - fatigueStep.coerceAtLeast(0)).coerceIn(15, 100)
                     }
 
                     val medbayLv = current.buildingsMap[BuildingType.REINFORCED_SILO.id] ?: 0
@@ -960,6 +982,13 @@ class OutpostViewModel(
                             "Day $nextDayCounter dawned: Crew & Rooms consumed -${newDayFoodDeduct.roundToInt()} Food$spoilMsg, -${newDayWaterDeduct.roundToInt()} Water, -${newDayScrapDeduct.roundToInt()} Auto-Repair Scrap & -${newDayFuelDeduct.roundToInt()} Fuel.$stableMsg"
                         )
                     }
+                    val prevSeason = WastelandSeason.forDay(state.dayCounter)
+                    val newSeason = WastelandSeason.forDay(nextDayCounter)
+                    if (prevSeason != newSeason) {
+                        val seasonMsg = "WASTELAND SEASON SHIFT (DAY $nextDayCounter): ${newSeason.title.uppercase()} — ${newSeason.modifierSummary}"
+                        overlayFlow.update { it.copy(lastSalvageFeedback = seasonMsg) }
+                        repository.logEvent("SEASON SHIFT", seasonMsg)
+                    }
                 }
 
                 val refineryLv = current.buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0
@@ -990,10 +1019,11 @@ class OutpostViewModel(
                 val nextIsGameOver = survivalEval?.isGameOver ?: false
                 val nextGameOverReason = survivalEval?.gameOverReason ?: ""
 
-                if (wrapped && nextDeficitDays == 1 && !nextIsGameOver) {
-                    val warn = "CRITICAL DEFICIT (DAY 1/2): Vault takes more resources to run than it gains! Vault Defenses are SHUT DOWN — restore resource generation within 1 Day or GAME OVER!"
+                if (wrapped && nextDeficitDays in 1 until OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER && !nextIsGameOver) {
+                    val rem = OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER - nextDeficitDays
+                    val warn = "RESOURCE DEPLETION CLOCK (DAY $nextDeficitDays/6): Vault is out of vital resources or in net deficit! Restore Food, Water & Scrap within $rem Day(s) or GAME OVER!"
                     overlayFlow.update { it.copy(lastDefenseDamageFeedback = warn) }
-                    repository.logEvent("DEFICIT SHUTDOWN", warn)
+                    repository.logEvent("DEFICIT CLOCK", warn)
                 }
                 if (wrapped && nextBlackoutDays in 1 until OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER && !nextIsGameOver) {
                     val rem = OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER - nextBlackoutDays
@@ -1894,7 +1924,7 @@ class OutpostViewModel(
             var nextLastAttackSummary = state.lastAttackSummary
             var defenseFeedback: String? = overlayFlow.value.lastDefenseDamageFeedback
 
-            if (state.lastAttackDayResolved < state.dayCounter) {
+            if (state.dayCounter >= OutpostCalculator.FIRST_ATTACK_DAY && state.lastAttackDayResolved < state.dayCounter) {
                 val raid = current.activeRaidThreat ?: createDailyRaidThreat(
                     state.dayCounter,
                     state.commandLevel,
@@ -1931,6 +1961,11 @@ class OutpostViewModel(
                 } else {
                     "FAILED: ${raid.title} Breached (${snap.totalDefenseRating}/${raid.requiredDefenseRating} DEF • Door $nextIntegrity%)"
                 }
+            } else if (nextDay <= OutpostCalculator.PREPARATION_PEACE_DAYS) {
+                val peaceLeft = OutpostCalculator.PREPARATION_PEACE_DAYS - nextDay + 1
+                defenseFeedback = "10-DAY PREPARATION WINDOW (Day $nextDay/10): $peaceLeft attack-free day(s) remaining before Day 11 Raider Siege begins!"
+            } else if (nextDay == OutpostCalculator.FIRST_ATTACK_DAY) {
+                defenseFeedback = "DAY 11 SIEGE ERA BEGUN: The 10-Day Preparation Window is over — Raider Warband incoming!"
             }
 
             // Daily Room-Level Automated System Repair:
@@ -2025,7 +2060,11 @@ class OutpostViewModel(
             overlayFlow.update {
                 it.copy(
                     activeConstruction = nextActiveBuild,
-                    activeRaidThreat = if (survivalEval.isGameOver) null else createDailyRaidThreat(nextDay, updated.commandLevel, updated.plasmaCannonCount),
+                    activeRaidThreat = if (survivalEval.isGameOver || nextDay < OutpostCalculator.FIRST_ATTACK_DAY) {
+                        null
+                    } else {
+                        createDailyRaidThreat(nextDay, updated.commandLevel, updated.plasmaCannonCount)
+                    },
                     lastDefenseDamageFeedback = if (survivalEval.isGameOver) survivalEval.gameOverReason else defenseFeedback
                 )
             }
@@ -2448,14 +2487,16 @@ class OutpostViewModel(
             }
 
             val newCombo = (state.salvageComboCount + 1).coerceAtMost(15)
-            // Swinging Pickaxe does NOT cause heat!
+            // Swinging Pickaxe does NOT cause heat, but every manual action costs Stamina!
             val nextDurability = (state.pickaxeDurabilityPercent - 3).coerceAtLeast(0)
+            val nextStamina = (state.dwellerStaminaPercent - OutpostCalculator.MANUAL_ACTION_STAMINA_COST).coerceAtLeast(10)
             val nextHeat = OutpostCalculator.computePickaxeSwingNextHeat(state.miningShaftHeatPercent)
             val triggeredCaveIn = state.activeCaveInHazard
 
             val stateWithCombo = state.copy(
                 salvageComboCount = newCombo,
                 pickaxeDurabilityPercent = nextDurability,
+                dwellerStaminaPercent = nextStamina,
                 miningShaftHeatPercent = nextHeat,
                 activeCaveInHazard = triggeredCaveIn
             )
@@ -2489,9 +2530,9 @@ class OutpostViewModel(
                     storageCap = snap.storageCap
                 )
                 repository.updateOutpostState(updatedState)
-                val hazardSuffix = when {
-                    nextDurability <= 20 -> " • Pickaxe Dull ($nextDurability%)!"
-                    else -> ""
+                val hazardSuffix = buildString {
+                    if (nextDurability <= 20) append(" • Pickaxe Dull ($nextDurability%)!")
+                    if (nextStamina <= 30) append(" • Stamina Low ($nextStamina% — Rest Crew)!")
                 }
                 val formattedTapGold = String.format(java.util.Locale.US, "%.1f", tapGold)
                 overlayFlow.update { ov ->
@@ -3458,7 +3499,7 @@ class OutpostViewModel(
                     activeDoorUpgrade = null,
                     activeConvoy = null,
                     activeExpedition = null,
-                    activeRaidThreat = createDailyRaidThreat(dayNumber = 1, commandLevel = 1, plasmaCount = 0),
+                    activeRaidThreat = null,
                     hireableCandidates = CaravanCandidateGenerator.generateBoard(
                         totalHiredSoFar = 0,
                         commandLevel = 1,
@@ -3852,13 +3893,16 @@ class OutpostViewModel(
             val snap = current.production
             val farmLv = current.buildingsMap[BuildingType.HYDROPONIC_GREENHOUSE.id] ?: 0
             val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
-            val foodGain = ((5.5 + farmLv * 1.5) * snap.uniqueDwellerBonusMultiplier).roundToInt().toDouble()
-            val waterGain = (2.0 * snap.uniqueDwellerBonusMultiplier).roundToInt().toDouble()
-            val scrapGain = (1.5 * snap.uniqueDwellerBonusMultiplier * 10.0).roundToInt() / 10.0
-            val goldGain = ((0.4 + yardLv * 0.15) * snap.uniqueDwellerBonusMultiplier * 10.0).roundToInt() / 10.0
+            val stamMult = snap.manualActionStaminaMultiplier
+            val foodGain = ((4.0 + farmLv * 1.4) * snap.uniqueDwellerBonusMultiplier * stamMult).roundToInt().coerceAtLeast(1).toDouble()
+            val waterGain = ((1.5 * snap.uniqueDwellerBonusMultiplier * stamMult).roundToInt().coerceAtLeast(1)).toDouble()
+            val scrapGain = ((1.2 * snap.uniqueDwellerBonusMultiplier * stamMult * 10.0).roundToInt() / 10.0).coerceAtLeast(0.5)
+            val goldGain = (((0.35 + yardLv * 0.12) * snap.uniqueDwellerBonusMultiplier * stamMult * 10.0).roundToInt() / 10.0)
+            val nextStamina = (state.dwellerStaminaPercent - OutpostCalculator.MANUAL_ACTION_STAMINA_COST).coerceAtLeast(10)
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
-                    dwellerHealthPercent = (state.dwellerHealthPercent + 4).coerceAtMost(100),
+                    dwellerStaminaPercent = nextStamina,
+                    dwellerHealthPercent = (state.dwellerHealthPercent + 3).coerceAtMost(100),
                     totalGoldSalvaged = state.totalGoldSalvaged + goldGain
                 ),
                 scrapDelta = scrapGain,
@@ -3869,7 +3913,8 @@ class OutpostViewModel(
                 storageCap = snap.storageCap
             )
             repository.updateOutpostState(updated)
-            val msg = "CAVE FORAGING: Harvested glowing fungi & sifted cave scrap (+${foodGain.toInt()} Food, +${waterGain.toInt()} Water, +$scrapGain Scrap, +$goldGain Gold, +10 XP)!"
+            val stamWarn = if (nextStamina <= 30) " [Stamina $nextStamina% — Build Hydroponics for auto-food!]" else " [Stamina $nextStamina%]"
+            val msg = "MANUAL CAVE FORAGING: Harvested glowing fungi & sifted cave scrap (+${foodGain.toInt()} Food, +${waterGain.toInt()} Water, +$scrapGain Scrap, +$goldGain Gold, +10 XP)!$stamWarn"
             overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
             repository.logEvent("FORAGE", msg)
         }
@@ -3881,11 +3926,14 @@ class OutpostViewModel(
             val state = current.state
             val snap = current.production
             val condenserLv = current.buildingsMap[BuildingType.ATMOSPHERIC_CONDENSER.id] ?: 0
-            val waterGain = ((6.5 + condenserLv * 1.6) * snap.uniqueDwellerBonusMultiplier).roundToInt().toDouble()
+            val stamMult = snap.manualActionStaminaMultiplier
+            val waterGain = ((4.5 + condenserLv * 1.5) * snap.uniqueDwellerBonusMultiplier * stamMult).roundToInt().coerceAtLeast(1).toDouble()
             val newHeat = (state.miningShaftHeatPercent - 20).coerceAtLeast(0)
             val newRads = (state.radiationMillisieverts - 5).coerceAtLeast(0)
+            val nextStamina = (state.dwellerStaminaPercent - OutpostCalculator.MANUAL_ACTION_STAMINA_COST).coerceAtLeast(10)
             val updated = applyXpAndResourceDelta(
                 baseState = state.copy(
+                    dwellerStaminaPercent = nextStamina,
                     miningShaftHeatPercent = newHeat,
                     radiationMillisieverts = newRads
                 ),
@@ -3894,7 +3942,8 @@ class OutpostViewModel(
                 storageCap = snap.storageCap
             )
             repository.updateOutpostState(updated)
-            val msg = "AQUIFER DISTILLATION: Boiled & condensed deep thermal steam (+${waterGain.toInt()} Purified Water, -20°C Shaft Heat, -5 mSv Rads, +10 XP)!"
+            val stamWarn = if (nextStamina <= 30) " [Stamina $nextStamina% — Build Water Purifier for auto-water!]" else " [Stamina $nextStamina%]"
+            val msg = "MANUAL AQUIFER DISTILLATION: Boiled & condensed deep thermal steam (+${waterGain.toInt()} Purified Water, -20°C Shaft Heat, -5 mSv Rads, +10 XP)!$stamWarn"
             overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
             repository.logEvent("WATER DISTILL", msg)
         }
@@ -4496,6 +4545,148 @@ class OutpostViewModel(
                 }
                 repository.logEvent("BOSS STRIKE", hitMsg)
             }
+        }
+    }
+
+    // --- PHASE 4 HARDCORE VAULT GOVERNANCE: RATIONING DECREES, ROOM MOTHBALLING & OVERSEER DIRECTIVES ---
+
+    fun selectRationingPolicy(policy: VaultRationingPolicy) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            repository.updateOutpostState(state.copy(rationingPolicyId = policy.id))
+            val msg = "RATIONING DECREE ENACTED -> ${policy.title.uppercase()}: ${policy.effectSummary}"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("RATION LAW", msg)
+        }
+    }
+
+    fun toggleBuildingMothball(buildingType: BuildingType) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val level = current.buildingsMap[buildingType.id] ?: 0
+            if (level <= 0) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "${buildingType.displayName} must be constructed (Lv.1+) before toggling Room Standby / Mothball mode.")
+                }
+                return@launch
+            }
+            val nextCsv = OutpostCalculator.toggleMothballedBuildingCsv(state.mothballedBuildingsCsv, buildingType.id)
+            val nowMothballed = buildingType.id in OutpostCalculator.parseMothballedSet(nextCsv)
+            repository.updateOutpostState(state.copy(mothballedBuildingsCsv = nextCsv))
+            val msg = if (nowMothballed) {
+                "SECTOR MOTHBALLED (STANDBY): ${buildingType.displayName} Lv.$level placed on Standby (0 MW power draw, -80% daily Scrap/Water/Fuel maintenance, 100% Storage Cap preserved)!"
+            } else {
+                "SECTOR ONLINE: ${buildingType.displayName} Lv.$level restored to full operational status!"
+            }
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("SECTOR STANDBY", msg)
+        }
+    }
+
+    fun mothballAllNonEssentialRooms() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val essentialIds = setOf(
+                BuildingType.ATMOSPHERIC_CONDENSER.id,
+                BuildingType.HYDROPONIC_GREENHOUSE.id
+            )
+            val nonEssentialBuiltIds = BuildingType.entries
+                .filter { (current.buildingsMap[it.id] ?: 0) > 0 && it.id !in essentialIds }
+                .map { it.id }
+            if (nonEssentialBuiltIds.isEmpty()) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "No built non-essential rooms to place on Standby (Water Purifier & Hydroponics remain online).")
+                }
+                return@launch
+            }
+            val nextCsv = nonEssentialBuiltIds.sorted().joinToString(",")
+            repository.updateOutpostState(state.copy(mothballedBuildingsCsv = nextCsv))
+            val msg = "EMERGENCY LOAD SHEDDING: Placed ${nonEssentialBuiltIds.size} non-essential room(s) on Standby (-80% upkeep & 0 MW draw; Water Purifier & Hydroponics kept online)!"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("LOAD SHEDDING", msg)
+        }
+    }
+
+    fun resumeAllMothballedRooms() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            if (state.mothballedBuildingsCsv.isBlank()) {
+                overlayFlow.update {
+                    it.copy(lastSalvageFeedback = "All constructed Vault rooms are already online!")
+                }
+                return@launch
+            }
+            repository.updateOutpostState(state.copy(mothballedBuildingsCsv = ""))
+            val msg = "ALL SECTORS ONLINE: Restored all mothballed Vault rooms to full power & production!"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("SECTORS ONLINE", msg)
+        }
+    }
+
+    fun claimCurrentVaultDirective() {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val snap = current.production
+            val directive = snap.currentDirective
+            if (!directive.isCompleted) {
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = "DIRECTIVE INCOMPLETE: ${directive.title} (${directive.progressText}) — ${directive.objectiveDescription}"
+                    )
+                }
+                return@launch
+            }
+            val nextTier = state.claimedDirectiveTier + 1
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(claimedDirectiveTier = nextTier),
+                researchDelta = directive.rewardResearch,
+                goldDelta = directive.rewardGold,
+                coresDelta = directive.rewardMutagenCores,
+                xpDelta = 45.0 + nextTier * 15.0,
+                storageCap = snap.storageCap + OutpostCalculator.DIRECTIVE_STORAGE_BONUS_PER_TIER
+            )
+            repository.updateOutpostState(updated)
+            val totalOutBonus = nextTier * 2
+            val totalCapBonus = (nextTier * OutpostCalculator.DIRECTIVE_STORAGE_BONUS_PER_TIER).toInt()
+            val winMsg = "★ DIRECTIVE TIER $nextTier CLAIMED (${directive.title}): +${directive.rewardGold.toInt()} Gold, +${directive.rewardResearch.toInt()} Research, +${directive.rewardMutagenCores.toInt()} Core(s) & Permanent Blueprint (+$totalOutBonus% Output, +$totalCapBonus Cap)!"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = winMsg,
+                    lastDefenseDamageFeedback = winMsg,
+                    levelUpBanner = LevelUpBannerState(
+                        title = "★ OVERSEER DIRECTIVE TIER $nextTier COMPLETE!",
+                        subtitle = directive.title,
+                        rewardSummary = "+${directive.rewardGold.toInt()} Gold • +${directive.rewardMutagenCores.toInt()} Core • Permanent +$totalOutBonus% Output & +$totalCapBonus Cap",
+                        isCommandLevel = false
+                    )
+                )
+            }
+            repository.logEvent("DIRECTIVE CLAIMED", winMsg)
         }
     }
 

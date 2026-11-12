@@ -766,6 +766,12 @@ fun VaultAlertsTabScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = TextPrimary
                         )
+                        Text(
+                            text = "${production.vaultCascadeStage.title} • Season: ${production.activeWastelandSeason.title} (Next: ${production.nextWastelandSeason.shortLabel} in ${production.daysRemainingInSeason}d) • Ration Law: ${production.activeRationingPolicy.shortLabel} • Standby Rooms: ${production.mothballedRoomsCount} (-${production.mothballedMwSaved} MW)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SolarAmber,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -798,11 +804,11 @@ fun VaultAlertsTabScreen(
                         Text(
                             text = when {
                                 production.isDefenseShutDownByDeficit && production.isVaultBlackout ->
-                                    "BLACKOUT (${state.blackoutDaysCount}/6D) & DEFICIT (${state.deficitDaysCount}/2D): ALL ROOMS & DEFENSES SHUT DOWN!"
+                                    "BLACKOUT (${state.blackoutDaysCount}/6D) & RESOURCE DEFICIT (${state.deficitDaysCount}/6D): ALL ROOMS & DEFENSES SHUT DOWN!"
                                 production.isDefenseShutDownByDeficit ->
-                                    "RESOURCE DEFICIT (${state.deficitDaysCount}/2D): VAULT TAKES MORE TO RUN THAN GAINING — DEFENSES SHUT DOWN!"
+                                    "RESOURCE DEPLETION / DEFICIT (${state.deficitDaysCount}/6D): VAULT LACKS RESOURCES — DEFENSES SHUT DOWN (6-DAY GAME OVER CLOCK)!"
                                 production.isVaultBlackout ->
-                                    "POWER BLACKOUT (${state.blackoutDaysCount}/6D): ALL AUTOMATED ROOMS & TURRETS HALTED! CRANK DYNAMO OR ADD FUEL!"
+                                    "POWER BLACKOUT (${state.blackoutDaysCount}/6D): ALL AUTOMATED ROOMS & TURRETS HALTED (6-DAY GAME OVER CLOCK)!"
                                 else ->
                                     "DWELLER STARVATION / DEHYDRATION: ALL WORKER PRODUCTION HALTED! FORAGE FOOD OR BOIL WATER!"
                             },

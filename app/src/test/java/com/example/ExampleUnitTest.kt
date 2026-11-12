@@ -521,26 +521,35 @@ class ExampleUnitTest {
 
     @Test
     fun attacksOnVault_getProgressivelyHarderAsDaysGoBy_withAcceleratingDifficultyCurve() {
-        val day1Def = OutpostCalculator.computeDailyRaidRequiredDefense(1, DayNightPhase.SCORCHING_DAY)
-        val day2Def = OutpostCalculator.computeDailyRaidRequiredDefense(2, DayNightPhase.SCORCHING_DAY)
-        val day3Def = OutpostCalculator.computeDailyRaidRequiredDefense(3, DayNightPhase.SCORCHING_DAY)
-        val day5Def = OutpostCalculator.computeDailyRaidRequiredDefense(5, DayNightPhase.SCORCHING_DAY)
-        val day7Def = OutpostCalculator.computeDailyRaidRequiredDefense(7, DayNightPhase.SCORCHING_DAY)
-        val day8Def = OutpostCalculator.computeDailyRaidRequiredDefense(8, DayNightPhase.SCORCHING_DAY)
-        val day10MegaDef = OutpostCalculator.computeDailyRaidRequiredDefense(10, DayNightPhase.SCORCHING_DAY)
+        // Days 1 to 10 are strictly the 10-Day Preparation Peace Window with 0 attacks
+        for (peaceDay in 1..OutpostCalculator.PREPARATION_PEACE_DAYS) {
+            assertEquals(
+                "Day $peaceDay must have 0 required raid defense during the 10-day preparation window",
+                0,
+                OutpostCalculator.computeDailyRaidRequiredDefense(peaceDay, DayNightPhase.SCORCHING_DAY)
+            )
+        }
+
+        val day11Def = OutpostCalculator.computeDailyRaidRequiredDefense(11, DayNightPhase.SCORCHING_DAY)
+        val day12Def = OutpostCalculator.computeDailyRaidRequiredDefense(12, DayNightPhase.SCORCHING_DAY)
+        val day13Def = OutpostCalculator.computeDailyRaidRequiredDefense(13, DayNightPhase.SCORCHING_DAY)
+        val day15Def = OutpostCalculator.computeDailyRaidRequiredDefense(15, DayNightPhase.SCORCHING_DAY)
+        val day17Def = OutpostCalculator.computeDailyRaidRequiredDefense(17, DayNightPhase.SCORCHING_DAY)
+        val day18Def = OutpostCalculator.computeDailyRaidRequiredDefense(18, DayNightPhase.SCORCHING_DAY)
         val day20MegaDef = OutpostCalculator.computeDailyRaidRequiredDefense(20, DayNightPhase.SCORCHING_DAY)
+        val day30MegaDef = OutpostCalculator.computeDailyRaidRequiredDefense(30, DayNightPhase.SCORCHING_DAY)
 
         assertTrue(
-            "Daily Vault attacks must require strictly more Defense Rating as days go by",
-            day1Def < day2Def && day2Def < day3Def && day3Def < day5Def && day5Def < day7Def && day7Def < day8Def && day8Def < day10MegaDef && day10MegaDef < day20MegaDef
+            "Daily Vault attacks starting on Day 11 must require strictly more Defense Rating as days go by",
+            day11Def > 0 && day11Def < day12Def && day12Def < day13Def && day13Def < day15Def && day15Def < day17Def && day17Def < day18Def && day18Def < day20MegaDef && day20MegaDef < day30MegaDef
         )
         assertTrue(
-            "Attack difficulty accelerates on later days ((Day 8 - Day 7) > (Day 2 - Day 1))",
-            (day8Def - day7Def) > (day2Def - day1Def)
+            "Attack difficulty accelerates on later days ((Day 18 - Day 17) > (Day 12 - Day 11))",
+            (day18Def - day17Def) > (day12Def - day11Def)
         )
 
-        val day5NightDef = OutpostCalculator.computeDailyRaidRequiredDefense(5, DayNightPhase.RAD_NIGHT)
-        assertTrue("Night Mutant Swarms are +35% harder than daytime attacks on the same day", day5NightDef > day5Def)
+        val day15NightDef = OutpostCalculator.computeDailyRaidRequiredDefense(15, DayNightPhase.RAD_NIGHT)
+        assertTrue("Night Mutant Swarms are +35% harder than daytime attacks on the same day", day15NightDef > day15Def)
     }
 
     @Test
@@ -592,13 +601,20 @@ class ExampleUnitTest {
         assertEquals(1, day1Eval.nextDeficitDaysCount)
         assertFalse("Day 1 of resource deficit warns player but does not end game yet", day1Eval.isGameOver)
 
-        val day2Eval = OutpostCalculator.evaluateSurvivalEndOfDay(
-            deficitState.copy(deficitDaysCount = 1),
+        val day5Eval = OutpostCalculator.evaluateSurvivalEndOfDay(
+            deficitState.copy(deficitDaysCount = 4),
             deficitSnap
         )
-        assertEquals(2, day2Eval.nextDeficitDaysCount)
-        assertTrue("2 consecutive days of resource deficit triggers Game Over", day2Eval.isGameOver)
-        assertTrue(day2Eval.gameOverReason.isNotEmpty())
+        assertEquals(5, day5Eval.nextDeficitDaysCount)
+        assertFalse("Day 5 of resource deficit does not end game before the 6-day Game Over clock", day5Eval.isGameOver)
+
+        val day6Eval = OutpostCalculator.evaluateSurvivalEndOfDay(
+            deficitState.copy(deficitDaysCount = 5),
+            deficitSnap
+        )
+        assertEquals(6, day6Eval.nextDeficitDaysCount)
+        assertTrue("6 consecutive days of resource depletion/deficit triggers Game Over", day6Eval.isGameOver)
+        assertTrue(day6Eval.gameOverReason.isNotEmpty())
     }
 
     @Test
@@ -1021,11 +1037,17 @@ class ExampleUnitTest {
             gold = 50.0,
             scrap = 100.0
         )
-        val raidThreat = OutpostCalculator.computeDailyRaidRequiredDefense(
+        val peaceDayThreat = OutpostCalculator.computeDailyRaidRequiredDefense(
             dayNumber = 3,
             activePhase = DayNightPhase.SCORCHING_DAY
         )
-        assertTrue("Day 3 raid defense requirement is calculated", raidThreat > 0)
+        assertEquals("Day 3 is within the 10-day preparation window (0 attacks)", 0, peaceDayThreat)
+
+        val raidThreatDay11 = OutpostCalculator.computeDailyRaidRequiredDefense(
+            dayNumber = OutpostCalculator.FIRST_ATTACK_DAY,
+            activePhase = DayNightPhase.SCORCHING_DAY
+        )
+        assertTrue("Day 11 first attack raid defense requirement is calculated", raidThreatDay11 > 0)
 
         val blastDoorCost = OutpostCalculator.computeBlastDoorUpgradeCost(
             state = state,
@@ -1286,5 +1308,107 @@ class ExampleUnitTest {
         val alertCountWithoutRooms = com.example.ui.components.countActiveVaultAlerts(intactAutomatedState, noWaterOrFoodRoomsSnap, null)
         assertTrue("Alerts counter includes missing Water Purifier / Hydroponics room manual-only alert", alertCountWithoutRooms > 0)
     }
+
+    @Test
+    fun hardcoreVaultGovernance_rationingLaws_roomMothballing_wastelandSeasons_andOverseerDirectives() {
+        val baseState = OutpostStateEntity(
+            commandLevel = 4,
+            dayCounter = 1,
+            totalSurvivors = 4,
+            scrap = 120.0,
+            water = 100.0,
+            rations = 100.0,
+            bioFuel = 80.0,
+            bioTurbineLevel = 3,
+            solarTowerLevel = 2,
+            defenseIntegrityPercent = 100
+        )
+        val buildings = mapOf(
+            BuildingType.SALVAGE_YARD.id to 2,
+            BuildingType.ATMOSPHERIC_CONDENSER.id to 1,
+            BuildingType.HYDROPONIC_GREENHOUSE.id to 1,
+            BuildingType.SIGNAL_RESEARCH_ARRAY.id to 2
+        )
+        val workers = mapOf(
+            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 2, classLevel = 2),
+            WorkerClassType.HYDRO_ENGINEER.id to WorkerClassEntity(WorkerClassType.HYDRO_ENGINEER.id, assignedCount = 1, classLevel = 1),
+            WorkerClassType.TECH_SAVANT.id to WorkerClassEntity(WorkerClassType.TECH_SAVANT.id, assignedCount = 1, classLevel = 1)
+        )
+
+        // 1. Verify Overseer Rationing Laws (HALF_RATIONS, STANDARD_RATIONS, DOUBLE_RATIONS)
+        val snapStandard = OutpostCalculator.computeProductionSnapshot(baseState, buildings, workers, emptyMap(), 1000L)
+        val snapHalfRations = OutpostCalculator.computeProductionSnapshot(
+            baseState.copy(rationingPolicyId = com.example.model.VaultRationingPolicy.HALF_RATIONS.id),
+            buildings, workers, emptyMap(), 1000L
+        )
+        val snapDoubleRations = OutpostCalculator.computeProductionSnapshot(
+            baseState.copy(rationingPolicyId = com.example.model.VaultRationingPolicy.DOUBLE_RATIONS.id),
+            buildings, workers, emptyMap(), 1000L
+        )
+        assertTrue(
+            "Half Rations cuts daily Food & Water upkeep by 35%, while Feast Rations increases upkeep by 45%",
+            snapHalfRations.dailyFoodUpkeepPerDay < snapStandard.dailyFoodUpkeepPerDay &&
+                snapHalfRations.dailyWaterUpkeepPerDay < snapStandard.dailyWaterUpkeepPerDay &&
+                snapDoubleRations.dailyFoodUpkeepPerDay > snapStandard.dailyFoodUpkeepPerDay
+        )
+        assertTrue(
+            "Feast Rations boosts worker production and morale compared to Standard and Half Rations",
+            snapDoubleRations.scrapPerSec > snapStandard.scrapPerSec &&
+                snapStandard.scrapPerSec > snapHalfRations.scrapPerSec &&
+                snapDoubleRations.moralePercent >= snapStandard.moralePercent &&
+                snapStandard.moralePercent > snapHalfRations.moralePercent
+        )
+
+        // 2. Verify Individual Room Standby / Mothballing (-80% upkeep, 0 MW draw, 100% Storage Cap preserved!)
+        val mothballedCsv = OutpostCalculator.toggleMothballedBuildingCsv("", BuildingType.SIGNAL_RESEARCH_ARRAY.id)
+        val snapMothballed = OutpostCalculator.computeProductionSnapshot(
+            baseState.copy(mothballedBuildingsCsv = mothballedCsv),
+            buildings, workers, emptyMap(), 1000L
+        )
+        assertEquals("1 room is placed on Standby", 1, snapMothballed.mothballedRoomsCount)
+        assertTrue("Mothballing Signal Research Array Lv.2 saves MW demand", snapMothballed.totalMegawattDemand < snapStandard.totalMegawattDemand && snapMothballed.mothballedMwSaved > 0)
+        assertTrue("Mothballing cuts daily room Scrap, Water, and Fuel maintenance by 80% for that room",
+            snapMothballed.dailyRoomScrapUpkeep < snapStandard.dailyRoomScrapUpkeep &&
+                snapMothballed.dailyRoomWaterUpkeep < snapStandard.dailyRoomWaterUpkeep &&
+                snapMothballed.dailyRoomFuelUpkeep < snapStandard.dailyRoomFuelUpkeep
+        )
+        assertEquals("Mothballing preserves 100% of the room's structural Storage Cap contribution", snapStandard.storageCap, snapMothballed.storageCap, 0.001)
+
+        // 3. Verify 5-Day Rotating Wasteland Seasons
+        assertEquals(com.example.model.WastelandSeason.SCORCHING_FALLOUT, com.example.model.WastelandSeason.forDay(1))
+        assertEquals(com.example.model.WastelandSeason.SCORCHING_FALLOUT, com.example.model.WastelandSeason.forDay(5))
+        assertEquals(com.example.model.WastelandSeason.ACID_MONSOON, com.example.model.WastelandSeason.forDay(6))
+        assertEquals(com.example.model.WastelandSeason.NUCLEAR_WINTER, com.example.model.WastelandSeason.forDay(11))
+        assertEquals(com.example.model.WastelandSeason.ASH_STORM_BLACKOUT, com.example.model.WastelandSeason.forDay(16))
+        assertEquals(com.example.model.WastelandSeason.BIOLUMINESCENT_BLOOM, com.example.model.WastelandSeason.forDay(21))
+        assertEquals(com.example.model.WastelandSeason.SCORCHING_FALLOUT, com.example.model.WastelandSeason.forDay(26))
+
+        // 4. Verify Vault Tech Eras, 3-Stage Cascade Telemetry & Permanent Directive Blueprint Bonuses
+        assertEquals(com.example.model.VaultCascadeStage.STAGE_0_STABLE, snapStandard.vaultCascadeStage)
+        val snapDirectiveTier3 = OutpostCalculator.computeProductionSnapshot(
+            baseState.copy(claimedDirectiveTier = 3),
+            buildings, workers, emptyMap(), 1000L
+        )
+        assertEquals(6, snapDirectiveTier3.directiveOutputBonusPercent)
+        assertEquals(75.0, snapDirectiveTier3.directiveStorageBonus, 0.01)
+        assertTrue(
+            "Claimed Overseer Directives permanently boost Vault output (+2%/tier) and Storage Cap (+25/tier)",
+            snapDirectiveTier3.scrapPerSec > snapStandard.scrapPerSec &&
+                snapDirectiveTier3.storageCap == snapStandard.storageCap + 75.0
+        )
+
+        // 5. Verify Hardcore 10-Day Preparation Window, 6-Day Game Over Clocks & Manual Stamina Rules
+        assertEquals(10, OutpostCalculator.PREPARATION_PEACE_DAYS)
+        assertEquals(11, OutpostCalculator.FIRST_ATTACK_DAY)
+        assertEquals(6, OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER)
+        assertEquals(6, OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER)
+        assertEquals(4, OutpostCalculator.MANUAL_ACTION_STAMINA_COST)
+        assertTrue("Day 1 is inside the 10-day preparation peace window", snapStandard.isPreparationPeaceWindow)
+        assertEquals(10, snapStandard.preparationDaysRemaining)
+        val snapDay11 = OutpostCalculator.computeProductionSnapshot(baseState.copy(dayCounter = 11), buildings, workers, emptyMap(), 1000L)
+        assertFalse("Day 11 is the first attack day (outside peace window)", snapDay11.isPreparationPeaceWindow)
+        assertEquals(0, snapDay11.preparationDaysRemaining)
+    }
 }
+
 

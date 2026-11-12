@@ -11,7 +11,7 @@
     <string name="tab_vault_stats">Vault Stats</string>
     <string name="tab_resources">Resources</string>
     <string name="tab_crew_power">Crew &amp; Power</string>
-    <string name="tab_vault_core">Hub</string>
+    <string name="tab_vault_core">Vault Info</string>
     <string name="tab_operations">Mine &amp; Build</string>
     <string name="tab_dwellers_expeditions">Dwellers</string>
     <string name="tab_defense_security">Defend &amp; Hunt</string>

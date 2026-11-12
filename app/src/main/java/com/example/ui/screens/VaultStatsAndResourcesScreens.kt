@@ -697,14 +697,14 @@ fun HardcoreHuntingTraumaAndAmmoCard(
 @Composable
 fun VaultStatsTabScreen(
     uiState: OutpostUiState,
-    onSetPosture: (VaultOperationalPosture) -> Unit,
-    onWeldRoomPipes: () -> Unit,
-    onTreatHuntingInjuries: () -> Unit,
-    onUseMedkit: () -> Unit,
-    onUseRadAway: () -> Unit,
-    onEmergencyManualCrank: () -> Unit,
-    onUnlockOrUpgradeSkill: (SkillNodeDefinition) -> Unit,
-    onPerformPrestige: () -> Unit,
+    onSetPosture: (VaultOperationalPosture) -> Unit = {},
+    onWeldRoomPipes: () -> Unit = {},
+    onTreatHuntingInjuries: () -> Unit = {},
+    onUseMedkit: () -> Unit = {},
+    onUseRadAway: () -> Unit = {},
+    onEmergencyManualCrank: () -> Unit = {},
+    onUnlockOrUpgradeSkill: (SkillNodeDefinition) -> Unit = {},
+    onPerformPrestige: () -> Unit = {},
     onCommissionEdenCoreModule: (Int) -> Unit = {},
     onAuditCertificationTier: (Int) -> Unit = {},
     onNavigateToTab: (String) -> Unit = {},
@@ -721,21 +721,10 @@ fun VaultStatsTabScreen(
     onRequestGoogleSignIn: () -> Unit = {},
     onPublishVault: () -> Unit = {}
 ) {
-    val context = LocalContext.current
     val state = uiState.state
     val snap = uiState.production
-    var showSkillTreeSection by rememberSaveable { mutableStateOf(false) }
-    var notificationStatusText by rememberSaveable {
-        mutableStateOf("Auto-arms when game closes: Max Resources, Out of Power & Room Upgrade Done.")
-    }
-
-    val schedule = OutpostCalculator.computeOfflineNotificationSchedule(
-        state = state,
-        production = snap,
-        activeConstructionBuildingId = uiState.activeConstruction?.buildingType?.id ?: state.activeConstructionBuildingId,
-        activeConstructionTargetLevel = uiState.activeConstruction?.targetLevel ?: state.activeConstructionTargetLevel,
-        activeConstructionRemainingSeconds = uiState.activeConstruction?.remainingSeconds ?: state.activeConstructionRemainingSeconds
-    )
+    val mothballedSet = OutpostCalculator.parseMothballedSet(state.mothballedBuildingsCsv)
+    val totalRoomLevels = uiState.buildingsMap.values.sum()
 
     LazyColumn(
         modifier = Modifier
@@ -744,1140 +733,789 @@ fun VaultStatsTabScreen(
         contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 1. Read-Only Vault Telemetry Header & 10-Day Preparation / Siege Readiness Card
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            val peaceActive = snap.isPreparationPeaceWindow
+            val headerAccent = when {
+                peaceActive -> CyanHydro
+                snap.totalDefenseRating >= snap.todayRequiredDefense -> BioGreen
+                else -> HazardRed
+            }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vault_telemetry_overview_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+                border = BorderStroke(1.5.dp, headerAccent.copy(alpha = 0.8f))
             ) {
-                FilledTonalButton(
-                    onClick = { showSkillTreeSection = false },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("vault_stats_mode_telemetry_btn"),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (!showSkillTreeSection) CyanHydro.copy(alpha = 0.25f) else VaultElevatedCard,
-                        contentColor = if (!showSkillTreeSection) CyanHydro else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("VAULT TELEMETRY & CORE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
-                }
-
-                FilledTonalButton(
-                    onClick = { showSkillTreeSection = true },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("vault_stats_mode_skills_btn"),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (showSkillTreeSection) AetherViolet.copy(alpha = 0.25f) else VaultElevatedCard,
-                        contentColor = if (showSkillTreeSection) AetherViolet else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                ) {
-                    Icon(Icons.Default.Hub, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "SKILL TREE (${state.availableSkillPoints} SP)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
-        }
-
-        if (showSkillTreeSection) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = VaultDarkSurface)
-                ) {
-                    Box(modifier = Modifier.height(740.dp)) {
-                        SkillTreeTabScreen(
-                            uiState = uiState,
-                            onUnlockSkill = onUnlockOrUpgradeSkill,
-                            onPerformPrestige = onPerformPrestige,
-                            isGoogleSignedIn = isGoogleSignedIn,
-                            onRequestGoogleSignIn = onRequestGoogleSignIn
-                        )
-                    }
-                }
-            }
-        } else {
-            // 0. Public Game & Optional Google Sign-In Status Card (Required only for Prestige, Cloud Save & Multiplayer)
-            item {
-                val openDropsCount = uiState.publicSupplyDrops.count { it.status == "open" }
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("vault_google_cloud_status_card"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
-                    border = BorderStroke(
-                        1.5.dp,
-                        if (isGoogleSignedIn) BioGreen.copy(alpha = 0.7f) else SolarAmber.copy(alpha = 0.7f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Public,
-                                contentDescription = "Public Vault Network",
-                                tint = if (isGoogleSignedIn) BioGreen else SolarAmber,
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = "Vault Telemetry",
+                                tint = headerAccent,
                                 modifier = Modifier.size(20.dp)
                             )
+                            Column {
+                                Text(
+                                    text = "VAULT INFORMATION & RESOURCE LEVELS TELEMETRY",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = headerAccent,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "Read-Only Overseer Status Monitor • Every Action & Resource Counts",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = headerAccent.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, headerAccent.copy(alpha = 0.55f))
+                        ) {
                             Text(
-                                text = if (isGoogleSignedIn) {
-                                    "PUBLIC VAULT NETWORK LIVE (${uiState.publicVaults.size} PUBLIC VAULTS • $openDropsCount SUPPLY DROPS)"
-                                } else {
-                                    "LOCAL OFFLINE MODE (SIGN IN FOR PUBLIC MULTIPLAYER, CLOUD SAVE & PRESTIGE)"
-                                },
-                                style = MaterialTheme.typography.titleSmall,
-                                color = if (isGoogleSignedIn) BioGreen else SolarAmber,
-                                fontWeight = FontWeight.ExtraBold
+                                text = "DAY ${state.dayCounter} • LV.${state.commandLevel}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = headerAccent,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
-                        Text(
-                            text = if (isGoogleSignedIn) {
-                                (uiState.publicNetworkFeedback ?: "").ifBlank {
-                                    "Your Vault is live on the Public Wasteland Network! You can Ascend (Prestige), Save Progress to the Cloud, and trade Multiplayer Supply Drops."
-                                }
-                            } else {
-                                "You can play all Mining, Building, Hunting & Survival mechanics offline without Google. Sign in with Google anytime to make your Vault public on the Global Leaderboard, Save to Cloud & Prestige!"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (isGoogleSignedIn) {
-                                Button(
-                                    onClick = onPublishVault,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 48.dp)
-                                        .testTag("stats_publish_public_vault_btn"),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = BioGreen,
-                                        contentColor = Color.Black
-                                    )
-                                ) {
-                                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "PUBLISH VAULT PUBLICLY",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                }
-                            } else {
-                                Button(
-                                    onClick = onRequestGoogleSignIn,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 48.dp)
-                                        .testTag("stats_google_sign_in_btn"),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = SolarAmber,
-                                        contentColor = Color.Black
-                                    )
-                                ) {
-                                    Text(
-                                        text = "SIGN IN (PUBLIC & CLOUD)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                }
-                            }
+                    }
 
-                            FilledTonalButton(
-                                onClick = {
-                                    val shareText = "Join Vault City (Public Nuclear Survival RPG)! My Vault is on Day ${state.dayCounter} (Command Lv.${state.commandLevel} • ${state.totalSurvivors}/15 Dwellers). Play & join the Public Vault Network: https://ais-pre-w3ronk3kb6rlcg5e54wro5-274786541862.us-east5.run.app"
-                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_SUBJECT, "Vault City — Public Survival RPG")
-                                        putExtra(Intent.EXTRA_TEXT, shareText)
-                                    }
-                                    runCatching {
-                                        context.startActivity(Intent.createChooser(sendIntent, "Share Public Game"))
-                                    }
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("stats_share_public_game_btn"),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = CyanHydro.copy(alpha = 0.22f),
-                                    contentColor = CyanHydro
-                                )
+                    // 10-Day Preparation Countdown or Day 11+ Siege Readiness Banner
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("vault_preparation_window_banner"),
+                        shape = RoundedCornerShape(10.dp),
+                        color = VaultDarkSurface,
+                        border = BorderStroke(1.dp, headerAccent.copy(alpha = 0.65f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "SHARE PUBLIC GAME",
+                                    text = if (peaceActive) {
+                                        "10-DAY PREPARATION WINDOW: DAY ${state.dayCounter}/10 (0 ATTACKS)"
+                                    } else {
+                                        "HOSTILE SIEGE ERA (DAY ${state.dayCounter}): DAILY RAIDER ATTACKS ACTIVE"
+                                    },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = headerAccent,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = if (peaceActive) {
+                                        "${snap.preparationDaysRemaining}d Until Day 11"
+                                    } else {
+                                        "${snap.totalDefenseRating}/${snap.todayRequiredDefense} DEF"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = headerAccent,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                             }
-                        }
-                    }
-                }
-            }
-
-            // 0B. Interactive 5-Stage Overseer Survival Roadmap & Live Objective Tracker
-            item {
-                OverseerSurvivalRoadmapCard(
-                    uiState = uiState,
-                    onNavigateToTab = onNavigateToTab
-                )
-            }
-
-            // 0C. Hands-On Overseer Field Survival & Auto-Stabilize Deck
-            item {
-                OverseerFieldSurvivalDeckCard(
-                    uiState = uiState,
-                    onQuickStabilizeAll = onQuickStabilizeAll,
-                    onForageRations = onForageRations,
-                    onBoilWater = onBoilWater,
-                    onFieldPressAmmo = onFieldPressAmmo,
-                    onScrubAir = onScrubAir,
-                    onIssueEmergencyRations = onIssueEmergencyRations
-                )
-            }
-
-            // 0D. Hardcore Physiological Needs (Hunger, Thirst, Sleep Stamina & Sickness Quarantine)
-            item {
-                PhysiologicalVitalsAndQuarantineCard(
-                    uiState = uiState,
-                    onToggleRestRotation = onToggleRestRotation,
-                    onCureSickAndExhaustedCrew = onCureSickAndExhaustedCrew,
-                    onIssueEmergencyRations = onIssueEmergencyRations
-                )
-            }
-
-            // 0E. Strict Power Grid Load Balancer & Machinery Breakdown Maintenance
-            item {
-                PowerGridLoadBalancerCard(
-                    uiState = uiState,
-                    onSetGridLoadBreakerMode = onSetGridLoadBreakerMode,
-                    onWeldRoomPipes = onWeldRoomPipes,
-                    onEmergencyManualCrank = onEmergencyManualCrank
-                )
-            }
-
-            // 1. Eden Core Endgame Project & 5-Tier Self-Sufficiency Certification Card
-            item {
-                val moduleCosts = OutpostCalculator.computeEdenCoreModuleCosts(state, uiState.buildingsMap)
-                val certPreviews = OutpostCalculator.computeCertificationPreviews(state, snap)
-                val isVictory = state.isSelfSustainedCertified
-                val headerAccent = if (isVictory) BioGreen else SolarAmber
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("eden_core_certification_card"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
-                    border = BorderStroke(1.5.dp, headerAccent.copy(alpha = 0.8f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PrecisionManufacturing,
-                                    contentDescription = "Eden Core",
-                                    tint = headerAccent,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = if (isVictory) "★ PERPETUAL EDEN CORE VAULT (AUTONOMOUS)" else "EDEN CORE: 5-TIER AUTONOMY PROJECT",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = headerAccent,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                    Text(
-                                        text = if (isVictory) "Victory Achieved! All 5 Self-Sufficiency Tiers Certified!" else "Build 4 Eden Modules & Certify 5 Tiers for Full Automation!",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = headerAccent.copy(alpha = 0.16f),
-                                border = BorderStroke(1.dp, headerAccent.copy(alpha = 0.55f))
-                            ) {
-                                Text(
-                                    text = "TIER ${state.certificationTier}/5",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = headerAccent,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = "EDEN CORE MODULES (${state.edenCorePhase}/4 BUILT):",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        moduleCosts.forEach { mod ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                color = VaultDarkSurface,
-                                border = BorderStroke(1.dp, if (mod.isBuilt) BioGreen else VaultCardBorder)
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = mod.title,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (mod.isBuilt) BioGreen else MaterialTheme.colorScheme.onSurface
-                                        )
-                                        if (mod.isBuilt) {
-                                            Text(
-                                                text = "✓ BUILT",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = BioGreen
-                                            )
-                                        }
+                            LinearProgressIndicator(
+                                progress = {
+                                    if (peaceActive) {
+                                        (state.dayCounter.toFloat() / OutpostCalculator.PREPARATION_PEACE_DAYS.toFloat()).coerceIn(0f, 1f)
+                                    } else {
+                                        (snap.totalDefenseRating.toFloat() / snap.todayRequiredDefense.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
                                     }
-                                    Text(
-                                        text = mod.description,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = "Requirement: ${mod.requiredBuildingSummary}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (mod.requirementsMet) BioGreen else RustOrange
-                                    )
-                                    if (!mod.isBuilt) {
-                                        val costText = buildString {
-                                            if (mod.scrapCost > 0) append("${mod.scrapCost.toInt()} Scrap ")
-                                            if (mod.waterCost > 0) append("${mod.waterCost.toInt()} Water ")
-                                            if (mod.rationsCost > 0) append("${mod.rationsCost.toInt()} Food ")
-                                            if (mod.fuelCost > 0) append("${mod.fuelCost.toInt()} Fuel ")
-                                            if (mod.researchCost > 0) append("${mod.researchCost.toInt()} Tech ")
-                                            if (mod.goldCost > 0) append("${mod.goldCost.toInt()} Gold ")
-                                            if (mod.thoriumCost > 0) append("${mod.thoriumCost.toInt()} Thorium ")
-                                            if (mod.aetherCost > 0) append("${mod.aetherCost.toInt()} Aether ")
-                                            if (mod.coresCost > 0) append("${mod.coresCost.toInt()} Cores")
-                                        }
-                                        Text(
-                                            text = "Cost: $costText",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = if (mod.canAfford) SolarAmber else HazardRed
-                                        )
-                                        Button(
-                                            onClick = { onCommissionEdenCoreModule(mod.phaseNumber) },
-                                            enabled = mod.canAfford && mod.requirementsMet,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(min = 40.dp)
-                                                .testTag("commission_eden_module_${mod.phaseNumber}"),
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = SolarAmber,
-                                                contentColor = Color.Black
-                                            )
-                                        ) {
-                                            Text("COMMISSION MODULE ${mod.phaseNumber}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        HorizontalDivider(color = VaultCardBorder)
-
-                        Text(
-                            text = "5-TIER SELF-SUFFICIENCY CERTIFICATION (STABLE: ${state.consecutiveDaysStable}/3 DAYS):",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        certPreviews.forEach { cert ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                color = VaultDarkSurface,
-                                border = BorderStroke(1.dp, if (cert.isCertified) BioGreen else if (cert.isMet) SolarAmber else VaultCardBorder)
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = cert.title,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (cert.isCertified) BioGreen else if (cert.isMet) SolarAmber else MaterialTheme.colorScheme.onSurface
-                                        )
-                                        if (cert.isCertified) {
-                                            Text(
-                                                text = "✓ CERTIFIED",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = BioGreen
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        text = cert.requirementSummary,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (cert.isMet) BioGreen else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    if (!cert.isCertified && cert.isMet) {
-                                        Button(
-                                            onClick = { onAuditCertificationTier(cert.tierNumber) },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(min = 38.dp)
-                                                .testTag("audit_cert_tier_${cert.tierNumber}"),
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = BioGreen,
-                                                contentColor = Color.Black
-                                            )
-                                        ) {
-                                            Text("CERTIFY TIER ${cert.tierNumber} (+${cert.tierNumber * 50} Gold)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2. Background Phone Notifications Card (Max Resources, Power Outage, Room Upgrade Done)
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("vault_phone_notifications_card"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
-                    border = BorderStroke(1.5.dp, CyanHydro.copy(alpha = 0.65f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.NotificationsActive,
-                                    contentDescription = "Phone Alerts",
-                                    tint = CyanHydro,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = "OFFLINE PHONE NOTIFICATIONS (AUTO-ARMED)",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = CyanHydro,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                    Text(
-                                        text = notificationStatusText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                color = VaultDarkSurface,
-                                border = BorderStroke(1.dp, BioGreen.copy(alpha = 0.45f))
-                            ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    Text("ROOM UPGRADE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(
-                                        text = schedule.secondsUntilRoomUpgradeComplete?.let { "${it}s ETA" } ?: "IDLE",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = BioGreen
-                                    )
-                                }
-                            }
-                            Surface(
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                color = VaultDarkSurface,
-                                border = BorderStroke(1.dp, SolarAmber.copy(alpha = 0.45f))
-                            ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    Text("MAX STORAGE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(
-                                        text = schedule.secondsUntilResourcesAtMax?.let {
-                                            if (it <= 1L) "FULL NOW" else "${it}s ETA"
-                                        } ?: "NET <= 0",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = SolarAmber
-                                    )
-                                }
-                            }
-                            Surface(
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                color = VaultDarkSurface,
-                                border = BorderStroke(1.dp, HazardRed.copy(alpha = 0.45f))
-                            ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    Text("OUT OF POWER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(
-                                        text = schedule.secondsUntilPowerOutage?.let {
-                                            if (it <= 1L) "OUT NOW!" else "${it}s ETA"
-                                        } ?: "STABLE",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (schedule.secondsUntilPowerOutage != null) HazardRed else BioGreen
-                                    )
-                                }
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                VaultNotificationHelper.scheduleOfflineNotifications(
-                                    context = context,
-                                    state = state,
-                                    production = snap,
-                                    activeConstruction = uiState.activeConstruction
-                                )
-                                notificationStatusText = "Armed Offline Phone Alerts! You will be notified when away for Room Done, Max Storage, or Power Outage."
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("arm_offline_notifications_btn"),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CyanHydro,
-                                contentColor = Color.Black
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = headerAccent,
+                                trackColor = VaultElevatedCard
                             )
-                        ) {
-                            Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "SYNC & ARM OFFLINE PHONE NOTIFICATIONS NOW",
+                                text = if (peaceActive) {
+                                    "Strictly zero Raider or Mutant attacks on Days 1–10. Manually mine veins to build your Water Purifier, Hydroponics, Bio-Refinery & Turrets before the first attack on Day 11 (Requires ${snap.firstAttackDay11RequiredDefense} DEF; Current Vault Defense: ${snap.totalDefenseRating} DEF)."
+                                } else {
+                                    "First attack window passed (Day 11+). Current Vault Defense: ${snap.totalDefenseRating} DEF vs Today's Required ${snap.todayRequiredDefense} DEF • Blast Door Lv.${state.blastDoorLevel} (${state.defenseIntegrityPercent}% Integrity) • Next 10-Day Boss in ${snap.daysUntilDay10Siege}d."
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.ExtraBold
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                }
-            }
 
-            // 2. Survival Clocks & Hardcore Vault Status Card
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("vault_survival_clocks_card"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
-                    border = BorderStroke(1.dp, VaultCardBorder)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "HARDCORE SURVIVAL CLOCKS & LIFE-SUPPORT TELEMETRY",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = SolarAmber,
-                            fontWeight = FontWeight.ExtraBold
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "WASTELAND SEASON",
+                            value = snap.activeWastelandSeason.shortLabel,
+                            subtitle = snap.activeWastelandSeason.modifierSummary,
+                            accent = SolarAmber
                         )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            StatTileBox(
-                                modifier = Modifier.weight(1f),
-                                label = "60S CREW FEEDING",
-                                value = "${state.dwellerFeedCycleSecondsRemaining}s",
-                                subtitle = "-${snap.fiveMinDwellerFoodCost.roundToInt()} Food / -${snap.fiveMinDwellerWaterCost.roundToInt()} H2O",
-                                accent = if (state.dwellerFeedCycleSecondsRemaining <= 12) HazardRed else BioGreen
-                            )
-                            StatTileBox(
-                                modifier = Modifier.weight(1f),
-                                label = "6-DAY BLACKOUT",
-                                value = "${state.blackoutDaysCount}/6 Days",
-                                subtitle = "${state.manualDynamoCranksRemaining}/4 Cranks Left",
-                                accent = if (snap.isVaultBlackout) HazardRed else BioGreen
-                            )
-                            StatTileBox(
-                                modifier = Modifier.weight(1f),
-                                label = "2-DAY DEFICIT",
-                                value = "${state.deficitDaysCount}/2 Days",
-                                subtitle = if (snap.isVaultResourceDeficit) "DEFICIT ACTIVE" else "POSITIVE FLOW",
-                                accent = if (snap.isVaultResourceDeficit) HazardRed else BioGreen
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            StatTileBox(
-                                modifier = Modifier.weight(1f),
-                                label = "OXYGEN & RADS",
-                                value = "${state.oxygenPercent}% O2",
-                                subtitle = "${state.radiationMillisieverts} mSv Rads",
-                                accent = if (state.oxygenPercent < 50 || state.radiationMillisieverts > 150) HazardRed else CyanHydro
-                            )
-                            StatTileBox(
-                                modifier = Modifier.weight(1f),
-                                label = "CREW HEALTH",
-                                value = "${state.dwellerHealthPercent}% HP",
-                                subtitle = "${state.bleedingDwellersCount} Bleed • ${state.venomInfectedDwellersCount} Venom",
-                                accent = if (state.dwellerHealthPercent < 60 || state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0) HazardRed else BioGreen
-                            )
-                            StatTileBox(
-                                modifier = Modifier.weight(1f),
-                                label = "10-DAY BOSS SIEGE",
-                                value = "${snap.daysUntilDay10Siege}d Left",
-                                subtitle = "${snap.totalDefenseRating} / ${snap.todayRequiredDefense} DEF",
-                                accent = if (snap.totalDefenseRating < snap.todayRequiredDefense) RustOrange else AetherViolet
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            FilledTonalButton(
-                                onClick = onUseMedkit,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("stats_use_medkit_btn"),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = BioGreen.copy(alpha = 0.2f),
-                                    contentColor = BioGreen
-                                )
-                            ) {
-                                Text("MEDKIT (${state.medkitsCount})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
-                            }
-                            FilledTonalButton(
-                                onClick = onUseRadAway,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("stats_use_radaway_btn"),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = CyanHydro.copy(alpha = 0.2f),
-                                    contentColor = CyanHydro
-                                )
-                            ) {
-                                Text("RADAWAY (${state.radAwayCount})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
-                            }
-                            FilledTonalButton(
-                                onClick = onEmergencyManualCrank,
-                                enabled = state.manualDynamoCranksRemaining > 0,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("stats_crank_dynamo_btn"),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = SolarAmber.copy(alpha = 0.2f),
-                                    contentColor = SolarAmber
-                                )
-                            ) {
-                                Text("CRANK (${state.manualDynamoCranksRemaining}/4)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold)
-                            }
-                        }
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "VAULT TECH ERA",
+                            value = snap.vaultTechEra.shortBadge,
+                            subtitle = "Global x${String.format(Locale.US, "%.2f", snap.commandLevelBonusMultiplier * snap.prestigeBonusMultiplier)}",
+                            accent = AetherViolet
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "CASCADE STATUS",
+                            value = snap.cascadeStage.shortBadge,
+                            subtitle = "Morale ${snap.citizenMoralePercent}%",
+                            accent = if (snap.cascadeStage.stageNumber == 0) BioGreen else HazardRed
+                        )
                     }
                 }
-            }
-
-            // 3. Vault Operational Posture Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
-                    border = BorderStroke(1.dp, VaultCardBorder)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "VAULT OPERATIONAL POSTURE (${snap.operationalPosture.title.uppercase()})",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = CyanHydro,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            VaultOperationalPosture.entries.forEach { posture ->
-                                val selected = snap.operationalPosture == posture
-                                FilledTonalButton(
-                                    onClick = { onSetPosture(posture) },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 48.dp)
-                                        .testTag("stats_posture_${posture.id}"),
-                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                        containerColor = if (selected) SolarAmber.copy(alpha = 0.24f) else VaultDarkSurface,
-                                        contentColor = if (selected) SolarAmber else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                ) {
-                                    Text(
-                                        text = posture.shortLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.ExtraBold
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4. Hardcore Building Maintenance & Hunting Trauma Summary
-            item {
-                HardcoreBuildingMaintenanceCard(
-                    uiState = uiState,
-                    onWeldRoomPipes = onWeldRoomPipes
-                )
-            }
-            item {
-                HardcoreHuntingTraumaAndAmmoCard(
-                    uiState = uiState,
-                    onTreatHuntingInjuries = onTreatHuntingInjuries,
-                    onFieldPressAmmo = onFieldPressAmmo
-                )
-            }
-            item {
-                VaultEventLogTerminalCard(uiState = uiState)
             }
         }
-    }
-}
 
-@Composable
-private fun OverseerSurvivalRoadmapCard(
-    uiState: OutpostUiState,
-    onNavigateToTab: (String) -> Unit
-) {
-    val state = uiState.state
-    val snap = uiState.production
-    val quartersLv = uiState.buildingsMap[BuildingType.SURVIVOR_HAB_BLOCK.id] ?: 0
-    val step1Done = state.scrap >= 35.0 || state.gold >= 10.0 || state.totalGoldSalvaged > 0.0 || quartersLv > 0
-    val step2Done = quartersLv >= 1
-    val step3Done = state.totalSurvivors >= 1 && snap.totalAssignedWorkers >= 1
-    val step4Done = !snap.isVaultBlackout && snap.isMakingPositiveResources && snap.totalBuiltRoomsCount >= 3
-    val step5Done = state.isSelfSustainedCertified
+        // 2. Dual 6-Day Game Over Survival Clocks Card (Read-Only)
+        item {
+            val blackoutDays = state.blackoutDaysCount
+            val deficitDays = state.deficitDaysCount
+            val clocksCritical = snap.isVaultBlackout || snap.isVaultResourceDeficit || blackoutDays > 0 || deficitDays > 0
+            val clockAccent = if (clocksCritical) HazardRed else BioGreen
 
-    val activeStageIndex = when {
-        !step1Done -> 1
-        !step2Done -> 2
-        !step3Done -> 3
-        !step4Done -> 4
-        else -> 5
-    }
-
-    val (activeTitle, activeInstruction, targetTab, actionButtonText) = when (activeStageIndex) {
-        1 -> Quadruple(
-            "STAGE 1/5: SWING PICKAXE FOR SCRAP, WATER & GOLD",
-            "You start alone in a ruined shelter. Tap 'Mine & Build' to swing your Pickaxe at salvage veins, sharpen the edge, and cool shaft heat.",
-            "operations",
-            "GO TO MINE & BUILD"
-        )
-        2 -> Quadruple(
-            "STAGE 2/5: REPAIR ROOM #1 (LIVING QUARTERS LV.1)",
-            "All Vault rooms start broken at Lv.0 (20% Worst). Repair Vault Living Quarters in 'Mine & Build' to unlock bed capacity for Dwellers!",
-            "operations",
-            "BUILD LIVING QUARTERS"
-        )
-        3 -> Quadruple(
-            "STAGE 3/5: HIRE DWELLERS WITH GOLD & ASSIGN SHIFTS",
-            "Open the 'Dwellers' tab to hire Wasteland Survivors with Gold (8% Unique Dweller chance) or fire the Rescue Beacon, then assign them to work!",
-            "crew",
-            "GO TO DWELLERS TAB"
-        )
-        4 -> Quadruple(
-            "STAGE 4/5: STABILIZE MW POWER & 60S FEEDING SURPLUS",
-            "Build Water, Hydroponics & Bio-Refinery rooms so resource generation stays positive and your crew is fed every 60 seconds.",
-            "operations",
-            "EXPAND ROOMS & POWER"
-        )
-        else -> Quadruple(
-            "STAGE 5/5: DEFEND 10D SIEGES & BUILD EDEN CORE",
-            "Keep Automated Turrets powered & manned in 'Defend & Hunt', hunt wasteland beasts with Ammo, and certify all 5 Eden Core Autonomy Tiers!",
-            "defense",
-            "GO TO DEFEND & HUNT"
-        )
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("overseer_survival_roadmap_card"),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
-        border = BorderStroke(1.5.dp, SolarAmber.copy(alpha = 0.85f))
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "OVERSEER SURVIVAL ROADMAP & NEXT MISSION",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = SolarAmber,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = SolarAmber.copy(alpha = 0.2f),
-                    border = BorderStroke(1.dp, SolarAmber)
-                ) {
-                    Text(
-                        text = "STAGE $activeStageIndex/5",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SolarAmber,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                color = VaultDarkSurface,
-                border = BorderStroke(1.dp, CyanHydro.copy(alpha = 0.65f))
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vault_survival_clocks_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+                border = BorderStroke(1.5.dp, clockAccent.copy(alpha = 0.75f))
             ) {
                 Column(
-                    modifier = Modifier.padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WarningAmber,
+                                contentDescription = "6-Day Game Over Clocks",
+                                tint = clockAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "DUAL 6-DAY GAME OVER SURVIVAL CLOCKS",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = clockAccent,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "Running out of Vault Resources OR Power for 6 consecutive days triggers Game Over.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Clock A: 6-Day Resource Depletion / Deficit Clock
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = VaultDarkSurface,
+                        border = BorderStroke(1.dp, if (snap.isVaultResourceDeficit) HazardRed else BioGreen.copy(alpha = 0.45f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "RESOURCE DEPLETION CLOCK (FOOD / WATER / SCRAP)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (snap.isVaultResourceDeficit) HazardRed else BioGreen,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "$deficitDays / ${OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER} DAYS",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (snap.isVaultResourceDeficit) HazardRed else BioGreen,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = {
+                                    (deficitDays.toFloat() / OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER.toFloat()).coerceIn(0f, 1f)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = if (snap.isVaultResourceDeficit) HazardRed else BioGreen,
+                                trackColor = VaultElevatedCard
+                            )
+                            Text(
+                                text = if (snap.isVaultResourceDeficit) {
+                                    "WARNING: Vault is depleted or in net resource deficit (${OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER - deficitDays} day(s) until collapse)! Defenses are shut down until positive supply is restored."
+                                } else {
+                                    "NOMINAL: Core resources are stocked and net production is stable (0/6 Days)."
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Clock B: 6-Day Power Blackout Clock
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = VaultDarkSurface,
+                        border = BorderStroke(1.dp, if (snap.isVaultBlackout) HazardRed else CyanHydro.copy(alpha = 0.45f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "POWER GRID BLACKOUT CLOCK (${snap.totalMegawattGenerated.roundToInt()}/${snap.totalMegawattDemand.roundToInt()} MW)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (snap.isVaultBlackout) HazardRed else CyanHydro,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "$blackoutDays / ${OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER} DAYS",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (snap.isVaultBlackout) HazardRed else CyanHydro,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = {
+                                    (blackoutDays.toFloat() / OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER.toFloat()).coerceIn(0f, 1f)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = if (snap.isVaultBlackout) HazardRed else CyanHydro,
+                                trackColor = VaultElevatedCard
+                            )
+                            Text(
+                                text = if (snap.isVaultBlackout) {
+                                    "BLACKOUT ACTIVE: Automated rooms & turrets are offline (${OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER - blackoutDays} day(s) until life-support failure • ${state.manualDynamoCranksRemaining}/4 Hand-Cranks left)."
+                                } else {
+                                    "GRID ENERGIZED: ${snap.totalMegawattGenerated.roundToInt()} MW generated vs ${snap.totalMegawattDemand.roundToInt()} MW demand (${state.manualDynamoCranksRemaining}/4 Emergency Cranks ready)."
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "60S CREW FEEDING",
+                            value = "${state.dwellerFeedCycleSecondsRemaining}s",
+                            subtitle = "-${snap.fiveMinDwellerFoodCost.roundToInt()} Food / -${snap.fiveMinDwellerWaterCost.roundToInt()} H2O",
+                            accent = if (state.dwellerFeedCycleSecondsRemaining <= 12) HazardRed else BioGreen
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "2M APPETITE TIER",
+                            value = "Tier ${snap.dwellerUpkeepEscalationTier}",
+                            subtitle = "x${String.format(Locale.US, "%.2f", snap.dwellerUpkeepEscalationMultiplier)} Crew Upkeep",
+                            accent = SolarAmber
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "FOOD ROT / DAY",
+                            value = "${snap.foodSpoilagePercentPerDay}%/d",
+                            subtitle = if (snap.isCryoPreservationActive) "Cryo Preserved" else "-${snap.dailyFoodSpoilageLoss.roundToInt()} Food/d",
+                            accent = if (snap.isCryoPreservationActive) BioGreen else RustOrange
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Complete Vault Resource Levels, Storage Caps & Net Rates Card (Read-Only)
+        item {
+            val isAllPositive = snap.isMakingPositiveResources
+            val ledgerAccent = if (isAllPositive) BioGreen else HazardRed
+            val scrapDrain = snap.roomScrapUpkeepPerSec + snap.pipeLeakScrapDrainPerSec
+            val waterDrain = snap.roomWaterUpkeepPerSec + snap.citizenWaterUpkeepPerSec + snap.pipeLeakWaterDrainPerSec
+            val foodDrain = snap.citizenFoodUpkeepPerSec
+            val fuelDrain = snap.roomFuelUpkeepPerSec + snap.reactorFuelUpkeepPerSec
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vault_resource_levels_only_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+                border = BorderStroke(1.5.dp, ledgerAccent.copy(alpha = 0.75f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Inventory2,
+                                contentDescription = "Resource Levels",
+                                tint = ledgerAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "VAULT RESOURCE LEVELS & STORAGE CAP LEDGER",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = ledgerAccent,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "Max Cap: ${snap.storageCap.toInt()} per resource • Auto-Resumes at ≤${snap.storeRoomResumeThreshold.toInt()} (50% Cap)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = ledgerAccent.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, ledgerAccent.copy(alpha = 0.55f))
+                        ) {
+                            Text(
+                                text = if (isAllPositive) "NET POSITIVE" else "NET DEFICIT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = ledgerAccent,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    NetResourceLedgerRow(
+                        name = "Scrap Metal ${if (snap.isScrapHalted) "[HALTED AT CAP]" else "[ACTIVE]"}",
+                        current = state.scrap,
+                        cap = snap.storageCap,
+                        grossGain = snap.scrapPerSec + scrapDrain,
+                        drain = scrapDrain,
+                        net = snap.scrapPerSec,
+                        color = RustOrange
+                    )
+                    NetResourceLedgerRow(
+                        name = "Purified Water ${if (!snap.hasWaterPurifierRoom) "[MANUAL ONLY]" else if (snap.isWaterHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        current = state.water,
+                        cap = snap.storageCap,
+                        grossGain = snap.waterPerSec + waterDrain,
+                        drain = waterDrain,
+                        net = snap.waterPerSec,
+                        color = CyanHydro
+                    )
+                    NetResourceLedgerRow(
+                        name = "Vault Food Rations ${if (!snap.hasHydroponicsRoom) "[MANUAL ONLY]" else if (snap.isRationsHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        current = state.rations,
+                        cap = snap.storageCap,
+                        grossGain = snap.rationsPerSec + foodDrain,
+                        drain = foodDrain,
+                        net = snap.rationsPerSec,
+                        color = BioGreen
+                    )
+                    NetResourceLedgerRow(
+                        name = "Refined Bio-Fuel ${if ((uiState.buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0) <= 0) "[MANUAL ONLY]" else if (snap.isFuelHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        current = state.bioFuel,
+                        cap = snap.storageCap,
+                        grossGain = snap.bioFuelPerSec + fuelDrain,
+                        drain = fuelDrain,
+                        net = snap.bioFuelPerSec,
+                        color = SolarAmber
+                    )
+                    NetResourceLedgerRow(
+                        name = "Research Data ${if ((uiState.buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0) <= 0) "[MANUAL ONLY]" else if (snap.isResearchHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        current = state.researchData,
+                        cap = snap.storageCap,
+                        grossGain = snap.researchPerSec,
+                        drain = 0.0,
+                        net = snap.researchPerSec,
+                        color = AetherViolet
+                    )
+
+                    HorizontalDivider(color = VaultCardBorder)
+
+                    Text(
+                        text = "STRATEGIC CURRENCIES, MUNITIONS & RARE STOCKPILES",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SolarAmber,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "GOLD BULLION",
+                            value = "${state.gold.toInt()}",
+                            subtitle = "Total: ${state.totalGoldSalvaged.toInt()}G",
+                            accent = SolarAmber
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "BALLISTIC AMMO",
+                            value = "${state.ammoRounds}",
+                            subtitle = "${snap.activeAmmoType.shortLabel} Loaded",
+                            accent = RustOrange
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "THORIUM RODS",
+                            value = "${state.thoriumRods.toInt()}",
+                            subtitle = "Reactor Fuel",
+                            accent = BioGreen
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "AETHER / CORES",
+                            value = "${state.aetherCells.toInt()} / ${state.mutagenCores.toInt()}",
+                            subtitle = "Aether / Mutagen",
+                            accent = AetherViolet
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "MEDKIT / RADAWAY",
+                            value = "${state.medkitsCount} / ${state.radAwayCount}",
+                            subtitle = "Medical Stock",
+                            accent = CyanHydro
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "CACHES & RELICS",
+                            value = "${state.rawSalvageCaches} / ${state.discoveredRelicsCount}",
+                            subtitle = "+${snap.relicOutputBonusPercent.roundToInt()}% Relic Bonus",
+                            accent = BioGreen
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4. Daily Room-Level Scrap Maintenance & Automated System Status Table (Read-Only)
+        item {
+            val scrapShortage = snap.isRoomsLackingScrap
+            val tableAccent = if (scrapShortage) HazardRed else SolarAmber
+            val totalDailyScrapRequired = snap.dailyRoomScrapUpkeep + snap.dailyAutoRepairScrapCost
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vault_room_scrap_upkeep_table_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+                border = BorderStroke(1.5.dp, tableAccent.copy(alpha = 0.75f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = "Room Scrap Maintenance",
+                                tint = tableAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "DAILY ROOM-LEVEL SCRAP MAINTENANCE LEDGER",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = tableAccent,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = "Each room level requires more Scrap per day to stay online (${String.format(Locale.US, "%.1f", totalDailyScrapRequired)} Scrap/day total for Room Lv.$totalRoomLevels).",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = tableAccent.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, tableAccent.copy(alpha = 0.55f))
+                        ) {
+                            Text(
+                                text = "OUTPUT ${(snap.roomScrapOperationalMultiplier * snap.roomWearPenaltyMultiplier * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = tableAccent,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    BuildingType.entries.forEach { bType ->
+                        val lv = uiState.buildingsMap[bType.id] ?: 0
+                        val isMothballed = bType.id in mothballedSet
+                        val isSabotaged = state.sabotagedBuildingId == bType.id
+                        val upkeepMult = if (isMothballed) OutpostCalculator.MOTHBALLED_UPKEEP_MULTIPLIER else 1.0
+                        val roomUpkeep = OutpostCalculator.computeBuildingResourceUpkeep(
+                            buildingType = bType,
+                            level = lv,
+                            hydroDiscountMult = 1.0,
+                            commandLevel = state.commandLevel,
+                            dayCounter = state.dayCounter
+                        )
+                        val roomScrapPerDay = roomUpkeep.dailyScrap * upkeepMult
+                        val roomWaterPerDay = roomUpkeep.dailyWater * upkeepMult
+                        val roomFuelPerDay = roomUpkeep.dailyFuel * upkeepMult
+                        val roomMw = if (lv <= 0 || isMothballed) 0 else OutpostCalculator.computeBuildingTotalMegawatts(bType, lv).roundToInt()
+                        val roomCapBonus = OutpostCalculator.computeSingleRoomStorageCapContribution(bType, lv).toInt()
+
+                        val statusLabel = when {
+                            lv <= 0 -> "OFFLINE (MANUAL ONLY)"
+                            isMothballed -> "STANDBY (-80% UPKEEP)"
+                            snap.isVaultBlackout -> "UNPOWERED (BLACKOUT)"
+                            isSabotaged -> "SABOTAGED (-50%)"
+                            scrapShortage -> "LOW SCRAP (${(snap.roomScrapOperationalMultiplier * 100).roundToInt()}%)"
+                            else -> "ONLINE (100% AUTO)"
+                        }
+                        val statusColor = when {
+                            lv <= 0 -> MaterialTheme.colorScheme.onSurfaceVariant
+                            isMothballed -> SolarAmber
+                            snap.isVaultBlackout || isSabotaged || scrapShortage -> HazardRed
+                            else -> BioGreen
+                        }
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = VaultDarkSurface,
+                            border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${bType.displayName} (Lv.$lv)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = statusLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = statusColor,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                                Text(
+                                    text = if (lv > 0) {
+                                        "Daily Upkeep: -${String.format(Locale.US, "%.1f", roomScrapPerDay)} Scrap/d" +
+                                            (if (roomWaterPerDay > 0.0) ", -${String.format(Locale.US, "%.1f", roomWaterPerDay)} H2O/d" else "") +
+                                            (if (roomFuelPerDay > 0.0) ", -${String.format(Locale.US, "%.1f", roomFuelPerDay)} Fuel/d" else "") +
+                                            " • Power: ${roomMw} MW • Cap Bonus: +$roomCapBonus"
+                                    } else {
+                                        "Unbuilt (Lv.0): 0 Scrap/d • Build Lv.1 in Mine & Build to bring automated system online (+${bType.megawattDemandPerLevel.roundToInt()} MW draw)"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Power Grid, Life-Support, Mining Stamina & Crew Vitals Telemetry Card (Read-Only)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("vault_vitals_and_grid_telemetry_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
+                border = BorderStroke(1.dp, VaultCardBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = activeTitle,
-                        style = MaterialTheme.typography.labelMedium,
+                        text = "POWER GRID, CREW VITALS & MANUAL MINING TELEMETRY",
+                        style = MaterialTheme.typography.titleSmall,
                         color = CyanHydro,
                         fontWeight = FontWeight.ExtraBold
                     )
-                    Text(
-                        text = activeInstruction,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Button(
-                        onClick = { onNavigateToTab(targetTab) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("roadmap_primary_action_btn"),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SolarAmber,
-                            contentColor = Color.Black
-                        )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = actionButtonText,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "MANUAL STAMINA",
+                            value = "${state.dwellerStaminaPercent}%",
+                            subtitle = "Tap Yield ${(snap.manualActionStaminaMultiplier * 100).roundToInt()}% (-${OutpostCalculator.MANUAL_ACTION_STAMINA_COST}%/Tap)",
+                            accent = if (state.dwellerStaminaPercent < 35) HazardRed else BioGreen
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "PICKAXE & SHAFT",
+                            value = "Mk.${state.salvageRigLevel} (${state.pickaxeDurabilityPercent}%)",
+                            subtitle = "Heat ${state.miningShaftHeatPercent}°C • ${state.deepCoreDepthMeters}m",
+                            accent = if (state.pickaxeDurabilityPercent <= 25 || state.activeCaveInHazard) HazardRed else SolarAmber
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "OXYGEN & RADS",
+                            value = "${state.oxygenPercent}% O2",
+                            subtitle = "${state.radiationMillisieverts} mSv Rads",
+                            accent = if (state.oxygenPercent < 50 || state.radiationMillisieverts > 150) HazardRed else CyanHydro
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "DWELLER CREW",
+                            value = "${state.totalSurvivors}/${snap.maxWorkerCapacity}",
+                            subtitle = "${snap.totalAssignedWorkers} Assigned • ${state.uniqueDwellersCount} Unique",
+                            accent = BioGreen
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "CREW HEALTH",
+                            value = "${state.dwellerHealthPercent}% HP",
+                            subtitle = "${state.sickDwellersCount} Sick • ${state.bleedingDwellersCount + state.venomInfectedDwellersCount} Trauma",
+                            accent = if (state.dwellerHealthPercent < 60 || state.sickDwellersCount > 0) HazardRed else BioGreen
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "WEAR & LEAKS",
+                            value = "${state.roomStructuralWearPercent}% Wear",
+                            subtitle = "${state.activePipeLeaksCount} Pipe Leaks • Gen ${state.generatorWearPercent}%",
+                            accent = if (state.activePipeLeaksCount > 0 || state.roomStructuralWearPercent >= 35) HazardRed else CyanHydro
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "RATIONING LAW",
+                            value = snap.activeRationingPolicy.shortLabel,
+                            subtitle = snap.activeRationingPolicy.effectSummary,
+                            accent = SolarAmber
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "GRID BREAKER",
+                            value = snap.activeGridBreakerMode.shortLabel,
+                            subtitle = "${snap.totalMegawattGenerated.roundToInt()}/${snap.totalMegawattDemand.roundToInt()} MW",
+                            accent = CyanHydro
+                        )
+                        StatTileBox(
+                            modifier = Modifier.weight(1f),
+                            label = "EDEN & PRESTIGE",
+                            value = "Eden ${state.edenCorePhase}/4",
+                            subtitle = "Cert ${state.certificationTier}/5 • Prest ${state.prestigeLevel}",
+                            accent = AetherViolet
                         )
                     }
                 }
             }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                RoadmapMiniBadge("1.Pickaxe", step1Done)
-                RoadmapMiniBadge("2.Quarters", step2Done)
-                RoadmapMiniBadge("3.Dwellers", step3Done)
-                RoadmapMiniBadge("4.Surplus", step4Done)
-                RoadmapMiniBadge("5.Eden Core", step5Done)
-            }
         }
-    }
-}
 
-private data class Quadruple<A, B, C, D>(
-    val first: A,
-    val second: B,
-    val third: C,
-    val fourth: D
-)
-
-private fun com.example.data.local.OutpostStateEntity.totalBuiltRoomsCount(): Int {
-    return if (commandLevel >= 2 || totalSurvivors > 0) 3 else 0
-}
-
-@Composable
-private fun RoadmapMiniBadge(label: String, done: Boolean) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = if (done) BioGreen.copy(alpha = 0.18f) else VaultDarkSurface,
-        border = BorderStroke(1.dp, if (done) BioGreen else VaultCardBorder)
-    ) {
-        Text(
-            text = if (done) "✓ $label" else "○ $label",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (done) BioGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-        )
-    }
-}
-
-@Composable
-private fun OverseerFieldSurvivalDeckCard(
-    uiState: OutpostUiState,
-    onQuickStabilizeAll: () -> Unit,
-    onForageRations: () -> Unit,
-    onBoilWater: () -> Unit,
-    onFieldPressAmmo: () -> Unit,
-    onScrubAir: () -> Unit,
-    onIssueEmergencyRations: () -> Unit
-) {
-    val state = uiState.state
-    val hazardCount = listOf(
-        uiState.production.isVaultBlackout,
-        state.activeCaveInHazard,
-        state.activePipeLeaksCount > 0,
-        state.roomStructuralWearPercent >= 25,
-        state.sabotagedBuildingId.isNotEmpty(),
-        state.generatorWearPercent >= 40,
-        state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0,
-        state.oxygenPercent < 80,
-        state.radiationMillisieverts >= 35
-    ).count { it }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("overseer_field_survival_deck_card"),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = VaultElevatedCard),
-        border = BorderStroke(1.5.dp, BioGreen.copy(alpha = 0.75f))
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "HANDS-ON FIELD SURVIVAL & AUTO-STABILIZE DECK",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = BioGreen,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text(
-                        text = "Forage cave mushrooms, boil aquifer water, press ballistic ammo, or stabilize all shelter hazards in 1 tap!",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Button(
-                onClick = onQuickStabilizeAll,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .testTag("stats_auto_stabilize_all_btn"),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (hazardCount > 0) HazardRed else SolarAmber,
-                    contentColor = if (hazardCount > 0) Color.White else Color.Black
-                )
-            ) {
-                Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (hazardCount > 0) {
-                        "AUTO-STABILIZE $hazardCount ACTIVE SHELTER HAZARDS NOW"
-                    } else {
-                        "ONE-TAP SHELTER TUNE-UP & HAZARD SWEEP (ALL CLEAR)"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilledTonalButton(
-                    onClick = onForageRations,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("stats_forage_rations_btn"),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = BioGreen.copy(alpha = 0.2f),
-                        contentColor = BioGreen
-                    )
-                ) {
-                    Text(
-                        text = "FORAGE CAVE (+FOOD/+H2O)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                FilledTonalButton(
-                    onClick = onBoilWater,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("stats_boil_water_btn"),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = CyanHydro.copy(alpha = 0.2f),
-                        contentColor = CyanHydro
-                    )
-                ) {
-                    Text(
-                        text = "BOIL WATER (+H2O/-HEAT)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilledTonalButton(
-                    onClick = onFieldPressAmmo,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("stats_press_ammo_btn"),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = SolarAmber.copy(alpha = 0.2f),
-                        contentColor = SolarAmber
-                    )
-                ) {
-                    Text(
-                        text = "PRESS +20 AMMO (${state.ammoRounds})",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                FilledTonalButton(
-                    onClick = onScrubAir,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("stats_scrub_air_btn"),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = CyanHydro.copy(alpha = 0.2f),
-                        contentColor = CyanHydro
-                    )
-                ) {
-                    Text(
-                        text = "SCRUB AIR (${state.oxygenPercent}% O2)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                FilledTonalButton(
-                    onClick = onIssueEmergencyRations,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("stats_emergency_rations_btn"),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = RustOrange.copy(alpha = 0.2f),
-                        contentColor = RustOrange
-                    )
-                ) {
-                    Text(
-                        text = "FEED CREW (+14F/+14W)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
+        // 6. Read-Only Overseer Terminal Event Log
+        item {
+            VaultEventLogTerminalCard(uiState = uiState)
         }
     }
 }
@@ -2808,6 +2446,8 @@ fun CrewAndPowerTabScreen(
     onInjectThoriumOverdrive: () -> Unit,
     onTriggerSolarFlare: () -> Unit,
     onTriggerEclipseShroud: () -> Unit,
+    onUnlockOrUpgradeSkill: (SkillNodeDefinition) -> Unit = {},
+    onPerformPrestige: () -> Unit = {},
     isAuthenticated: Boolean,
     userEmail: String?,
     authErrorMessage: String?,
@@ -2817,59 +2457,85 @@ fun CrewAndPowerTabScreen(
     onBroadcastSupplyDrop: () -> Unit,
     onClaimSupplyDrop: (com.example.data.remote.PublicSupplyDrop) -> Unit
 ) {
-    var showPowerGridSubTab by rememberSaveable { mutableStateOf(false) }
+    var selectedSubTab by rememberSaveable { mutableStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             FilledTonalButton(
-                onClick = { showPowerGridSubTab = false },
+                onClick = { selectedSubTab = 0 },
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
                     .testTag("crew_power_subtab_crew"),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = if (!showPowerGridSubTab) BioGreen.copy(alpha = 0.24f) else VaultElevatedCard,
-                    contentColor = if (!showPowerGridSubTab) BioGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = if (selectedSubTab == 0) BioGreen.copy(alpha = 0.24f) else VaultElevatedCard,
+                    contentColor = if (selectedSubTab == 0) BioGreen else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             ) {
-                Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "DWELLERS (${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity})",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
                 )
             }
 
             FilledTonalButton(
-                onClick = { showPowerGridSubTab = true },
+                onClick = { selectedSubTab = 1 },
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
                     .testTag("crew_power_subtab_power"),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = if (showPowerGridSubTab) SolarAmber.copy(alpha = 0.24f) else VaultElevatedCard,
-                    contentColor = if (showPowerGridSubTab) SolarAmber else MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = if (selectedSubTab == 1) SolarAmber.copy(alpha = 0.24f) else VaultElevatedCard,
+                    contentColor = if (selectedSubTab == 1) SolarAmber else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             ) {
-                Icon(Icons.Default.ElectricBolt, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(Icons.Default.ElectricBolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "POWER & PUBLIC NET (${uiState.production.totalMegawattGenerated.roundToInt()}/${uiState.production.totalMegawattDemand.roundToInt()} MW)",
+                    text = "POWER (${uiState.production.totalMegawattGenerated.roundToInt()}/${uiState.production.totalMegawattDemand.roundToInt()} MW)",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
+                )
+            }
+
+            FilledTonalButton(
+                onClick = { selectedSubTab = 2 },
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .testTag("crew_power_subtab_skills"),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = if (selectedSubTab == 2) AetherViolet.copy(alpha = 0.24f) else VaultElevatedCard,
+                    contentColor = if (selectedSubTab == 2) AetherViolet else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Icon(Icons.Default.Hub, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "SKILLS (${uiState.state.availableSkillPoints} SP)",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
                 )
             }
         }
 
         Box(modifier = Modifier.weight(1f)) {
-            if (!showPowerGridSubTab) {
-                SurvivorsTabScreen(
+            when (selectedSubTab) {
+                0 -> SurvivorsTabScreen(
                     uiState = uiState,
                     onHireCandidate = onHireCandidate,
                     onRefreshBoard = onRefreshBoard,
@@ -2882,8 +2548,7 @@ fun CrewAndPowerTabScreen(
                     onToggleRestRotation = onToggleRestRotation,
                     onCureSickAndExhaustedCrew = onCureSickAndExhaustedCrew
                 )
-            } else {
-                TradePowerTabScreen(
+                1 -> TradePowerTabScreen(
                     uiState = uiState,
                     onSellToTown = onSellToTown,
                     onBuyRareItem = onBuyRareItem,
@@ -2901,6 +2566,13 @@ fun CrewAndPowerTabScreen(
                     authErrorMessage = authErrorMessage,
                     onRequestGoogleSignIn = onSignInClick,
                     onSignOutGoogle = onSignOutClick
+                )
+                else -> SkillTreeTabScreen(
+                    uiState = uiState,
+                    onUnlockSkill = onUnlockOrUpgradeSkill,
+                    onPerformPrestige = onPerformPrestige,
+                    isGoogleSignedIn = isAuthenticated,
+                    onRequestGoogleSignIn = onSignInClick
                 )
             }
         }
