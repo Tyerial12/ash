@@ -1527,8 +1527,8 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val snap = current.production
-            if (snap.isStoreRoomFull) {
-                val msg = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+            if (snap.isRationsHalted && snap.isWaterHalted) {
+                val msg = "FOOD & WATER SHELVES FULL: Food and Water automatically resume production when they fall to half of Store Room capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
                 overlayFlow.update { it.copy(lastDefenseDamageFeedback = msg, lastSalvageFeedback = msg) }
                 return@launch
             }
@@ -1607,8 +1607,8 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val snap = current.production
-            if (snap.isStoreRoomFull) {
-                val msg = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+            if (snap.isRationsHalted && snap.isWaterHalted) {
+                val msg = "FOOD & WATER SHELVES FULL: Food and Water automatically resume production when they fall to half of Store Room capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
                 overlayFlow.update { it.copy(lastDefenseDamageFeedback = msg, lastSalvageFeedback = msg) }
                 return@launch
             }
@@ -2430,7 +2430,7 @@ class OutpostViewModel(
             if (snap.isStoreRoomFull) {
                 overlayFlow.update {
                     it.copy(
-                        lastSalvageFeedback = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                        lastSalvageFeedback = "ALL STORE ROOM SHELVES AT CAP: Each resource automatically resumes production as soon as it falls to half capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
                     )
                 }
                 return@launch
@@ -2587,7 +2587,7 @@ class OutpostViewModel(
             if (snap.isStoreRoomFull) {
                 overlayFlow.update {
                     it.copy(
-                        lastSalvageFeedback = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Cannot unpack caches until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                        lastSalvageFeedback = "ALL STORE ROOM SHELVES AT CAP: Resources automatically resume as soon as they fall to half capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
                     )
                 }
                 return@launch
@@ -4352,7 +4352,7 @@ class OutpostViewModel(
             if (snap.isStoreRoomFull) {
                 overlayFlow.update {
                     it.copy(
-                        lastSalvageFeedback = "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): Resources do not restart gaining until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()})!"
+                        lastSalvageFeedback = "ALL STORE ROOM SHELVES AT CAP: Each resource automatically resumes production as soon as it falls to half capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
                     )
                 }
                 return@launch
@@ -4511,63 +4511,36 @@ class OutpostViewModel(
             required = CommandLevelProgression.xpRequiredForLevel(newLevel)
         }
 
-        // When Store Room is full, ALL positive resource gathering halts (0.0 positive gain), while spending/deductions still apply!
-        val storeRoomAlreadyFull = OutpostCalculator.isStoreRoomFull(baseState, storageCap)
-        val effScrapDelta = if (storeRoomAlreadyFull && scrapDelta > 0.0) 0.0 else scrapDelta
-        val effWaterDelta = if (storeRoomAlreadyFull && waterDelta > 0.0) 0.0 else waterDelta
-        val effRationsDelta = if (storeRoomAlreadyFull && rationsDelta > 0.0) 0.0 else rationsDelta
-        val effFuelDelta = if (storeRoomAlreadyFull && fuelDelta > 0.0) 0.0 else fuelDelta
-        val effResearchDelta = if (storeRoomAlreadyFull && researchDelta > 0.0) 0.0 else researchDelta
+        // Per-Resource Store Room Halt & 50% Resume:
+        // Each resource shelf halts when it reaches storageCap, and automatically resumes when THAT resource falls to <= 50% of storageCap!
+        val scrapAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.scrap, baseState.isScrapGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
+        val waterAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.water, baseState.isWaterGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
+        val rationsAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.rations, baseState.isRationsGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
+        val fuelAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.bioFuel, baseState.isFuelGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
+        val researchAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.researchData, baseState.isResearchGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
+        val storeRoomAlreadyFull = scrapAlreadyHalted && waterAlreadyHalted && rationsAlreadyHalted && fuelAlreadyHalted
+
+        val effScrapDelta = if (scrapAlreadyHalted && scrapDelta > 0.0) 0.0 else scrapDelta
+        val effWaterDelta = if (waterAlreadyHalted && waterDelta > 0.0) 0.0 else waterDelta
+        val effRationsDelta = if (rationsAlreadyHalted && rationsDelta > 0.0) 0.0 else rationsDelta
+        val effFuelDelta = if (fuelAlreadyHalted && fuelDelta > 0.0) 0.0 else fuelDelta
+        val effResearchDelta = if (researchAlreadyHalted && researchDelta > 0.0) 0.0 else researchDelta
         val effGoldDelta = if (storeRoomAlreadyFull && goldDelta > 0.0) 0.0 else goldDelta
         val effCoresDelta = if (storeRoomAlreadyFull && coresDelta > 0.0) 0.0 else coresDelta
 
-        // Also ensure total stored resources across the Store Room do not exceed storageCap when adding positive resources
-        var nextScrap = (baseState.scrap + effScrapDelta).coerceIn(0.0, storageCap)
-        var nextWater = (baseState.water + effWaterDelta).coerceIn(0.0, storageCap)
-        var nextRations = (baseState.rations + effRationsDelta).coerceIn(0.0, storageCap)
-        var nextFuel = (baseState.bioFuel + effFuelDelta).coerceIn(0.0, storageCap)
-        var nextResearch = (baseState.researchData + effResearchDelta).coerceIn(0.0, storageCap)
+        val finalScrap = (baseState.scrap + effScrapDelta).coerceIn(0.0, storageCap)
+        val finalWater = (baseState.water + effWaterDelta).coerceIn(0.0, storageCap)
+        val finalRations = (baseState.rations + effRationsDelta).coerceIn(0.0, storageCap)
+        val finalFuel = (baseState.bioFuel + effFuelDelta).coerceIn(0.0, storageCap)
+        val finalResearch = (baseState.researchData + effResearchDelta).coerceIn(0.0, storageCap)
 
-        val nextTotal = nextScrap + nextWater + nextRations + nextFuel + nextResearch
-        if (nextTotal > storageCap && storageCap > 0.0) {
-            val baseTotal = OutpostCalculator.computeTotalStoredResources(baseState)
-            val availableRoom = (storageCap - baseTotal).coerceAtLeast(0.0)
-            val positiveAdded = (nextScrap - baseState.scrap).coerceAtLeast(0.0) +
-                (nextWater - baseState.water).coerceAtLeast(0.0) +
-                (nextRations - baseState.rations).coerceAtLeast(0.0) +
-                (nextFuel - baseState.bioFuel).coerceAtLeast(0.0) +
-                (nextResearch - baseState.researchData).coerceAtLeast(0.0)
-            if (positiveAdded > 0.0) {
-                val scale = (availableRoom / positiveAdded).coerceIn(0.0, 1.0)
-                if (nextScrap > baseState.scrap) nextScrap = baseState.scrap + (nextScrap - baseState.scrap) * scale
-                if (nextWater > baseState.water) nextWater = baseState.water + (nextWater - baseState.water) * scale
-                if (nextRations > baseState.rations) nextRations = baseState.rations + (nextRations - baseState.rations) * scale
-                if (nextFuel > baseState.bioFuel) nextFuel = baseState.bioFuel + (nextFuel - baseState.bioFuel) * scale
-                if (nextResearch > baseState.researchData) nextResearch = baseState.researchData + (nextResearch - baseState.researchData) * scale
-            }
-        }
-
-        val finalScrap = nextScrap.coerceIn(0.0, storageCap)
-        val finalWater = nextWater.coerceIn(0.0, storageCap)
-        val finalRations = nextRations.coerceIn(0.0, storageCap)
-        val finalFuel = nextFuel.coerceIn(0.0, storageCap)
-        val finalResearch = nextResearch.coerceIn(0.0, storageCap)
-        val finalTotalStored = finalScrap + finalWater + finalRations + finalFuel + finalResearch
-        val halfCapThreshold = OutpostCalculator.computeStoreRoomResumeThreshold(storageCap)
-        val reachedFullNow = storageCap > 0.0 && (
-            finalTotalStored >= storageCap ||
-                finalScrap >= storageCap ||
-                finalWater >= storageCap ||
-                finalRations >= storageCap ||
-                finalFuel >= storageCap ||
-                finalResearch >= storageCap
-            )
-        // Latch halted = true when full, and keep halted = true until stored resources drop to or below half (50% of storageCap)!
-        val nextStoreRoomHalted = when {
-            reachedFullNow -> true
-            baseState.isStoreRoomGatheringHalted || storeRoomAlreadyFull -> finalTotalStored > halfCapThreshold
-            else -> false
-        }
+        // Update per-resource halt flags: latches true at storageCap, and clears to false as soon as that resource falls to <= 50% of storageCap!
+        val nextScrapHalted = OutpostCalculator.isResourceShelfHalted(finalScrap, scrapAlreadyHalted, false, storageCap)
+        val nextWaterHalted = OutpostCalculator.isResourceShelfHalted(finalWater, waterAlreadyHalted, false, storageCap)
+        val nextRationsHalted = OutpostCalculator.isResourceShelfHalted(finalRations, rationsAlreadyHalted, false, storageCap)
+        val nextFuelHalted = OutpostCalculator.isResourceShelfHalted(finalFuel, fuelAlreadyHalted, false, storageCap)
+        val nextResearchHalted = OutpostCalculator.isResourceShelfHalted(finalResearch, researchAlreadyHalted, false, storageCap)
+        val nextStoreRoomHalted = nextScrapHalted && nextWaterHalted && nextRationsHalted && nextFuelHalted
 
         return baseState.copy(
             commandLevel = newLevel,
@@ -4579,7 +4552,12 @@ class OutpostViewModel(
             researchData = finalResearch,
             gold = (baseState.gold + effGoldDelta).coerceAtLeast(0.0),
             mutagenCores = (baseState.mutagenCores + effCoresDelta).coerceAtLeast(0.0),
-            isStoreRoomGatheringHalted = nextStoreRoomHalted
+            isStoreRoomGatheringHalted = nextStoreRoomHalted,
+            isScrapGatheringHalted = nextScrapHalted,
+            isWaterGatheringHalted = nextWaterHalted,
+            isRationsGatheringHalted = nextRationsHalted,
+            isFuelGatheringHalted = nextFuelHalted,
+            isResearchGatheringHalted = nextResearchHalted
         )
     }
 

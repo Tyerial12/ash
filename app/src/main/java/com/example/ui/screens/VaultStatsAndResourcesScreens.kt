@@ -2161,17 +2161,20 @@ fun CurrentResourcesTabScreen(
                             )
                             Column {
                                 Text(
-                                    text = if (snap.isStoreRoomFull) {
-                                        "STORE ROOM HALTED (${snap.totalStoredResources.toInt()}/${snap.storageCap.toInt()}): RESTARTS AT ≤${snap.storeRoomResumeThreshold.toInt()} (50%)!"
-                                    } else {
-                                        "VAULT STORE ROOM: ${snap.totalStoredResources.toInt()} / ${snap.storageCap.toInt()} STORED"
+                                    text = when {
+                                        snap.isStoreRoomFull ->
+                                            "STORE ROOM FULL (CAP ${snap.storageCap.toInt()}/EA): AUTO-RESUMES AT ≤${snap.storeRoomResumeThreshold.toInt()} (50%)"
+                                        snap.isAnyStoreRoomResourceHalted ->
+                                            "${snap.haltedResourcesSummary.uppercase()} HALTED AT CAP (RESUMES AT ≤${snap.storeRoomResumeThreshold.toInt()} • OTHERS ACTIVE)"
+                                        else ->
+                                            "VAULT STORE ROOM: MAX ${snap.storageCap.toInt()} PER RESOURCE (RESUME AT ≤${snap.storeRoomResumeThreshold.toInt()})"
                                     },
                                     style = MaterialTheme.typography.titleSmall,
                                     color = if (snap.isStoreRoomFull) HazardRed else SolarAmber,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = "When Store Room fills up, ALL resources stop gathering and do not restart until stored resources drop to half (≤${snap.storeRoomResumeThreshold.toInt()}). Upgrade Store Room Lv.$storeRoomLv (+${snap.storeRoomStorageBonus.toInt()} Cap) to expand.",
+                                    text = "When a resource reaches Store Room capacity (${snap.storageCap.toInt()}), it pauses and automatically resumes production as soon as that resource falls to half capacity (≤${snap.storeRoomResumeThreshold.toInt()} / 50%) — no Gold needed!",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

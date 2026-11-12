@@ -324,6 +324,7 @@ fun WastelandSkyHeader(
             val netSign = if (production.netResourceBalancePerSec >= 0.0) "+" else ""
             val balanceBadgeColor = when {
                 production.isStoreRoomFull -> WarningOrange
+                production.isAnyStoreRoomResourceHalted -> SolarAmber
                 isPositiveBalance -> SurplusGreen
                 else -> HazardRed
             }
@@ -344,22 +345,25 @@ fun WastelandSkyHeader(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (production.isStoreRoomFull) {
-                            "📦 STORE ROOM HALTED (${production.totalStoredResources.toInt()}/${production.storageCap.toInt()} • Restarts at ≤${production.storeRoomResumeThreshold.toInt()})"
-                        } else if (isPositiveBalance) {
-                            "🟢 MAKING POSITIVE RESOURCES ($netSign${formatRate(production.netResourceBalancePerSec)}/s NET)"
-                        } else {
-                            "🔴 TAKING MORE THAN MAKING (${formatRate(production.netResourceBalancePerSec)}/s NET)"
+                        text = when {
+                            production.isStoreRoomFull ->
+                                "📦 STORE ROOM FULL (Each Resource Resumes at ≤${production.storeRoomResumeThreshold.toInt()} / 50%)"
+                            production.isAnyStoreRoomResourceHalted ->
+                                "📦 ${production.haltedResourcesSummary.uppercase()} AT CAP (Resumes at ≤${production.storeRoomResumeThreshold.toInt()} • Others Producing)"
+                            isPositiveBalance ->
+                                "🟢 MAKING POSITIVE RESOURCES ($netSign${formatRate(production.netResourceBalancePerSec)}/s NET)"
+                            else ->
+                                "🔴 TAKING MORE THAN MAKING (${formatRate(production.netResourceBalancePerSec)}/s NET)"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = balanceBadgeColor,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (production.isStoreRoomFull) {
-                            "Spend to ≤${production.storeRoomResumeThreshold.toInt()} (50%) to Resume"
+                        text = if (production.isAnyStoreRoomResourceHalted) {
+                            "Auto-Resumes ≤${production.storeRoomResumeThreshold.toInt()} (50%) • +${formatRate(production.totalGrossResourceGainPerSec)}/s"
                         } else {
-                            "Store Rm ${production.totalStoredResources.toInt()}/${production.storageCap.toInt()} • Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s"
+                            "Cap ${production.storageCap.toInt()}/ea • Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface,

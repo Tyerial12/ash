@@ -792,17 +792,23 @@ class ExampleUnitTest {
             eff0 > 0.0 && eff0 < eff1 && eff1 < eff2 && eff2 < eff3
         )
 
-        // 7. All resources stop gathering when the Store Room is full, and do NOT restart gaining until resources drop to HALF (<= 50%)!
+        // 7. Store Room full halts gathering, and each individual resource automatically resumes when IT falls to HALF (<= 50% of storageCap) without needing Gold!
         val fullStoreState = positiveState.copy(
-            scrap = positiveSnap.storageCap - 80.0,
-            water = 50.0,
-            rations = 50.0,
-            bioFuel = 50.0,
-            isStoreRoomGatheringHalted = true
+            scrap = positiveSnap.storageCap,
+            water = positiveSnap.storageCap,
+            rations = positiveSnap.storageCap,
+            bioFuel = positiveSnap.storageCap,
+            researchData = positiveSnap.storageCap,
+            isStoreRoomGatheringHalted = true,
+            isScrapGatheringHalted = true,
+            isWaterGatheringHalted = true,
+            isRationsGatheringHalted = true,
+            isFuelGatheringHalted = true,
+            isResearchGatheringHalted = true
         )
         val fullStoreSnap = OutpostCalculator.computeProductionSnapshot(fullStoreState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
-        assertTrue("Store Room is marked full when total stored resources reach storageCap", fullStoreSnap.isStoreRoomFull)
-        assertEquals("Store Room resume threshold is exactly half (50%) of storageCap", positiveSnap.storageCap * 0.50, fullStoreSnap.storeRoomResumeThreshold, 0.01)
+        assertTrue("Store Room is marked full when all primary resources reach storageCap", fullStoreSnap.isStoreRoomFull)
+        assertEquals("Store Room resume threshold is half (50%) of storageCap", positiveSnap.storageCap * 0.50, fullStoreSnap.storeRoomResumeThreshold, 0.01)
         assertEquals("When Store Room is full, total gross resource gathering per sec is 0.0", 0.0, fullStoreSnap.totalGrossResourceGainPerSec, 0.001)
         assertEquals("When Store Room is full, Gold/s gathering is 0.0", 0.0, fullStoreSnap.goldPerSec, 0.001)
         assertEquals("When Store Room is full, Research/s gathering is 0.0", 0.0, fullStoreSnap.researchPerSec, 0.001)
@@ -810,29 +816,32 @@ class ExampleUnitTest {
         assertEquals("When Store Room is full, Daily Room Scrap Bonus is 0.0", 0.0, fullStoreSnap.dailyRoomScrapBonus, 0.001)
         assertFalse("Full Store Room does not trigger a false resource deficit shutdown", fullStoreSnap.isVaultResourceDeficit)
 
-        // Dropping slightly below full (e.g. 80% full, still above 50% half threshold) keeps gathering HALTED so alert doesn't flicker!
+        // Dropping slightly below full (e.g. 80% of storageCap, still above 50% half threshold) keeps gathering HALTED so alert doesn't flicker!
         val aboveHalfState = fullStoreState.copy(
-            scrap = positiveSnap.storageCap * 0.65,
-            water = 30.0,
-            rations = 30.0,
-            bioFuel = 20.0,
-            isStoreRoomGatheringHalted = true
+            scrap = positiveSnap.storageCap * 0.80,
+            water = positiveSnap.storageCap * 0.80,
+            rations = positiveSnap.storageCap * 0.80,
+            bioFuel = positiveSnap.storageCap * 0.80
         )
         val aboveHalfSnap = OutpostCalculator.computeProductionSnapshot(aboveHalfState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
-        assertTrue("Resources above half capacity (50%) stay halted once Store Room was full", aboveHalfSnap.isStoreRoomFull)
-        assertEquals("Gathering remains 0.0/s while resources are still above half capacity", 0.0, aboveHalfSnap.totalGrossResourceGainPerSec, 0.001)
+        assertTrue("Resources above half capacity (80% > 50%) stay halted once full", aboveHalfSnap.isStoreRoomFull)
+        assertEquals("Gathering remains 0.0/s while all resources are still above half capacity", 0.0, aboveHalfSnap.totalGrossResourceGainPerSec, 0.001)
 
-        // Once stored resources drop to or below half capacity (<= 50%), gathering restarts!
-        val atHalfState = fullStoreState.copy(
-            scrap = positiveSnap.storageCap * 0.25,
-            water = 20.0,
-            rations = 20.0,
-            bioFuel = 10.0,
-            isStoreRoomGatheringHalted = true
+        // When Water & Food Rations fall to half of storage room capacity (<= 50%) from natural upkeep while Scrap is STILL at 90% (> 50%),
+        // Water & Food Rations immediately resume production without needing to spend Gold or drain Scrap!
+        val waterAndFoodAtHalfState = fullStoreState.copy(
+            scrap = positiveSnap.storageCap * 0.90, // Still above 50% -> Scrap stays halted!
+            water = positiveSnap.storageCap * 0.50, // Fell to half (50%) -> Water resumes!
+            rations = positiveSnap.storageCap * 0.45, // Fell below half (45%) -> Food resumes!
+            bioFuel = positiveSnap.storageCap * 0.85 // Still above 50% -> Fuel stays halted!
         )
-        val atHalfSnap = OutpostCalculator.computeProductionSnapshot(atHalfState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
-        assertFalse("Once stored resources drop to or below half capacity, Store Room is no longer halted", atHalfSnap.isStoreRoomFull)
-        assertTrue("Once resources are at half capacity or below, resources restart gathering", atHalfSnap.totalGrossResourceGainPerSec > 0.0 && atHalfSnap.scrapPerSec > 0.0)
+        val partialResumeSnap = OutpostCalculator.computeProductionSnapshot(waterAndFoodAtHalfState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
+        assertTrue("Scrap (90% > 50%) stays halted", partialResumeSnap.isScrapHalted)
+        assertFalse("Water (50% <= 50%) automatically resumes production", partialResumeSnap.isWaterHalted)
+        assertFalse("Food Rations (45% <= 50%) automatically resumes production", partialResumeSnap.isRationsHalted)
+        assertTrue("Water & Food resume positive gross gathering even while Scrap is still halted at 90%", partialResumeSnap.totalGrossResourceGainPerSec > 0.0)
+        assertFalse("Store Room is no longer completely locked once Water & Food fall to half capacity", partialResumeSnap.isStoreRoomFull)
+        assertFalse("Partial Store Room halt does not trigger a false resource deficit shutdown", partialResumeSnap.isVaultResourceDeficit)
     }
 
     @Test

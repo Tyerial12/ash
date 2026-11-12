@@ -65,7 +65,12 @@ data class OutpostStateEntity(
     val totalExpeditionsCompleted: Int = 0,
     val dwellerArmorCount: Int = 0, // Salvaged Dweller Armor from Expeditions (+12 Extra Defense each & -1% expedition death risk up to -3%)
     val dwellerWeaponsCount: Int = 0, // Salvaged Dweller Weapons from Expeditions (+15 Extra Defense each & +10% expedition loot security up to +30%)
-    val isStoreRoomGatheringHalted: Boolean = false, // Latches true when Store Room is full; stays true until stored resources drop to half (<= 50% cap)
+    val isStoreRoomGatheringHalted: Boolean = false, // True when all Store Room shelves are halted; each resource resumes as soon as it drops to <= 50% cap
+    val isScrapGatheringHalted: Boolean = false,
+    val isWaterGatheringHalted: Boolean = false,
+    val isRationsGatheringHalted: Boolean = false,
+    val isFuelGatheringHalted: Boolean = false,
+    val isResearchGatheringHalted: Boolean = false,
     val cycleProgress: Float = 0.15f,
     val dayCounter: Int = 1,
     val lastAttackDayResolved: Int = 0,
