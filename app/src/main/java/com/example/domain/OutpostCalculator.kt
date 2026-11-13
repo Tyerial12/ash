@@ -142,6 +142,8 @@ data class ProductionSnapshot(
     val haltedResourcesSummary: String = "",
     val totalStoredResources: Double = 0.0,
     val storeRoomResumeThreshold: Double = 0.0,
+    val storageSlowdownMultiplier: Double = 1.0,
+    val storageFillPercent: Int = 0,
     val dwellerGearDefenseBonus: Int = 0,
     val hasWaterPurifierRoom: Boolean = false,
     val hasHydroponicsRoom: Boolean = false,
@@ -411,7 +413,9 @@ object OutpostCalculator {
     const val RELIC_MORALE_BONUS_PER_RELIC = 0.01 // +1% Crew Morale per Relic
     const val RELIC_AUTO_REPAIR_DISCOUNT_PER_RELIC = 0.01 // -1% Daily Auto-Repair Scrap Cost per Relic
     const val SCRAP_GATHER_RATE_MULTIPLIER = 0.80 // 20% lower Scrap gather rate across automated & manual gathering
-    const val STORE_ROOM_RESUME_THRESHOLD_RATIO = 0.50 // Resources do not restart gaining until Store Room drops to half (50%) capacity
+    const val STORE_ROOM_RESUME_THRESHOLD_RATIO = 0.50 // Resources stay in Storage-Full Slowdown until Store Room drops to half (50%) capacity
+    const val STORAGE_FULL_SLOWDOWN_MULTIPLIER = 0.25 // Resources gather at 25% speed (-75% slower) when storage shelf is full or latched above 50% capacity
+    const val STORAGE_NEAR_FULL_SLOWDOWN_MULTIPLIER = 0.55 // Resources gather at 55% speed (-45% slower) when storage shelf is >= 90% full
     const val DWELLER_ARMOR_DEFENSE_BONUS = 12 // +12 Extra Vault Defense per Dweller Armor salvaged on Expeditions
     const val DWELLER_WEAPON_DEFENSE_BONUS = 15 // +15 Extra Vault Defense per Dweller Weapon salvaged on Expeditions
     const val PICKAXE_SWING_HEAT_DELTA = 0 // Swinging pickaxe does NOT cause heat!
@@ -792,6 +796,28 @@ object OutpostCalculator {
         val rationsHalted = isResourceShelfHalted(state.rations, state.isRationsGatheringHalted, state.isStoreRoomGatheringHalted, storageCap)
         val fuelHalted = isResourceShelfHalted(state.bioFuel, state.isFuelGatheringHalted, state.isStoreRoomGatheringHalted, storageCap)
         return scrapHalted && waterHalted && rationsHalted && fuelHalted
+    }
+
+    /**
+     * Storage-Full Slowdown Multiplier:
+     * - When a resource shelf reaches 100% of Store Room capacity (or remains latched above 50% capacity),
+     *   gathering slows to [STORAGE_FULL_SLOWDOWN_MULTIPLIER] (25% speed / -75% slower) instead of halting to 0!
+     * - When a resource shelf is >= 90% of Store Room capacity, gathering slows to [STORAGE_NEAR_FULL_SLOWDOWN_MULTIPLIER] (55% speed).
+     * - Below 90% (and once unlatched at <= 50% capacity), gathering runs at 100% full speed (1.0x).
+     */
+    fun computeResourceStorageSlowdownMultiplier(
+        currentAmount: Double,
+        isShelfHalted: Boolean,
+        storageCap: Double
+    ): Double {
+        if (!storageCap.isFinite() || storageCap <= 0.0) return 1.0
+        if (isShelfHalted) return STORAGE_FULL_SLOWDOWN_MULTIPLIER
+        val safeAmount = if (currentAmount.isFinite()) currentAmount.coerceAtLeast(0.0) else 0.0
+        return when {
+            safeAmount >= storageCap -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            safeAmount >= storageCap * 0.90 -> STORAGE_NEAR_FULL_SLOWDOWN_MULTIPLIER
+            else -> 1.0
+        }
     }
 
     /**
@@ -1316,6 +1342,25 @@ object OutpostCalculator {
         val isResearchHalted = isResourceShelfHalted(state.researchData, state.isResearchGatheringHalted, state.isStoreRoomGatheringHalted, storageCap)
         val isStoreRoomFull = isScrapHalted && isWaterHalted && isRationsHalted && isFuelHalted
         val isAnyStoreRoomResourceHalted = isScrapHalted || isWaterHalted || isRationsHalted || isFuelHalted || isResearchHalted
+        val scrapStorageSlowdownMult = computeResourceStorageSlowdownMultiplier(state.scrap, isScrapHalted, storageCap)
+        val waterStorageSlowdownMult = computeResourceStorageSlowdownMultiplier(state.water, isWaterHalted, storageCap)
+        val rationsStorageSlowdownMult = computeResourceStorageSlowdownMultiplier(state.rations, isRationsHalted, storageCap)
+        val fuelStorageSlowdownMult = computeResourceStorageSlowdownMultiplier(state.bioFuel, isFuelHalted, storageCap)
+        val researchStorageSlowdownMult = computeResourceStorageSlowdownMultiplier(state.researchData, isResearchHalted, storageCap)
+        val overallStorageSlowdownMult = when {
+            isStoreRoomFull -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            isAnyStoreRoomResourceHalted -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            else -> minOf(
+                scrapStorageSlowdownMult,
+                waterStorageSlowdownMult,
+                rationsStorageSlowdownMult,
+                fuelStorageSlowdownMult
+            )
+        }
+        val highestShelfRatio = if (storageCap > 0.0) {
+            maxOf(state.scrap, state.water, state.rations, state.bioFuel, state.researchData).coerceAtLeast(0.0) / storageCap
+        } else 0.0
+        val storageFillPercent = (highestShelfRatio * 100.0).roundToInt().coerceIn(0, 100)
         val haltedResourcesSummary = buildList {
             if (isScrapHalted) add("Scrap")
             if (isWaterHalted) add("Water")
@@ -1334,34 +1379,35 @@ object OutpostCalculator {
         val isRoomsLackingScrap = activeBuiltRoomsCount > 0 && state.scrap <= 0.0
         val roomScrapOperationalMultiplier = if (isRoomsLackingScrap) 0.65 else 1.0
 
-        // Daily Powered Room Supply Bonuses (Water requires active Water Purifier Room, Food requires active Hydroponics Room!)
+        // Daily Powered Room Supply Bonuses (Water requires active Water Purifier Room, Food requires active Hydroponics Room; slowed when storage shelf is full!)
         val activeCryoFoodBonus = if (isCryoMothballed) 0.0 else (cryoVaultLevel * 2.4 * computeRoomLevelOutputMultiplier(cryoVaultLevel))
-        val dailyRoomFoodBonus = if (isVaultBlackout || isRationsHalted || !hasHydroponicsRoom) {
+        val dailyRoomFoodBonus = if (isVaultBlackout || !hasHydroponicsRoom) {
             0.0
         } else {
             ((farmLevel * 3.8 * computeRoomLevelOutputMultiplier(farmLevel) + activeCryoFoodBonus) *
-                activeSeason.hydroponicsFoodMultiplier * roomScrapOperationalMultiplier * 10.0).roundToInt() / 10.0
+                activeSeason.hydroponicsFoodMultiplier * roomScrapOperationalMultiplier * rationsStorageSlowdownMult * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomWaterBonus = if (isVaultBlackout || isWaterHalted || !hasWaterPurifierRoom) {
+        val dailyRoomWaterBonus = if (isVaultBlackout || !hasWaterPurifierRoom) {
             0.0
         } else {
             val seasonWaterMult = if (activeSeason == WastelandSeason.SCORCHING_FALLOUT) 1.0 else activeSeason.waterCondenserMultiplier
-            ((condenserLevel * 2.8 * computeRoomLevelOutputMultiplier(condenserLevel) * seasonWaterMult * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
+            ((condenserLevel * 2.8 * computeRoomLevelOutputMultiplier(condenserLevel) * seasonWaterMult * roomScrapOperationalMultiplier * waterStorageSlowdownMult) * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomScrapBonus = if (isVaultBlackout || isScrapHalted || isSmelteryMothballed) {
+        val dailyRoomScrapBonus = if (isVaultBlackout || isSmelteryMothballed) {
             0.0
         } else {
-            ((smelteryLevel * 4.5 * SCRAP_GATHER_RATE_MULTIPLIER * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
+            ((smelteryLevel * 4.5 * SCRAP_GATHER_RATE_MULTIPLIER * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier * scrapStorageSlowdownMult) * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomGoldBonus = if (isVaultBlackout || isStoreRoomFull || isSmelteryMothballed) {
+        val dailyRoomGoldBonus = if (isVaultBlackout || isSmelteryMothballed) {
             0.0
         } else {
-            ((smelteryLevel * 1.4 * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
+            val goldSlowdownMult = if (isStoreRoomFull) STORAGE_FULL_SLOWDOWN_MULTIPLIER else 1.0
+            ((smelteryLevel * 1.4 * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier * goldSlowdownMult) * 10.0).roundToInt() / 10.0
         }
-        val dailyRoomFuelBonus = if (isVaultBlackout || isFuelHalted || isSmelteryMothballed) {
+        val dailyRoomFuelBonus = if (isVaultBlackout || isSmelteryMothballed) {
             0.0
         } else {
-            ((smelteryLevel * 0.75 * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier) * 10.0).roundToInt() / 10.0
+            ((smelteryLevel * 0.75 * computeRoomLevelOutputMultiplier(smelteryLevel) * roomScrapOperationalMultiplier * fuelStorageSlowdownMult) * 10.0).roundToInt() / 10.0
         }
 
         // 3. Daily & 5-Minute Food/Water Upkeep per Worker + Rationing Decree Multiplier
@@ -1581,6 +1627,8 @@ object OutpostCalculator {
                 haltedResourcesSummary = haltedResourcesSummary,
                 totalStoredResources = totalStoredResources,
                 storeRoomResumeThreshold = storeRoomResumeThreshold,
+                storageSlowdownMultiplier = overallStorageSlowdownMult,
+                storageFillPercent = storageFillPercent,
                 dwellerGearDefenseBonus = dwellerGearBonusDef,
                 hasWaterPurifierRoom = hasWaterPurifierRoom,
                 hasHydroponicsRoom = hasHydroponicsRoom,
@@ -1803,12 +1851,12 @@ object OutpostCalculator {
                     state.aetherCrossbowLevel * CraftableItemType.AETHER_CROSSBOW.passiveFoodPerSec * 0.5
                 ) * (1.0 + rankHydroFiltration * 0.22) * (1.0 + farmLevel * 0.25) * roomScrapOperationalMultiplier
         }
-        val passiveFoodFromTraps = if (isRationsHalted || !hasHydroponicsRoom) 0.0 else unhaltedPassiveFoodFromTraps
+        val passiveFoodFromTraps = if (!hasHydroponicsRoom) 0.0 else (unhaltedPassiveFoodFromTraps * rationsStorageSlowdownMult)
 
-        // PER-RESOURCE HALT & 50% CAPACITY RESUME:
-        // Each resource halts when it reaches storageCap, and automatically resumes when THAT resource falls to <= 50% of storageCap!
+        // PER-RESOURCE STORAGE SLOWDOWN & 50% CAPACITY FULL-SPEED RESUME:
+        // Each resource slows down to 25% speed when it reaches storageCap, and automatically returns to 100% speed when THAT resource falls to <= 50% of storageCap!
         val unhaltedScrapPerSec = scrapBase * SCRAP_GATHER_RATE_MULTIPLIER * (1.0 + rankRotarySaws * 0.18) * effectiveScrapPhase * daylightSkillMult * nightSkillMult * globalMult
-        val grossScrapPerSec = if (isScrapHalted) 0.0 else unhaltedScrapPerSec
+        val grossScrapPerSec = unhaltedScrapPerSec * scrapStorageSlowdownMult
         val scrapPerSec = (grossScrapPerSec - totalRoomScrapUpkeepPerSec).coerceAtLeast(-2.5)
 
         val unhaltedWaterPerSec = if (!hasWaterPurifierRoom) {
@@ -1816,7 +1864,7 @@ object OutpostCalculator {
         } else {
             waterBase * (1.0 + rankHydroFiltration * 0.22) * effectiveWaterPhase * daylightSkillMult * nightSkillMult * globalMult
         }
-        val grossWaterPerSec = if (isWaterHalted || !hasWaterPurifierRoom) 0.0 else unhaltedWaterPerSec
+        val grossWaterPerSec = if (!hasWaterPurifierRoom) 0.0 else (unhaltedWaterPerSec * waterStorageSlowdownMult)
         val waterPerSec = (grossWaterPerSec - totalRoomWaterUpkeepPerSec - citizenWaterUpkeep).coerceAtLeast(-2.5)
 
         val unhaltedRationsPerSec = if (!hasHydroponicsRoom) {
@@ -1824,18 +1872,19 @@ object OutpostCalculator {
         } else {
             rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + unhaltedPassiveFoodFromTraps
         }
-        val grossRationsPerSec = if (isRationsHalted || !hasHydroponicsRoom) 0.0 else (rationsBase * (1.0 + rankHydroFiltration * 0.22) * effectiveRationsPhase * daylightSkillMult * nightSkillMult * globalMult + passiveFoodFromTraps)
+        val grossRationsPerSec = if (!hasHydroponicsRoom) 0.0 else (unhaltedRationsPerSec * rationsStorageSlowdownMult)
         val rationsPerSec = (grossRationsPerSec - citizenFoodUpkeep).coerceAtLeast(-2.5)
 
         val unhaltedGoldMineFuelPerSec = ((goldMineFuelTrickle) * 100.0).roundToInt() / 100.0
-        val goldMineSmallFuelPerSec = if (isFuelHalted) 0.0 else unhaltedGoldMineFuelPerSec
+        val goldMineSmallFuelPerSec = ((unhaltedGoldMineFuelPerSec * fuelStorageSlowdownMult) * 100.0).roundToInt() / 100.0
         val unhaltedFuelPerSec = bioFuelBase * (1.0 + rankHighOctane * 0.25) * daylightSkillMult * nightSkillMult * globalMult + unhaltedGoldMineFuelPerSec
-        val grossFuelPerSec = if (isFuelHalted) 0.0 else (bioFuelBase * (1.0 + rankHighOctane * 0.25) * daylightSkillMult * nightSkillMult * globalMult + goldMineSmallFuelPerSec)
+        val grossFuelPerSec = (bioFuelBase * (1.0 + rankHighOctane * 0.25) * daylightSkillMult * nightSkillMult * globalMult * fuelStorageSlowdownMult) + goldMineSmallFuelPerSec
         val bioFuelPerSec = if (bioFuelBase > 0.0 || goldMineSmallFuelPerSec > 0.0 || totalRoomFuelUpkeepPerSec > 0.0 || reactorFuelUpkeep > 0.0) {
             (grossFuelPerSec - reactorFuelUpkeep - totalRoomFuelUpkeepPerSec)
                 .coerceAtLeast(-4.0)
         } else 0.0
-        val goldPerSec = if (isStoreRoomFull) 0.0 else ((goldBase * (1.0 + rankSovereign * 0.20) * daylightSkillMult * nightSkillMult * globalMult) * 100.0).roundToInt() / 100.0
+        val goldStoreSlowdown = if (isStoreRoomFull) STORAGE_FULL_SLOWDOWN_MULTIPLIER else 1.0
+        val goldPerSec = ((goldBase * (1.0 + rankSovereign * 0.20) * daylightSkillMult * nightSkillMult * globalMult * goldStoreSlowdown) * 100.0).roundToInt() / 100.0
 
         val totalGrossResourceGainPerSec =
             ((grossScrapPerSec + grossWaterPerSec + grossRationsPerSec + grossFuelPerSec) * 100.0).roundToInt() / 100.0
@@ -1856,8 +1905,8 @@ object OutpostCalculator {
         val effectiveTotalDefenseRating = if (isDefenseShutDownByDeficit) 0 else totalDefenseRating
         val effectiveAutoDefenseActive = if (isDefenseShutDownByDeficit) false else isAutoDefenseActive
 
-        val researchPerSec = if (isResearchHalted) 0.0 else (researchBase * (1.0 + rankSovereign * 0.25) * effectiveResearchPhase * daylightSkillMult * nightSkillMult * globalMult)
-        val mutagenCoresPerSec = if (isStoreRoomFull) 0.0 else (mutagenBase * (1.0 + rankBiolumSensors * 0.20) * effectiveMutagenPhase * nightSkillMult * globalMult)
+        val researchPerSec = (researchBase * (1.0 + rankSovereign * 0.25) * effectiveResearchPhase * daylightSkillMult * nightSkillMult * globalMult * researchStorageSlowdownMult)
+        val mutagenCoresPerSec = (mutagenBase * (1.0 + rankBiolumSensors * 0.20) * effectiveMutagenPhase * nightSkillMult * globalMult * goldStoreSlowdown)
 
         val arrayLevel = buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0
         val xpFromWorkers = totalAssigned * 0.55
@@ -1992,6 +2041,8 @@ object OutpostCalculator {
             haltedResourcesSummary = haltedResourcesSummary,
             totalStoredResources = totalStoredResources,
             storeRoomResumeThreshold = storeRoomResumeThreshold,
+            storageSlowdownMultiplier = overallStorageSlowdownMult,
+            storageFillPercent = storageFillPercent,
             dwellerGearDefenseBonus = dwellerGearBonusDef,
             hasWaterPurifierRoom = hasWaterPurifierRoom,
             hasHydroponicsRoom = hasHydroponicsRoom,
@@ -2463,7 +2514,16 @@ object OutpostCalculator {
             else -> 1.0
         }
         val caveInMult = if (state.activeCaveInHazard) 0.45 else 1.0
-        val hardcoreMiningConditionMult = pickaxeDurabilityMult * caveInMult * staminaManualMult
+        val nodeStorageSlowdownMult = when {
+            state.isStoreRoomGatheringHalted -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            nodeType.primaryResource == ResourceType.SCRAP && state.isScrapGatheringHalted -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            nodeType.primaryResource == ResourceType.WATER && state.isWaterGatheringHalted -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            nodeType.primaryResource == ResourceType.RATIONS && state.isRationsGatheringHalted -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            nodeType.primaryResource == ResourceType.BIO_FUEL && state.isFuelGatheringHalted -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            nodeType.primaryResource == ResourceType.RESEARCH_DATA && state.isResearchGatheringHalted -> STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            else -> 1.0
+        }
+        val hardcoreMiningConditionMult = pickaxeDurabilityMult * caveInMult * staminaManualMult * nodeStorageSlowdownMult
 
         val primaryAmount = (nodeType.basePrimaryYield * rigMult * skillMult * bonusForResource(nodeType.primaryResource) * hardcoreMiningConditionMult)
             .roundToInt().toDouble().coerceAtLeast(1.0)

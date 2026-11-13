@@ -1129,7 +1129,7 @@ fun VaultStatsTabScreen(
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = "Max Cap: ${snap.storageCap.toInt()} per resource • Auto-Resumes at ≤${snap.storeRoomResumeThreshold.toInt()} (50% Cap)",
+                                    text = "Max Cap: ${snap.storageCap.toInt()} per resource • Full Shelf = Slowed to 25% Speed (100% Speed at ≤${snap.storeRoomResumeThreshold.toInt()})",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1152,7 +1152,7 @@ fun VaultStatsTabScreen(
                     }
 
                     NetResourceLedgerRow(
-                        name = "Scrap Metal ${if (snap.isScrapHalted) "[HALTED AT CAP]" else "[ACTIVE]"}",
+                        name = "Scrap Metal ${if (snap.isScrapHalted) "[SLOWED 25% AT CAP]" else "[ACTIVE]"}",
                         current = state.scrap,
                         cap = snap.storageCap,
                         grossGain = snap.scrapPerSec + scrapDrain,
@@ -1161,7 +1161,7 @@ fun VaultStatsTabScreen(
                         color = RustOrange
                     )
                     NetResourceLedgerRow(
-                        name = "Purified Water ${if (!snap.hasWaterPurifierRoom) "[MANUAL ONLY]" else if (snap.isWaterHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        name = "Purified Water ${if (!snap.hasWaterPurifierRoom) "[MANUAL ONLY]" else if (snap.isWaterHalted) "[SLOWED 25% AT CAP]" else "[AUTO ONLINE]"}",
                         current = state.water,
                         cap = snap.storageCap,
                         grossGain = snap.waterPerSec + waterDrain,
@@ -1170,7 +1170,7 @@ fun VaultStatsTabScreen(
                         color = CyanHydro
                     )
                     NetResourceLedgerRow(
-                        name = "Vault Food Rations ${if (!snap.hasHydroponicsRoom) "[MANUAL ONLY]" else if (snap.isRationsHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        name = "Vault Food Rations ${if (!snap.hasHydroponicsRoom) "[MANUAL ONLY]" else if (snap.isRationsHalted) "[SLOWED 25% AT CAP]" else "[AUTO ONLINE]"}",
                         current = state.rations,
                         cap = snap.storageCap,
                         grossGain = snap.rationsPerSec + foodDrain,
@@ -1179,7 +1179,7 @@ fun VaultStatsTabScreen(
                         color = BioGreen
                     )
                     NetResourceLedgerRow(
-                        name = "Refined Bio-Fuel ${if ((uiState.buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0) <= 0) "[MANUAL ONLY]" else if (snap.isFuelHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        name = "Refined Bio-Fuel ${if ((uiState.buildingsMap[BuildingType.BIO_SLUDGE_REFINERY.id] ?: 0) <= 0) "[MANUAL ONLY]" else if (snap.isFuelHalted) "[SLOWED 25% AT CAP]" else "[AUTO ONLINE]"}",
                         current = state.bioFuel,
                         cap = snap.storageCap,
                         grossGain = snap.bioFuelPerSec + fuelDrain,
@@ -1188,7 +1188,7 @@ fun VaultStatsTabScreen(
                         color = SolarAmber
                     )
                     NetResourceLedgerRow(
-                        name = "Research Data ${if ((uiState.buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0) <= 0) "[MANUAL ONLY]" else if (snap.isResearchHalted) "[HALTED AT CAP]" else "[AUTO ONLINE]"}",
+                        name = "Research Data ${if ((uiState.buildingsMap[BuildingType.SIGNAL_RESEARCH_ARRAY.id] ?: 0) <= 0) "[MANUAL ONLY]" else if (snap.isResearchHalted) "[SLOWED 25% AT CAP]" else "[AUTO ONLINE]"}",
                         current = state.researchData,
                         cap = snap.storageCap,
                         grossGain = snap.researchPerSec,

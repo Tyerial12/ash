@@ -318,25 +318,31 @@ fun AshfallOutpostApp(
                 Lifecycle.Event.ON_START -> {
                     VaultNotificationHelper.cancelScheduledOfflineNotifications(context)
                     val snapshotState = latestUiState
-                    VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
-                        context = context,
-                        state = snapshotState.state,
-                        production = snapshotState.production
-                    )
+                    if (snapshotState.isLoaded) {
+                        VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+                            context = context,
+                            state = snapshotState.state,
+                            production = snapshotState.production
+                        )
+                    } else {
+                        VaultStatusAppWidgetProvider.requestUpdateAllWidgets(context)
+                    }
                 }
                 Lifecycle.Event.ON_STOP -> {
                     val snapshotState = latestUiState
-                    VaultNotificationHelper.scheduleOfflineNotifications(
-                        context = context,
-                        state = snapshotState.state,
-                        production = snapshotState.production,
-                        activeConstruction = snapshotState.activeConstruction
-                    )
-                    VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
-                        context = context,
-                        state = snapshotState.state,
-                        production = snapshotState.production
-                    )
+                    if (snapshotState.isLoaded) {
+                        VaultNotificationHelper.scheduleOfflineNotifications(
+                            context = context,
+                            state = snapshotState.state,
+                            production = snapshotState.production,
+                            activeConstruction = snapshotState.activeConstruction
+                        )
+                        VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+                            context = context,
+                            state = snapshotState.state,
+                            production = snapshotState.production
+                        )
+                    }
                 }
                 else -> {}
             }
@@ -357,6 +363,7 @@ fun AshfallOutpostApp(
     // Keep the installed Home Screen Phone Widget synchronized as resources and status change,
     // AND automatically refresh the widget every 10 seconds!
     LaunchedEffect(
+        uiState.isLoaded,
         state.dayCounter,
         state.commandLevel,
         state.scrap.toInt() / 5,
@@ -373,22 +380,26 @@ fun AshfallOutpostApp(
         state.dwellerStaminaPercent,
         state.oxygenPercent
     ) {
-        VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
-            context = context,
-            state = state,
-            production = prod
-        )
+        if (uiState.isLoaded) {
+            VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+                context = context,
+                state = state,
+                production = prod
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(VaultStatusAppWidgetProvider.AUTO_REFRESH_INTERVAL_MILLIS)
             val snapshotState = latestUiState
-            VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
-                context = context,
-                state = snapshotState.state,
-                production = snapshotState.production
-            )
+            if (snapshotState.isLoaded) {
+                VaultStatusAppWidgetProvider.pushLiveStateToWidgets(
+                    context = context,
+                    state = snapshotState.state,
+                    production = snapshotState.production
+                )
+            }
         }
     }
 

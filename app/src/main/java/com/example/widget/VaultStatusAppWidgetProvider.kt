@@ -70,8 +70,12 @@ data class VaultWidgetSnapshot(
     val blackoutDaysCount: Int = 0,
     val dailyRoomScrapUpkeep: Double = 0.0,
     val storageCap: Double = 150.0,
+    val storageFillPercent: Int = 4,
+    val storageSlowdownMultiplier: Double = 1.0,
+    val isAnyResourceSlowedByStorage: Boolean = false,
+    val storageStatusLine: String = "📦 Storage: 6/150 (4%) • Speed 100%",
     val manualDynamoCranksRemaining: Int = 4,
-    val lastWidgetActionFeedback: String = "Tap ⛏ MINE or ⚡ STABILIZE out-of-game",
+    val lastWidgetActionFeedback: String = "Tap ⛏ DRILL, 💧 ICE & FOOD, or ⚡ FIX",
     val statusAlertHeadline: String = "🟢 PREP DAY 1/10 (0 ATTACKS) • 6D CLOCKS: RES 0/6D • PWR 0/6D",
     val isCriticalAlert: Boolean = false
 )
@@ -126,6 +130,7 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
         val action = intent.action ?: return
         if (action == ACTION_REFRESH_VAULT_WIDGET ||
             action == ACTION_WIDGET_QUICK_MINE ||
+            action == ACTION_WIDGET_QUICK_SUPPLY ||
             action == ACTION_WIDGET_QUICK_STABILIZE
         ) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -160,9 +165,10 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        const val WIDGET_VERSION_NAME = "v24.0"
+        const val WIDGET_VERSION_NAME = "v25.0"
         const val ACTION_REFRESH_VAULT_WIDGET = "com.example.widget.ACTION_REFRESH_VAULT_WIDGET"
         const val ACTION_WIDGET_QUICK_MINE = "com.example.widget.ACTION_WIDGET_QUICK_MINE"
+        const val ACTION_WIDGET_QUICK_SUPPLY = "com.example.widget.ACTION_WIDGET_QUICK_SUPPLY"
         const val ACTION_WIDGET_QUICK_STABILIZE = "com.example.widget.ACTION_WIDGET_QUICK_STABILIZE"
         const val AUTO_REFRESH_INTERVAL_MILLIS = 10_000L // Auto-refresh widget every 10 seconds
         private const val AUTO_REFRESH_REQUEST_CODE = 709
@@ -171,32 +177,46 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
         fun buildWidgetSnapshot(
             state: OutpostStateEntity,
             production: ProductionSnapshot,
-            lastActionFeedback: String = "Tap ⛏ MINE or ⚡ STABILIZE out-of-game"
+            lastActionFeedback: String = "Tap ⛏ DRILL, 💧 ICE & FOOD, or ⚡ FIX"
         ): VaultWidgetSnapshot {
             val activeBoss = SubterraneanBossType.fromId(state.activeSubterraneanBossId)
             val maxDeficitDays = OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER
             val maxBlackoutDays = OutpostCalculator.MAX_BLACKOUT_DAYS_BEFORE_GAME_OVER
             val totalDailyScrapUpkeep = ((production.dailyRoomScrapUpkeep + production.dailyAutoRepairScrapCost) * 10.0).roundToInt() / 10.0
+            val highestShelf = maxOf(state.scrap, state.water, state.rations, state.bioFuel).coerceAtLeast(0.0)
+            val safeCap = production.storageCap.coerceAtLeast(1.0)
+            val fillPct = ((highestShelf / safeCap) * 100.0).roundToInt().coerceIn(0, 100)
+            val speedPct = (production.storageSlowdownMultiplier * 100.0).roundToInt()
+            val storageStatus = when {
+                production.isStoreRoomFull ->
+                    "📦 STORAGE FULL (${highestShelf.toInt()}/${safeCap.toInt()}) • Slowed to ${speedPct}% (100% ≤${production.storeRoomResumeThreshold.toInt()})"
+                production.isAnyStoreRoomResourceHalted ->
+                    "📦 Shelf Full (${production.haltedResourcesSummary}: ${speedPct}% speed until ≤${production.storeRoomResumeThreshold.toInt()})"
+                production.storageSlowdownMultiplier < 1.0 ->
+                    "📦 Storage Near Cap (${highestShelf.toInt()}/${safeCap.toInt()} • ${fillPct}%) • Speed ${speedPct}%"
+                else ->
+                    "📦 Storage Cap: ${highestShelf.toInt()}/${safeCap.toInt()} (${fillPct}%) • Speed 100%"
+            }
 
             val (headline, isCritical) = when {
                 state.isGameOver ->
-                    "💀 VAULT FALLEN (DAY ${state.dayCounter}) • TAP TO REBUILD" to true
+                    "💀 OUTPOST FALLEN (DAY ${state.dayCounter}) • TAP TO REBUILD" to true
                 production.isVaultBlackout ->
-                    "⚡ BLACKOUT (${state.blackoutDaysCount}/${maxBlackoutDays}D) • TAP ⚡ STABILIZE / CRANK!" to true
+                    "⚡ BLACKOUT (${state.blackoutDaysCount}/${maxBlackoutDays}D) • TAP ⚡ FIX / POWER!" to true
                 production.isDefenseShutDownByDeficit ->
-                    "🚨 RESOURCE DEFICIT (${state.deficitDaysCount}/${maxDeficitDays}D) • DEF SHUT DOWN!" to true
+                    "🚨 RESOURCE DEFICIT (${state.deficitDaysCount}/${maxDeficitDays}D) • TAP ⛏ DRILL / 💧 ICE!" to true
                 production.isWorkersStarvingOrDehydrated ->
-                    "🍖 CREW STARVING / DEHYDRATED (${state.deficitDaysCount}/${maxDeficitDays}D) • TAP ⚡ STABILIZE!" to true
+                    "🍖 CREW STARVING / DEHYDRATED (${state.deficitDaysCount}/${maxDeficitDays}D) • TAP 💧 ICE & FOOD!" to true
                 production.isRoomsLackingScrap && production.totalBuiltRoomsCount > 0 ->
-                    "⚙ LOW SCRAP FOR ROOM UPKEEP (-${totalDailyScrapUpkeep}/d) • TAP ⛏ MINE!" to true
+                    "⚙ LOW SCRAP FOR ROOM UPKEEP (-${totalDailyScrapUpkeep}/d) • TAP ⛏ DRILL!" to true
                 activeBoss != null ->
                     "🕳 BOSS AWAKENED: ${activeBoss.title.uppercase()} (${state.subterraneanBossHpPercent}% HP)" to true
                 state.sickDwellersCount > 0 || state.bleedingDwellersCount > 0 || state.venomInfectedDwellersCount > 0 ->
                     "☣ MEDBAY ALERT: ${state.sickDwellersCount} SICK / TRAUMA (${state.dwellerHealthPercent}% HP)" to true
                 state.activePipeLeaksCount > 0 || state.activeCaveInHazard ->
-                    "🔧 HAZARD: ${state.activePipeLeaksCount} PIPE LEAK(S) • TAP ⚡ STABILIZE" to true
+                    "🔧 HAZARD: ${state.activePipeLeaksCount} PIPE LEAK(S) • TAP ⚡ FIX / POWER" to true
                 production.isStoreRoomFull ->
-                    "📦 STORE ROOM FULL (${production.totalStoredResources.toInt()}/${production.storageCap.toInt()}) • RESUMES ≤${production.storeRoomResumeThreshold.toInt()}" to false
+                    "📦 STORAGE FULL (${highestShelf.toInt()}/${safeCap.toInt()}) • GATHERING SLOWED (-75%)" to false
                 !production.isPreparationPeaceWindow && production.totalDefenseRating < production.todayRequiredDefense ->
                     "⚔ SIEGE WARNING: ${production.totalDefenseRating}/${production.todayRequiredDefense} DEF • RES ${state.deficitDaysCount}/${maxDeficitDays}D" to false
                 production.isPreparationPeaceWindow ->
@@ -250,6 +270,10 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 blackoutDaysCount = state.blackoutDaysCount,
                 dailyRoomScrapUpkeep = totalDailyScrapUpkeep,
                 storageCap = production.storageCap,
+                storageFillPercent = fillPct,
+                storageSlowdownMultiplier = production.storageSlowdownMultiplier,
+                isAnyResourceSlowedByStorage = production.isAnyStoreRoomResourceHalted || production.storageSlowdownMultiplier < 1.0,
+                storageStatusLine = storageStatus,
                 manualDynamoCranksRemaining = state.manualDynamoCranksRemaining,
                 lastWidgetActionFeedback = lastActionFeedback,
                 statusAlertHeadline = headline,
@@ -259,8 +283,8 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
 
         /**
          * Pure helper for out-of-game Quick Mine action from the Home Screen Widget:
-         * Harvests scarce Scrap, Water, Food, Bio-Fuel & Gold using Pickaxe level and Stamina multiplier,
-         * deducts 4% Stamina (MANUAL_ACTION_STAMINA_COST), and clamps to Storage Cap.
+         * Harvests Scrap, Water, Food, Bio-Fuel & Gold using Pickaxe level and Stamina multiplier,
+         * slows down to 25% when a resource shelf is full instead of halting to 0, and clamps to Storage Cap.
          */
         fun applyWidgetQuickMine(
             state: OutpostStateEntity,
@@ -276,12 +300,19 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 else -> 1.0
             }
             val effectiveMult = stamMult * rigMult * pickaxeDurMult * production.uniqueDwellerBonusMultiplier
+            val slowMult = OutpostCalculator.STORAGE_FULL_SLOWDOWN_MULTIPLIER
 
-            val scrapGain = if (production.isScrapHalted) 0.0 else ((2.6 * effectiveMult * OutpostCalculator.SCRAP_GATHER_RATE_MULTIPLIER) * 10.0).roundToInt() / 10.0
-            val waterGain = if (production.isWaterHalted) 0.0 else ((1.6 * effectiveMult) * 10.0).roundToInt() / 10.0
-            val foodGain = if (production.isRationsHalted) 0.0 else ((1.6 * effectiveMult) * 10.0).roundToInt() / 10.0
-            val fuelGain = if (production.isFuelHalted) 0.0 else ((0.8 * effectiveMult) * 10.0).roundToInt() / 10.0
-            val goldGain = ((0.9 * effectiveMult) * 10.0).roundToInt() / 10.0
+            val scrapSlow = if (production.isScrapHalted) slowMult else 1.0
+            val waterSlow = if (production.isWaterHalted) slowMult else 1.0
+            val foodSlow = if (production.isRationsHalted) slowMult else 1.0
+            val fuelSlow = if (production.isFuelHalted) slowMult else 1.0
+            val goldSlow = if (production.isStoreRoomFull) slowMult else 1.0
+
+            val scrapGain = ((2.8 * effectiveMult * OutpostCalculator.SCRAP_GATHER_RATE_MULTIPLIER * scrapSlow) * 10.0).roundToInt() / 10.0
+            val waterGain = ((1.8 * effectiveMult * waterSlow) * 10.0).roundToInt() / 10.0
+            val foodGain = ((1.8 * effectiveMult * foodSlow) * 10.0).roundToInt() / 10.0
+            val fuelGain = ((0.9 * effectiveMult * fuelSlow) * 10.0).roundToInt() / 10.0
+            val goldGain = ((1.0 * effectiveMult * goldSlow) * 10.0).roundToInt() / 10.0
 
             val nextStamina = (state.dwellerStaminaPercent - OutpostCalculator.MANUAL_ACTION_STAMINA_COST).coerceAtLeast(10)
             val nextDurability = (state.pickaxeDurabilityPercent - 2).coerceAtLeast(0)
@@ -291,6 +322,11 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
             val nextFood = (state.rations + foodGain).coerceIn(0.0, cap)
             val nextFuel = (state.bioFuel + fuelGain).coerceIn(0.0, cap)
             val nextGold = (state.gold + goldGain).coerceAtLeast(0.0)
+
+            val nextScrapHalted = OutpostCalculator.isResourceShelfHalted(nextScrap, state.isScrapGatheringHalted, state.isStoreRoomGatheringHalted, cap)
+            val nextWaterHalted = OutpostCalculator.isResourceShelfHalted(nextWater, state.isWaterGatheringHalted, state.isStoreRoomGatheringHalted, cap)
+            val nextFoodHalted = OutpostCalculator.isResourceShelfHalted(nextFood, state.isRationsGatheringHalted, state.isStoreRoomGatheringHalted, cap)
+            val nextFuelHalted = OutpostCalculator.isResourceShelfHalted(nextFuel, state.isFuelGatheringHalted, state.isStoreRoomGatheringHalted, cap)
 
             val updated = state.copy(
                 scrap = nextScrap,
@@ -302,14 +338,61 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 dwellerStaminaPercent = nextStamina,
                 pickaxeDurabilityPercent = nextDurability,
                 totalManualScavenges = state.totalManualScavenges + 1,
+                isScrapGatheringHalted = nextScrapHalted,
+                isWaterGatheringHalted = nextWaterHalted,
+                isRationsGatheringHalted = nextFoodHalted,
+                isFuelGatheringHalted = nextFuelHalted,
+                isStoreRoomGatheringHalted = nextScrapHalted && nextWaterHalted && nextFoodHalted && nextFuelHalted,
                 lastSavedTimestampMillis = nowMillis
             )
 
-            val feedback = "⛏ MINED: +${formatCompactWidget(scrapGain)} Scrap, +${formatCompactWidget(waterGain)} H2O/Food, +${formatCompactWidget(goldGain)}G (Stam $nextStamina%)"
+            val slowSuffix = if (production.isAnyStoreRoomResourceHalted) " [Full=Slowed]" else ""
+            val feedback = "⛏ DRILLED: +${formatCompactWidget(scrapGain)} Scrap, +${formatCompactWidget(waterGain)} H2O/Food, +${formatCompactWidget(goldGain)}G$slowSuffix"
             return WidgetQuickActionResult(
                 updatedState = updated,
                 actionFeedback = feedback,
                 logCategory = "WIDGET MINE"
+            )
+        }
+
+        /**
+         * Pure helper for out-of-game Quick Supply (💧 ICE & FOOD) action from the Home Screen Widget:
+         * Melts Martian ice & harvests emergency bio-rations (+4.5 Water, +4.5 Food, +1.2 Scrap, +15% O2, +10% Stamina).
+         */
+        fun applyWidgetQuickSupply(
+            state: OutpostStateEntity,
+            production: ProductionSnapshot,
+            nowMillis: Long = System.currentTimeMillis()
+        ): WidgetQuickActionResult {
+            val cap = production.storageCap.coerceAtLeast(OutpostCalculator.BASE_STORAGE_CAP)
+            val slowMult = OutpostCalculator.STORAGE_FULL_SLOWDOWN_MULTIPLIER
+            val waterSlow = if (production.isWaterHalted) slowMult else 1.0
+            val foodSlow = if (production.isRationsHalted) slowMult else 1.0
+            val scrapSlow = if (production.isScrapHalted) slowMult else 1.0
+
+            val waterGain = ((4.5 * production.uniqueDwellerBonusMultiplier * waterSlow) * 10.0).roundToInt() / 10.0
+            val foodGain = ((4.5 * production.uniqueDwellerBonusMultiplier * foodSlow) * 10.0).roundToInt() / 10.0
+            val scrapGain = ((1.2 * production.uniqueDwellerBonusMultiplier * scrapSlow) * 10.0).roundToInt() / 10.0
+            val nextWater = (state.water + waterGain).coerceIn(0.0, cap)
+            val nextFood = (state.rations + foodGain).coerceIn(0.0, cap)
+            val nextScrap = (state.scrap + scrapGain).coerceIn(0.0, cap)
+            val nextO2 = (state.oxygenPercent + 15).coerceAtMost(100)
+            val nextStamina = (state.dwellerStaminaPercent + 10).coerceAtMost(100)
+
+            val updated = state.copy(
+                water = nextWater,
+                rations = nextFood,
+                scrap = nextScrap,
+                oxygenPercent = nextO2,
+                dwellerStaminaPercent = nextStamina,
+                miningShaftHeatPercent = (state.miningShaftHeatPercent - 15).coerceAtLeast(0),
+                lastSavedTimestampMillis = nowMillis
+            )
+            val feedback = "💧 ICE & FOOD: +${formatCompactWidget(waterGain)} Water, +${formatCompactWidget(foodGain)} Food, O2 $nextO2%, Stam $nextStamina%"
+            return WidgetQuickActionResult(
+                updatedState = updated,
+                actionFeedback = feedback,
+                logCategory = "WIDGET SUPPLY"
             )
         }
 
@@ -362,8 +445,11 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 )
             } else {
                 val stamMult = production.manualActionStaminaMultiplier
-                val waterGain = ((3.5 * stamMult) * 10.0).roundToInt() / 10.0
-                val foodGain = ((3.5 * stamMult) * 10.0).roundToInt() / 10.0
+                val slowMult = OutpostCalculator.STORAGE_FULL_SLOWDOWN_MULTIPLIER
+                val waterSlow = if (production.isWaterHalted) slowMult else 1.0
+                val foodSlow = if (production.isRationsHalted) slowMult else 1.0
+                val waterGain = ((3.5 * stamMult * waterSlow) * 10.0).roundToInt() / 10.0
+                val foodGain = ((3.5 * stamMult * foodSlow) * 10.0).roundToInt() / 10.0
                 val nextStamina = (state.dwellerStaminaPercent - OutpostCalculator.MANUAL_ACTION_STAMINA_COST).coerceAtLeast(10)
                 val updated = state.copy(
                     water = (state.water + waterGain).coerceIn(0.0, cap),
@@ -378,6 +464,16 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                     actionFeedback = "⚡ FORAGED & BOILED: +${formatCompactWidget(waterGain)} H2O, +${formatCompactWidget(foodGain)} Food (Stam $nextStamina%)",
                     logCategory = "WIDGET FORAGE"
                 )
+            }
+        }
+
+        fun requestUpdateAllWidgets(context: Context) {
+            runCatching {
+                val appContext = context.applicationContext
+                val refreshIntent = Intent(appContext, VaultStatusAppWidgetProvider::class.java).apply {
+                    action = ACTION_REFRESH_VAULT_WIDGET
+                }
+                appContext.sendBroadcast(refreshIntent)
             }
         }
 
@@ -492,11 +588,11 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 val offlineFactor = 0.65
                 val cap = baseProd.storageCap
                 savedState.copy(
-                    scrap = (savedState.scrap + baseProd.scrapPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    water = (savedState.water + baseProd.waterPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    rations = (savedState.rations + baseProd.rationsPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    bioFuel = (savedState.bioFuel + baseProd.bioFuelPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    gold = (savedState.gold + baseProd.goldPerSec * elapsedSecs * offlineFactor).coerceAtLeast(0.0)
+                    scrap = (savedState.scrap + baseProd.scrapPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    water = (savedState.water + baseProd.waterPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    rations = (savedState.rations + baseProd.rationsPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    bioFuel = (savedState.bioFuel + baseProd.bioFuelPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    gold = (savedState.gold + baseProd.goldPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceAtLeast(0.0)
                 )
             } else {
                 savedState
@@ -534,11 +630,11 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 val offlineFactor = 0.65
                 val cap = baseProd.storageCap
                 savedState.copy(
-                    scrap = (savedState.scrap + baseProd.scrapPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    water = (savedState.water + baseProd.waterPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    rations = (savedState.rations + baseProd.rationsPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    bioFuel = (savedState.bioFuel + baseProd.bioFuelPerSec * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
-                    gold = (savedState.gold + baseProd.goldPerSec * elapsedSecs * offlineFactor).coerceAtLeast(0.0),
+                    scrap = (savedState.scrap + baseProd.scrapPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    water = (savedState.water + baseProd.waterPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    rations = (savedState.rations + baseProd.rationsPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    bioFuel = (savedState.bioFuel + baseProd.bioFuelPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceIn(0.0, cap),
+                    gold = (savedState.gold + baseProd.goldPerSec.coerceAtLeast(0.0) * elapsedSecs * offlineFactor).coerceAtLeast(0.0),
                     lastSavedTimestampMillis = now
                 )
             } else {
@@ -555,8 +651,9 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
 
             val result = when (action) {
                 ACTION_WIDGET_QUICK_MINE -> applyWidgetQuickMine(projectedState, currentProd, now)
+                ACTION_WIDGET_QUICK_SUPPLY -> applyWidgetQuickSupply(projectedState, currentProd, now)
                 ACTION_WIDGET_QUICK_STABILIZE -> applyWidgetQuickStabilize(projectedState, currentProd, now)
-                else -> WidgetQuickActionResult(projectedState, "↻ Synced v24.0 Telemetry", "WIDGET SYNC")
+                else -> WidgetQuickActionResult(projectedState, "↻ Synced v25.0 Telemetry", "WIDGET SYNC")
             }
 
             dao.upsertOutpostState(result.updatedState)
@@ -614,6 +711,16 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
+            val quickSupplyIntent = Intent(context, VaultStatusAppWidgetProvider::class.java).apply {
+                action = ACTION_WIDGET_QUICK_SUPPLY
+            }
+            val quickSupplyPendingIntent = PendingIntent.getBroadcast(
+                context,
+                705,
+                quickSupplyIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
             val quickStabilizeIntent = Intent(context, VaultStatusAppWidgetProvider::class.java).apply {
                 action = ACTION_WIDGET_QUICK_STABILIZE
             }
@@ -625,12 +732,12 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
             )
 
             val prestigeBadge = if (snapshot.prestigeLevel > 0) " • ★P${snapshot.prestigeLevel}" else ""
-            val titleText = "VAULT CITY ${snapshot.versionName} • DAY ${snapshot.dayCounter} • LV.${snapshot.commandLevel}$prestigeBadge"
+            val titleText = "ARES OUTPOST ${snapshot.versionName} • SOL ${snapshot.dayCounter} • LV.${snapshot.commandLevel}$prestigeBadge"
 
             val prepAndClocksBanner = if (snapshot.isPreparationPeaceWindow) {
-                "⏳ ${snapshot.preparationDaysRemaining}d to Day 11 Siege (${snapshot.firstAttackDay11RequiredDefense} DEF) • Upkeep -${String.format(Locale.US, "%.1f", snapshot.dailyRoomScrapUpkeep)} Scrap/d • Cap ${snapshot.storageCap.toInt()}"
+                "⏳ ${snapshot.preparationDaysRemaining}d Peace (Day 11: ${snapshot.firstAttackDay11RequiredDefense} DEF) • Upkeep -${String.format(Locale.US, "%.1f", snapshot.dailyRoomScrapUpkeep)}/d"
             } else {
-                "⚔ Siege Req ${snapshot.todayRequiredDefense} DEF • Upkeep -${String.format(Locale.US, "%.1f", snapshot.dailyRoomScrapUpkeep)} Scrap/d • Cap ${snapshot.storageCap.toInt()}"
+                "⚔ Siege Req ${snapshot.todayRequiredDefense} DEF • Upkeep -${String.format(Locale.US, "%.1f", snapshot.dailyRoomScrapUpkeep)}/d"
             }
 
             val attackStatusText = when {
@@ -661,6 +768,12 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                     R.id.widget_status_alert,
                     if (snapshot.isCriticalAlert) Color.parseColor("#FF5252") else Color.parseColor("#66BB6A")
                 )
+                views.setTextViewText(R.id.widget_storage_status, snapshot.storageStatusLine)
+                views.setTextColor(
+                    R.id.widget_storage_status,
+                    if (snapshot.isAnyResourceSlowedByStorage) Color.parseColor("#FFD54F") else Color.parseColor("#FFF3E0")
+                )
+                views.setProgressBar(R.id.widget_storage_progress, 100, snapshot.storageFillPercent, false)
                 views.setTextViewText(R.id.widget_prep_and_clocks_banner, prepAndClocksBanner)
 
                 views.setTextViewText(
@@ -702,6 +815,7 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
 
                 views.setOnClickPendingIntent(R.id.widget_root_container, launchPendingIntent)
                 views.setOnClickPendingIntent(R.id.widget_btn_quick_mine, quickMinePendingIntent)
+                views.setOnClickPendingIntent(R.id.widget_btn_quick_supply, quickSupplyPendingIntent)
                 views.setOnClickPendingIntent(R.id.widget_btn_quick_stabilize, quickStabilizePendingIntent)
                 views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPendingIntent)
                 appWidgetManager.updateAppWidget(widgetId, views)
@@ -767,6 +881,10 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 .putInt("blackoutDaysCount", snap.blackoutDaysCount)
                 .putFloat("dailyRoomScrapUpkeep", snap.dailyRoomScrapUpkeep.toFloat())
                 .putFloat("storageCap", snap.storageCap.toFloat())
+                .putInt("storageFillPercent", snap.storageFillPercent)
+                .putFloat("storageSlowdownMultiplier", snap.storageSlowdownMultiplier.toFloat())
+                .putBoolean("isAnyResourceSlowedByStorage", snap.isAnyResourceSlowedByStorage)
+                .putString("storageStatusLine", snap.storageStatusLine)
                 .putInt("manualDynamoCranksRemaining", snap.manualDynamoCranksRemaining)
                 .putString("lastWidgetActionFeedback", snap.lastWidgetActionFeedback)
                 .putString("statusAlertHeadline", snap.statusAlertHeadline)
@@ -822,9 +940,14 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
                 blackoutDaysCount = prefs.getInt("blackoutDaysCount", 0),
                 dailyRoomScrapUpkeep = prefs.getFloat("dailyRoomScrapUpkeep", 0f).toDouble(),
                 storageCap = prefs.getFloat("storageCap", 150f).toDouble(),
+                storageFillPercent = prefs.getInt("storageFillPercent", 4),
+                storageSlowdownMultiplier = prefs.getFloat("storageSlowdownMultiplier", 1f).toDouble(),
+                isAnyResourceSlowedByStorage = prefs.getBoolean("isAnyResourceSlowedByStorage", false),
+                storageStatusLine = prefs.getString("storageStatusLine", "📦 Storage Cap: 6/150 (4%) • Speed 100%")
+                    ?: "📦 Storage Cap: 6/150 (4%) • Speed 100%",
                 manualDynamoCranksRemaining = prefs.getInt("manualDynamoCranksRemaining", 4),
-                lastWidgetActionFeedback = prefs.getString("lastWidgetActionFeedback", "Tap ⛏ MINE or ⚡ STABILIZE out-of-game")
-                    ?: "Tap ⛏ MINE or ⚡ STABILIZE out-of-game",
+                lastWidgetActionFeedback = prefs.getString("lastWidgetActionFeedback", "Tap ⛏ DRILL, 💧 ICE & FOOD, or ⚡ FIX")
+                    ?: "Tap ⛏ DRILL, 💧 ICE & FOOD, or ⚡ FIX",
                 statusAlertHeadline = prefs.getString("statusAlertHeadline", "🟢 PREP DAY 1/10 (0 ATTACKS) • 6D CLOCKS: RES 0/6D • PWR 0/6D")
                     ?: "🟢 PREP DAY 1/10 (0 ATTACKS) • 6D CLOCKS: RES 0/6D • PWR 0/6D",
                 isCriticalAlert = prefs.getBoolean("isCriticalAlert", false)

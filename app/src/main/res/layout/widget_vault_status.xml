@@ -5,19 +5,14 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg_bunker"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="10dp">
 
-    <!-- ROW 1: Compact v23.0 Header, 10-Day Prep Countdown, Dual 6-Day Game Over Clocks & Daily Room Scrap Upkeep -->
+    <!-- Top Header Row: Mars Outpost Identity, Defense Badge & Quick Sync -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/widget_pill_bg"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingLeft="8dp"
-        android:paddingTop="5dp"
-        android:paddingRight="8dp"
-        android:paddingBottom="5dp">
+        android:orientation="horizontal">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -31,9 +26,9 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="VAULT CITY v24.0 • DAY 1 • LV.1"
-                android:textColor="#FFD54F"
-                android:textSize="11sp"
+                android:text="ARES OUTPOST v25.0 • SOL 1 • LV.1"
+                android:textColor="#FFAB40"
+                android:textSize="11.5sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -42,20 +37,9 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="🟢 PREP DAY 1/10 (0 ATTACKS) • 6D CLOCKS: RES 0/6D • PWR 0/6D"
+                android:text="🟢 PREP DAY 1/10 (0 ATTACKS) • ALL SYSTEMS NOMINAL"
                 android:textColor="#66BB6A"
-                android:textSize="9.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_prep_and_clocks_banner"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="⏳ 10d to Day 11 Siege (14 DEF) • Upkeep: 0.0 Scrap/d • Cap 150"
-                android:textColor="#4DD0E1"
-                android:textSize="9sp"
+                android:textSize="10sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -63,42 +47,111 @@
             android:id="@+id/widget_attack_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="6dp"
+            android:layout_marginEnd="4dp"
             android:background="@drawable/widget_pill_bg"
-            android:ellipsize="end"
-            android:maxLines="1"
             android:paddingLeft="6dp"
-            android:paddingTop="4dp"
+            android:paddingTop="3dp"
             android:paddingRight="6dp"
-            android:paddingBottom="4dp"
+            android:paddingBottom="3dp"
             android:text="🛡 PREP 10D"
             android:textColor="#4DD0E1"
             android:textSize="9.5sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_btn_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_pill_bg"
+            android:paddingLeft="7dp"
+            android:paddingTop="3dp"
+            android:paddingRight="7dp"
+            android:paddingBottom="3dp"
+            android:text="↻ v25.0"
+            android:textColor="#80DEEA"
+            android:textSize="9.5sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- ROW 2: Streamlined 5-Pill Core Resource Strip (Scrap, Water, Food, Fuel, Gold/DEF) -->
+    <!-- Storage Capacity & Slowdown Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
-        android:baselineAligned="false"
-        android:orientation="horizontal">
+        android:layout_marginTop="4dp"
+        android:background="@drawable/widget_pill_bg"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingLeft="7dp"
+        android:paddingTop="3dp"
+        android:paddingRight="7dp"
+        android:paddingBottom="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_storage_status"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="📦 Storage Cap: 6/150 (4%) • Full Speed (100%)"
+                android:textColor="#FFF3E0"
+                android:textSize="9.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_prep_and_clocks_banner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="⏳ 10d Peace • Cap 150"
+                android:textColor="#B0BEC5"
+                android:textSize="9sp" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/widget_storage_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="5dp"
+            android:layout_marginTop="2dp"
+            android:max="100"
+            android:progress="4"
+            android:progressTint="#4DD0E1" />
+    </LinearLayout>
+
+    <!-- Row 1: Primary Survival Resources (Regolith Scrap, Water Ice, Bio-Food) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:weightSum="3">
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginRight="3dp"
+            android:layout_marginEnd="3dp"
             android:layout_weight="1"
             android:background="@drawable/widget_pill_bg"
             android:orientation="vertical"
-            android:padding="4dp">
+            android:paddingLeft="6dp"
+            android:paddingTop="3dp"
+            android:paddingRight="6dp"
+            android:paddingBottom="3dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⚙ SCRAP"
-                android:textColor="#90A4AE"
+                android:text="⚙ REGOLITH SCRAP"
+                android:textColor="#FFB74D"
                 android:textSize="8.5sp"
                 android:textStyle="bold" />
 
@@ -109,25 +162,28 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="0.0 (+0.0/s)"
-                android:textColor="#FFB300"
-                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:textSize="10.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginRight="3dp"
+            android:layout_marginEnd="3dp"
             android:layout_weight="1"
             android:background="@drawable/widget_pill_bg"
             android:orientation="vertical"
-            android:padding="4dp">
+            android:paddingLeft="6dp"
+            android:paddingTop="3dp"
+            android:paddingRight="6dp"
+            android:paddingBottom="3dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="💧 WATER"
-                android:textColor="#90A4AE"
+                android:text="💧 WATER ICE"
+                android:textColor="#4DD0E1"
                 android:textSize="8.5sp"
                 android:textStyle="bold" />
 
@@ -138,25 +194,27 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="6.0 (+0.0/s)"
-                android:textColor="#29B6F6"
-                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:textSize="10.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginRight="3dp"
             android:layout_weight="1"
             android:background="@drawable/widget_pill_bg"
             android:orientation="vertical"
-            android:padding="4dp">
+            android:paddingLeft="6dp"
+            android:paddingTop="3dp"
+            android:paddingRight="6dp"
+            android:paddingBottom="3dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🍖 FOOD"
-                android:textColor="#90A4AE"
+                android:text="🌱 BIO-RATIONS"
+                android:textColor="#81C784"
                 android:textSize="8.5sp"
                 android:textStyle="bold" />
 
@@ -167,25 +225,37 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="6.0 (+0.0/s)"
-                android:textColor="#66BB6A"
-                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:textSize="10.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!-- Row 2: Secondary Resources & Defense (Methalox Fuel, Credits Gold, Airlock DEF & Ammo) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:orientation="horizontal"
+        android:weightSum="3">
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginRight="3dp"
+            android:layout_marginEnd="3dp"
             android:layout_weight="1"
             android:background="@drawable/widget_pill_bg"
             android:orientation="vertical"
-            android:padding="4dp">
+            android:paddingLeft="6dp"
+            android:paddingTop="3dp"
+            android:paddingRight="6dp"
+            android:paddingBottom="3dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⛽ FUEL"
-                android:textColor="#90A4AE"
+                android:text="🔥 METHALOX FUEL"
+                android:textColor="#FF8A65"
                 android:textSize="8.5sp"
                 android:textStyle="bold" />
 
@@ -196,18 +266,30 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="0.0 (+0.0/s)"
-                android:textColor="#FF7043"
-                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:textSize="10.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1.15"
+            android:layout_marginEnd="3dp"
+            android:layout_weight="1"
             android:background="@drawable/widget_pill_bg"
             android:orientation="vertical"
-            android:padding="4dp">
+            android:paddingLeft="6dp"
+            android:paddingTop="3dp"
+            android:paddingRight="6dp"
+            android:paddingBottom="3dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🪙 MARS CREDITS"
+                android:textColor="#FFD54F"
+                android:textSize="8.5sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/widget_res_gold"
@@ -216,7 +298,27 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="🪙 0.0G (+0.0/s)"
-                android:textColor="#FFD54F"
+                android:textColor="#FFF59D"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_pill_bg"
+            android:orientation="vertical"
+            android:paddingLeft="6dp"
+            android:paddingTop="3dp"
+            android:paddingRight="6dp"
+            android:paddingBottom="3dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🛡 AIRLOCK DEF"
+                android:textColor="#90CAF9"
                 android:textSize="8.5sp"
                 android:textStyle="bold" />
 
@@ -227,110 +329,98 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="🛡 20 DEF • 20 Rds"
-                android:textColor="#4DD0E1"
-                android:textSize="9.5sp"
+                android:textColor="#FFFFFF"
+                android:textSize="10.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- ROW 3: Out-of-Game Quick Survival Action Bar & Live Action Telemetry -->
+    <!-- Row 3: 3 One-Tap Out-of-Game Command Buttons -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:weightSum="3">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/widget_btn_quick_mine"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_marginEnd="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_pill_bg"
+            android:gravity="center"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="⛏ DRILL (+RES)"
+            android:textColor="#FFD54F"
+            android:textSize="9.5sp"
+            android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/widget_btn_quick_mine"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginRight="4dp"
-                android:layout_weight="1.15"
-                android:background="@drawable/widget_pill_bg"
-                android:gravity="center"
-                android:maxLines="1"
-                android:paddingLeft="6dp"
-                android:paddingTop="5dp"
-                android:paddingRight="6dp"
-                android:paddingBottom="5dp"
-                android:text="⛏ MINE (-4% ST)"
-                android:textColor="#FFD54F"
-                android:textSize="9.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_btn_quick_stabilize"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginRight="4dp"
-                android:layout_weight="1.25"
-                android:background="@drawable/widget_pill_bg"
-                android:gravity="center"
-                android:maxLines="1"
-                android:paddingLeft="6dp"
-                android:paddingTop="5dp"
-                android:paddingRight="6dp"
-                android:paddingBottom="5dp"
-                android:text="⚡ STABILIZE / CRANK"
-                android:textColor="#66BB6A"
-                android:textSize="9.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_btn_refresh"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/widget_pill_bg"
-                android:gravity="center"
-                android:maxLines="1"
-                android:paddingLeft="8dp"
-                android:paddingTop="5dp"
-                android:paddingRight="8dp"
-                android:paddingBottom="5dp"
-                android:text="↻ v23.0"
-                android:textColor="#4DD0E1"
-                android:textSize="9.5sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/widget_btn_quick_supply"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_marginEnd="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_pill_bg"
+            android:gravity="center"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="💧 ICE &amp; FOOD"
+            android:textColor="#4DD0E1"
+            android:textSize="9.5sp"
+            android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/widget_dwellers_status"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="👥 0/4 • STAM 100% • ⚡ 8/0 MW"
-                android:textColor="#E0F7FA"
-                android:textSize="8.5sp"
-                android:textStyle="bold" />
+        <TextView
+            android:id="@+id/widget_btn_quick_stabilize"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_pill_bg"
+            android:gravity="center"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="⚡ FIX / POWER"
+            android:textColor="#69F0AE"
+            android:textSize="9.5sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
-            <TextView
-                android:id="@+id/widget_systems_footer"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="4dp"
-                android:layout_weight="1.2"
-                android:ellipsize="end"
-                android:gravity="right"
-                android:maxLines="1"
-                android:text="Tap ⛏ MINE or ⚡ STABILIZE out-of-game"
-                android:textColor="#CFD8DC"
-                android:textSize="8.5sp" />
-        </LinearLayout>
+    <!-- Bottom Telemetry & Action Feedback Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_dwellers_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="👥 0/4 • STAM 100% • ⚡ OK (8/0MW)"
+            android:textColor="#B0BEC5"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_systems_footer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:gravity="end"
+            android:maxLines="1"
+            android:text="Tap ⛏ DRILL, 💧 ICE &amp; FOOD, or ⚡ FIX"
+            android:textColor="#80DEEA"
+            android:textSize="9sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
 </LinearLayout>

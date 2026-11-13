@@ -37,6 +37,7 @@
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.example.widget.ACTION_REFRESH_VAULT_WIDGET" />
                 <action android:name="com.example.widget.ACTION_WIDGET_QUICK_MINE" />
+                <action android:name="com.example.widget.ACTION_WIDGET_QUICK_SUPPLY" />
                 <action android:name="com.example.widget.ACTION_WIDGET_QUICK_STABILIZE" />
             </intent-filter>
             <meta-data

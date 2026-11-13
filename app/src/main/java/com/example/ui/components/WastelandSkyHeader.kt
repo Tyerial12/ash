@@ -627,10 +627,19 @@ private fun ResourcesGatheredDrawerPanel(
                 color = SolarAmber,
                 fontWeight = FontWeight.Bold
             )
+            val speedPct = (production.storageSlowdownMultiplier * 100).roundToInt()
             Text(
-                text = "Storage Cap: ${production.storageCap.toInt()} (+${production.storeRoomStorageBonus.toInt()} Store Rm)",
+                text = "Cap: ${production.storageCap.toInt()} (${production.storageFillPercent}% Full • Speed ${speedPct}%)",
                 style = MaterialTheme.typography.labelSmall,
-                color = RadTeal,
+                color = if (production.storageSlowdownMultiplier < 1.0) WarningOrange else RadTeal,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        if (production.isAnyStoreRoomResourceHalted || production.storageSlowdownMultiplier < 1.0) {
+            Text(
+                text = "📦 STORAGE SLOWDOWN ACTIVE (${production.haltedResourcesSummary.ifBlank { "Near Cap" }}): Gathering slowed to ${(production.storageSlowdownMultiplier * 100).roundToInt()}% speed until shelf drops ≤${production.storeRoomResumeThreshold.toInt()} (50% Cap)!",
+                style = MaterialTheme.typography.labelSmall,
+                color = WarningOrange,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -772,9 +781,9 @@ private fun CurrentSystemsOnlineDrawerPanel(
                     VaultStatusAppWidgetProvider.pushLiveStateToWidgets(context, state, production)
                     val pinned = VaultStatusAppWidgetProvider.requestPinVaultWidget(context)
                     widgetFeedback = if (pinned) {
-                        "v24.0 3-Row Widget pin requested & synced (Quick Mine & Stabilize ready)!"
+                        "v25.0 Mars Command Widget pin requested & synced (Storage Bar + 3 Quick Actions ready)!"
                     } else {
-                        "v24.0 Widget synced! Long-press Home Screen -> Widgets -> Vault City v24.0 Command."
+                        "v25.0 Mars Command Widget synced! Long-press Home Screen -> Widgets -> Vault City."
                     }
                 }
                 .testTag("pin_phone_widget_btn")
@@ -782,13 +791,19 @@ private fun CurrentSystemsOnlineDrawerPanel(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
-                    text = "📱 PIN / SYNC VAULT WIDGET v24.0 (3-ROW • 10D PREP, 6D CLOCKS & QUICK ACTIONS)",
+                    text = "📱 PIN / SYNC MARS COMMAND WIDGET v25.0 (STORAGE BAR + ⛏ DRILL • 💧 ICE & FOOD • ⚡ FIX)",
                     style = MaterialTheme.typography.labelSmall,
                     color = SolarAmber,
                     fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Live Home Screen Telemetry • Storage Fill (${production.storageFillPercent}%) & Slowdown Indicator • 3 One-Tap Out-of-Game Actions",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CryoCyan
                 )
                 if (widgetFeedback.isNotEmpty()) {
                     Text(

@@ -99,7 +99,8 @@ data class OutpostUiState(
     val publicVaults: List<PublicVaultProfile> = emptyList(),
     val publicSupplyDrops: List<PublicSupplyDrop> = emptyList(),
     val publicNetworkFeedback: String? = null,
-    val nowMillis: Long = System.currentTimeMillis()
+    val nowMillis: Long = System.currentTimeMillis(),
+    val isLoaded: Boolean = false
 )
 
 private data class TransientOverlayState(
@@ -196,28 +197,31 @@ class OutpostViewModel(
             publicVaults = overlay.publicVaults,
             publicSupplyDrops = overlay.publicSupplyDrops,
             publicNetworkFeedback = overlay.publicNetworkFeedback,
-            nowMillis = overlay.nowMillis
+            nowMillis = overlay.nowMillis,
+            isLoaded = stateEntity != null
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
+        started = SharingStarted.Eagerly,
         initialValue = OutpostUiState()
     )
 
     init {
         viewModelScope.launch {
-            repository.ensureSeeded()
-            evaluateOfflineEarningsIfNeeded()
+            val seeded = repository.getInitialSnapshotOrSeed()
+            evaluateOfflineEarningsIfNeeded(seeded)
             startSimulationLoop()
         }
     }
 
-    private suspend fun evaluateOfflineEarningsIfNeeded() {
+    private suspend fun evaluateOfflineEarningsIfNeeded(seeded: com.example.data.InitialOutpostSnapshot) {
         if (offlineCheckCompleted) return
         offlineCheckCompleted = true
 
-        val savedState = repository.getStateSnapshot() ?: return
-        val rankDrills = repository.getSkillSnapshot("WRK_GUILD_DRILLS")?.currentRank ?: 0
+        val savedState = seeded.state
+        val skillsMap = seeded.skills.associate { it.nodeId to it.currentRank }
+        val workersMap = seeded.workers.associateBy { it.workerClassId }
+        val rankDrills = skillsMap["WRK_GUILD_DRILLS"] ?: 0
         val discountMult = (1.0 - rankDrills * 0.10).coerceAtLeast(0.50)
         overlayFlow.update {
             it.copy(
@@ -234,11 +238,13 @@ class OutpostViewModel(
 
         // Restore or finish persisted active room construction across app restarts!
         var baseSavedState = savedState
+        var effectiveBuildingsMap = seeded.buildings.associate { it.buildingTypeId to it.level }
         if (savedState.activeConstructionBuildingId.isNotBlank() && savedState.activeConstructionRemainingSeconds > 0) {
             val bType = BuildingType.entries.find { it.id == savedState.activeConstructionBuildingId } ?: BuildingType.SALVAGE_YARD
             val remAfterOffline = (savedState.activeConstructionRemainingSeconds - elapsedSeconds.toInt())
             if (remAfterOffline <= 0) {
                 repository.updateBuildingLevel(bType.id, savedState.activeConstructionTargetLevel)
+                effectiveBuildingsMap = effectiveBuildingsMap + (bType.id to savedState.activeConstructionTargetLevel)
                 val buildDoneMsg = "OFFLINE BUILD COMPLETE: ${bType.displayName} reached Lv.${savedState.activeConstructionTargetLevel} while away!"
                 repository.logEvent("BUILD COMPLETE", buildDoneMsg)
                 baseSavedState = savedState.copy(
@@ -265,12 +271,11 @@ class OutpostViewModel(
             }
         }
 
-        val currentUi = uiState.value
         val snap = OutpostCalculator.computeProductionSnapshot(
             state = baseSavedState,
-            buildingsMap = currentUi.buildingsMap,
-            workersMap = currentUi.workersMap,
-            skillsMap = currentUi.skillsMap,
+            buildingsMap = effectiveBuildingsMap,
+            workersMap = workersMap,
+            skillsMap = skillsMap,
             nowMillis = now
         )
 
@@ -335,6 +340,10 @@ class OutpostViewModel(
                 tickCounter++
                 val now = System.currentTimeMillis()
                 val current = uiState.value
+                if (!current.isLoaded) {
+                    overlayFlow.update { it.copy(nowMillis = now) }
+                    continue
+                }
                 val state = current.state
                 if (state.isGameOver) {
                     overlayFlow.update { it.copy(nowMillis = now) }
@@ -378,6 +387,7 @@ class OutpostViewModel(
                 }
 
                 // 60-Second Dweller Food & Water Feeding Cycle + 2-Minute (120s) Appetite Escalation
+                // Smoothed so a 60s feeding tick never wipes stored Food/Water to 0.0 when life-support rooms are active!
                 var fiveMinFoodDeduct = 0.0
                 var fiveMinWaterDeduct = 0.0
                 val clampedCurrentFeedSecs = state.dwellerFeedCycleSecondsRemaining.coerceIn(1, OutpostCalculator.DWELLER_FEED_INTERVAL_SECONDS)
@@ -394,8 +404,12 @@ class OutpostViewModel(
                         )
                     }
                     if (clampedCurrentFeedSecs <= 1) {
-                        fiveMinFoodDeduct = snap.fiveMinDwellerFoodCost
-                        fiveMinWaterDeduct = snap.fiveMinDwellerWaterCost
+                        val minFoodReserve = if (snap.hasHydroponicsRoom && !snap.isVaultBlackout) 1.5 else 0.0
+                        val minWaterReserve = if (snap.hasWaterPurifierRoom && !snap.isVaultBlackout) 1.5 else 0.0
+                        val maxSafeFoodFeed = ((state.rations - minFoodReserve).coerceAtLeast(0.0) * 0.35)
+                        val maxSafeWaterFeed = ((state.water - minWaterReserve).coerceAtLeast(0.0) * 0.35)
+                        fiveMinFoodDeduct = minOf(snap.fiveMinDwellerFoodCost, maxSafeFoodFeed)
+                        fiveMinWaterDeduct = minOf(snap.fiveMinDwellerWaterCost, maxSafeWaterFeed)
                         nextFeedSeconds = OutpostCalculator.DWELLER_FEED_INTERVAL_SECONDS
                         if (state.rations >= fiveMinFoodDeduct && state.water >= fiveMinWaterDeduct && nextEscalationSeconds >= OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS) {
                             nextEscalationSeconds = (nextEscalationSeconds - OutpostCalculator.DWELLER_ESCALATION_INTERVAL_SECONDS).coerceAtLeast(0)
@@ -440,6 +454,13 @@ class OutpostViewModel(
                         foodSpoiledThisDay = snap.dailyFoodSpoilageLoss
                         newDayFoodDeduct += foodSpoiledThisDay
                     }
+
+                    // Prevent lump-sum New Day upkeep from wiping stored Food/Water/Fuel down to 0.0!
+                    val minFoodReserve = if (snap.hasHydroponicsRoom && !snap.isVaultBlackout) 1.5 else 0.0
+                    val minWaterReserve = if (snap.hasWaterPurifierRoom && !snap.isVaultBlackout) 1.5 else 0.0
+                    newDayFoodDeduct = minOf(newDayFoodDeduct, ((state.rations + newDayRoomFoodBonus - minFoodReserve).coerceAtLeast(0.0) * 0.40))
+                    newDayWaterDeduct = minOf(newDayWaterDeduct, ((state.water + newDayRoomWaterBonus - minWaterReserve).coerceAtLeast(0.0) * 0.40))
+                    newDayFuelDeduct = minOf(newDayFuelDeduct, ((state.bioFuel + newDayRoomFuelBonus).coerceAtLeast(0.0) * 0.40))
 
                     // Stability tracking for Self-Sufficiency Certification (Tier V requires 3 consecutive days)
                     val isDayStable = !snap.isVaultBlackout && snap.isMakingPositiveResources && state.activePipeLeaksCount == 0 && state.sabotagedBuildingId.isEmpty()
@@ -942,14 +963,16 @@ class OutpostViewModel(
                         buildingsMap = current.buildingsMap
                     )
                     val availableScrapForRepair = (state.scrap + snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus).coerceAtLeast(0.0)
+                    val protectedScrapReserve = 5.0
+                    val spendableScrapForRepair = ((availableScrapForRepair - protectedScrapReserve).coerceAtLeast(0.0) * 0.45)
                     if (autoRepairPlan.needsAutomatedRepair) {
-                        newDayScrapDeduct = minOf(availableScrapForRepair, autoRepairPlan.scrapCost)
+                        newDayScrapDeduct = minOf(spendableScrapForRepair, autoRepairPlan.scrapCost)
                         val repairRatio = if (autoRepairPlan.scrapCost > 0.0) {
                             (newDayScrapDeduct / autoRepairPlan.scrapCost).coerceIn(0.0, 1.0)
                         } else 0.0
                         if (repairRatio < 0.99 && autoRepairPlan.totalRoomLevels > 0) {
-                            nextRoomWear = (nextRoomWear + 10).coerceAtMost(80)
-                            val lowScrapMsg = "LOW OPERATIONAL SCRAP (Room Lv.${autoRepairPlan.totalRoomLevels}): Needed ${String.format(java.util.Locale.US, "%.1f", autoRepairPlan.scrapCost)} Scrap/day to keep rooms fully operational (used -${String.format(java.util.Locale.US, "%.1f", newDayScrapDeduct)} Scrap) — Room Wear rose to $nextRoomWear%!"
+                            nextRoomWear = (nextRoomWear + 6).coerceAtMost(80)
+                            val lowScrapMsg = "OPERATIONAL SCRAP RESERVE PROTECTED (Room Lv.${autoRepairPlan.totalRoomLevels}): Kept ≥5 Scrap reserve so rooms stay online (used -${String.format(java.util.Locale.US, "%.1f", newDayScrapDeduct)}/${String.format(java.util.Locale.US, "%.1f", autoRepairPlan.scrapCost)} Scrap)!"
                             overlayFlow.update { it.copy(lastDefenseDamageFeedback = lowScrapMsg) }
                             repository.logEvent("ROOM SCRAP SHORTAGE", lowScrapMsg)
                         } else if (newDayScrapDeduct > 0.0) {
@@ -1045,6 +1068,19 @@ class OutpostViewModel(
                     state.manualDynamoCranksRemaining
                 }
 
+                // Automatic Life-Support Recovery Trickle:
+                // If built life-support/smeltery rooms are powered, prevent a temporary 0.0 dip from deadlocking automated rooms until manual mining!
+                val smelteryLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
+                val emergencyScrapRecovery = if (!snap.isVaultBlackout && state.scrap <= 0.5 && (smelteryLv > 0 || hiredScrappers > 0)) {
+                    1.2 + smelteryLv * 0.4
+                } else 0.0
+                val emergencyWaterRecovery = if (!snap.isVaultBlackout && state.water <= 0.5 && snap.hasWaterPurifierRoom) {
+                    1.6
+                } else 0.0
+                val emergencyFoodRecovery = if (!snap.isVaultBlackout && state.rations <= 0.5 && snap.hasHydroponicsRoom) {
+                    1.6
+                } else 0.0
+
                 var updatedState = applyXpAndResourceDelta(
                     baseState = state.copy(
                         totalSurvivors = (state.totalSurvivors + expSurvivorDelta).coerceAtLeast(0),
@@ -1111,9 +1147,9 @@ class OutpostViewModel(
                         gameOverReason = nextGameOverReason,
                         lastSavedTimestampMillis = now
                     ),
-                    scrapDelta = snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus - newDayScrapDeduct,
-                    waterDelta = snap.waterPerSec + cacheWaterBonus + expWaterAward + newDayRoomWaterBonus - newDayWaterDeduct - fiveMinWaterDeduct,
-                    rationsDelta = snap.rationsPerSec + cacheRationsBonus + expFoodAward + newDayRoomFoodBonus - newDayFoodDeduct - fiveMinFoodDeduct,
+                    scrapDelta = snap.scrapPerSec + cacheScrapBonus + raidScrapDelta + expScrapAward + newDayRoomScrapBonus + emergencyScrapRecovery - newDayScrapDeduct,
+                    waterDelta = snap.waterPerSec + cacheWaterBonus + expWaterAward + newDayRoomWaterBonus + emergencyWaterRecovery - newDayWaterDeduct - fiveMinWaterDeduct,
+                    rationsDelta = snap.rationsPerSec + cacheRationsBonus + expFoodAward + newDayRoomFoodBonus + emergencyFoodRecovery - newDayFoodDeduct - fiveMinFoodDeduct,
                     fuelDelta = snap.bioFuelPerSec + cacheFuelBonus + expFuelAward + newDayRoomFuelBonus - newDayFuelDeduct,
                     researchDelta = snap.researchPerSec,
                     goldDelta = snap.goldPerSec + cacheGoldBonus + convoyGoldAward + raidGoldDelta + expGoldAward + newDayRoomGoldBonus,
@@ -1569,11 +1605,6 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val snap = current.production
-            if (snap.isRationsHalted && snap.isWaterHalted) {
-                val msg = "FOOD & WATER SHELVES FULL: Food and Water automatically resume production when they fall to half of Store Room capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
-                overlayFlow.update { it.copy(lastDefenseDamageFeedback = msg, lastSalvageFeedback = msg) }
-                return@launch
-            }
             val preview = OutpostCalculator.computeHuntPreview(
                 target = target,
                 state = state,
@@ -1648,12 +1679,6 @@ class OutpostViewModel(
         viewModelScope.launch {
             val current = uiState.value
             val state = current.state
-            val snap = current.production
-            if (snap.isRationsHalted && snap.isWaterHalted) {
-                val msg = "FOOD & WATER SHELVES FULL: Food and Water automatically resume production when they fall to half of Store Room capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
-                overlayFlow.update { it.copy(lastDefenseDamageFeedback = msg, lastSalvageFeedback = msg) }
-                return@launch
-            }
             val preview = OutpostCalculator.computeFishingPreview(spot, state, current.skillsMap, current.buildingsMap)
             if (!preview.canFish) return@launch
 
@@ -1990,8 +2015,10 @@ class OutpostViewModel(
             val dailyWaterBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomWaterBonus
             val dailyFoodBonus = if (snap.isVaultBlackout) 0.0 else snap.dailyRoomFoodBonus
             val availableScrap = (state.scrap + snap.scrapPerSec * dailyProdSeconds + dailyScrapBonus + raidScrapDelta).coerceAtLeast(0.0)
-            val roomScrapUpkeep = if (autoRepairPlan.needsAutomatedRepair && availableScrap > 0.0) {
-                minOf(availableScrap, autoRepairPlan.scrapCost)
+            val protectedScrapReserve = 5.0
+            val spendableScrap = ((availableScrap - protectedScrapReserve).coerceAtLeast(0.0) * 0.45)
+            val roomScrapUpkeep = if (autoRepairPlan.needsAutomatedRepair && spendableScrap > 0.0) {
+                minOf(spendableScrap, autoRepairPlan.scrapCost)
             } else 0.0
             if (autoRepairPlan.needsAutomatedRepair && roomScrapUpkeep > 0.0) {
                 val repairRatio = if (autoRepairPlan.scrapCost > 0.0) (roomScrapUpkeep / autoRepairPlan.scrapCost).coerceIn(0.0, 1.0) else 0.0
@@ -2481,14 +2508,6 @@ class OutpostViewModel(
             val slot = current.salvageNodes.getOrNull(slotIndex) ?: return@launch
             val state = current.state
             val snap = current.production
-            if (snap.isStoreRoomFull) {
-                overlayFlow.update {
-                    it.copy(
-                        lastSalvageFeedback = "ALL STORE ROOM SHELVES AT CAP: Each resource automatically resumes production as soon as it falls to half capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
-                    )
-                }
-                return@launch
-            }
 
             val newCombo = (state.salvageComboCount + 1).coerceAtMost(15)
             // Swinging Pickaxe does NOT cause heat, but every manual action costs Stamina!
@@ -2524,10 +2543,10 @@ class OutpostViewModel(
                         totalManualScavenges = state.totalManualScavenges + 1,
                         totalGoldSalvaged = state.totalGoldSalvaged + tapGold
                     ),
-                    scrapDelta = if (slot.nodeType.primaryResource == ResourceType.SCRAP) tapPrimary else 0.5,
-                    waterDelta = if (slot.nodeType.primaryResource == ResourceType.WATER) tapPrimary else 0.0,
-                    rationsDelta = if (slot.nodeType.primaryResource == ResourceType.RATIONS) tapPrimary else 0.0,
-                    fuelDelta = (if (slot.nodeType.primaryResource == ResourceType.BIO_FUEL) tapPrimary else 0.0) + tapFuel,
+                    scrapDelta = if (slot.nodeType.primaryResource == ResourceType.SCRAP) tapPrimary else 0.8,
+                    waterDelta = if (slot.nodeType.primaryResource == ResourceType.WATER) tapPrimary else 0.8,
+                    rationsDelta = if (slot.nodeType.primaryResource == ResourceType.RATIONS) tapPrimary else 0.8,
+                    fuelDelta = (if (slot.nodeType.primaryResource == ResourceType.BIO_FUEL) tapPrimary else 0.4) + tapFuel,
                     researchDelta = if (slot.nodeType.primaryResource == ResourceType.RESEARCH_DATA) tapPrimary else 0.0,
                     goldDelta = tapGold,
                     xpDelta = 4.0,
@@ -2536,6 +2555,7 @@ class OutpostViewModel(
                 repository.updateOutpostState(updatedState)
                 com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.PIP_BOY_CLICK)
                 val hazardSuffix = buildString {
+                    if (snap.isAnyStoreRoomResourceHalted) append(" • Storage Full Slowdown (-75% rate until ≤${snap.storeRoomResumeThreshold.toInt()})")
                     if (nextDurability <= 20) append(" • Pickaxe Dull ($nextDurability%)!")
                     if (nextStamina <= 30) append(" • Stamina Low ($nextStamina% — Rest Crew)!")
                 }
@@ -2549,10 +2569,10 @@ class OutpostViewModel(
                     )
                 }
             } else {
-                var scrapGain = 0.0
-                var waterGain = 0.0
-                var rationsGain = 0.0
-                var fuelGain = 0.0
+                var scrapGain = 0.8
+                var waterGain = 0.8
+                var rationsGain = 0.8
+                var fuelGain = 0.4
                 var researchGain = 0.0
                 var coresGain = yieldPreview.bonusMutagenCores
                 var thoriumBonus = 0.0
@@ -2639,16 +2659,7 @@ class OutpostViewModel(
         viewModelScope.launch {
             val current = uiState.value
             val state = current.state
-            val snap = current.production
             if (state.rawSalvageCaches <= 0) return@launch
-            if (snap.isStoreRoomFull) {
-                overlayFlow.update {
-                    it.copy(
-                        lastSalvageFeedback = "ALL STORE ROOM SHELVES AT CAP: Resources automatically resume as soon as they fall to half capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
-                    )
-                }
-                return@launch
-            }
 
             val countToOpen = if (dismantleAll) state.rawSalvageCaches.coerceAtMost(10) else 1
             val yardLv = current.buildingsMap[BuildingType.SALVAGE_YARD.id] ?: 0
@@ -4511,14 +4522,6 @@ class OutpostViewModel(
             val current = uiState.value
             val state = current.state
             val snap = current.production
-            if (snap.isStoreRoomFull) {
-                overlayFlow.update {
-                    it.copy(
-                        lastSalvageFeedback = "ALL STORE ROOM SHELVES AT CAP: Each resource automatically resumes production as soon as it falls to half capacity (≤${snap.storeRoomResumeThreshold.toInt()})!"
-                    )
-                }
-                return@launch
-            }
             if (state.activeCaveInHazard) {
                 overlayFlow.update {
                     it.copy(lastSalvageFeedback = "DEEP BOREHOLE BLOCKED BY CAVE-IN! Clear the Cave-In first (FREE • 0 Scrap).")
@@ -4815,8 +4818,8 @@ class OutpostViewModel(
             required = CommandLevelProgression.xpRequiredForLevel(newLevel)
         }
 
-        // Per-Resource Store Room Halt & 50% Resume:
-        // Each resource shelf halts when it reaches storageCap, and automatically resumes when THAT resource falls to <= 50% of storageCap!
+        // Per-Resource Store Room Slowdown & 50% Full-Speed Resume:
+        // Each resource shelf slows to 25% speed when it reaches storageCap (or remains latched above 50%), and returns to 100% speed at <= 50% of storageCap!
         val scrapAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.scrap, baseState.isScrapGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
         val waterAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.water, baseState.isWaterGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
         val rationsAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.rations, baseState.isRationsGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
@@ -4824,13 +4827,14 @@ class OutpostViewModel(
         val researchAlreadyHalted = OutpostCalculator.isResourceShelfHalted(baseState.researchData, baseState.isResearchGatheringHalted, baseState.isStoreRoomGatheringHalted, storageCap)
         val storeRoomAlreadyFull = scrapAlreadyHalted && waterAlreadyHalted && rationsAlreadyHalted && fuelAlreadyHalted
 
-        val effScrapDelta = if (scrapAlreadyHalted && scrapDelta > 0.0) 0.0 else scrapDelta
-        val effWaterDelta = if (waterAlreadyHalted && waterDelta > 0.0) 0.0 else waterDelta
-        val effRationsDelta = if (rationsAlreadyHalted && rationsDelta > 0.0) 0.0 else rationsDelta
-        val effFuelDelta = if (fuelAlreadyHalted && fuelDelta > 0.0) 0.0 else fuelDelta
-        val effResearchDelta = if (researchAlreadyHalted && researchDelta > 0.0) 0.0 else researchDelta
-        val effGoldDelta = if (storeRoomAlreadyFull && goldDelta > 0.0) 0.0 else goldDelta
-        val effCoresDelta = if (storeRoomAlreadyFull && coresDelta > 0.0) 0.0 else coresDelta
+        val slowdownMult = OutpostCalculator.STORAGE_FULL_SLOWDOWN_MULTIPLIER
+        val effScrapDelta = if (scrapAlreadyHalted && scrapDelta > 0.0) scrapDelta * slowdownMult else scrapDelta
+        val effWaterDelta = if (waterAlreadyHalted && waterDelta > 0.0) waterDelta * slowdownMult else waterDelta
+        val effRationsDelta = if (rationsAlreadyHalted && rationsDelta > 0.0) rationsDelta * slowdownMult else rationsDelta
+        val effFuelDelta = if (fuelAlreadyHalted && fuelDelta > 0.0) fuelDelta * slowdownMult else fuelDelta
+        val effResearchDelta = if (researchAlreadyHalted && researchDelta > 0.0) researchDelta * slowdownMult else researchDelta
+        val effGoldDelta = if (storeRoomAlreadyFull && goldDelta > 0.0) goldDelta * slowdownMult else goldDelta
+        val effCoresDelta = if (storeRoomAlreadyFull && coresDelta > 0.0) coresDelta * slowdownMult else coresDelta
 
         val finalScrap = (baseState.scrap + effScrapDelta).coerceIn(0.0, storageCap)
         val finalWater = (baseState.water + effWaterDelta).coerceIn(0.0, storageCap)

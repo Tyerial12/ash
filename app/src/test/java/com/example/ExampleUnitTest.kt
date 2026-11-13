@@ -875,7 +875,7 @@ class ExampleUnitTest {
             eff0 > 0.0 && eff0 < eff1 && eff1 < eff2 && eff2 < eff3
         )
 
-        // 7. Store Room full halts gathering, and each individual resource automatically resumes when IT falls to HALF (<= 50% of storageCap) without needing Gold!
+        // 7. Store Room full SLOWS gathering to 25% speed (-75% slower), and each individual resource automatically resumes 100% full speed when IT falls to HALF (<= 50% of storageCap) without needing Gold!
         val fullStoreState = positiveState.copy(
             scrap = positiveSnap.storageCap,
             water = positiveSnap.storageCap,
@@ -892,14 +892,18 @@ class ExampleUnitTest {
         val fullStoreSnap = OutpostCalculator.computeProductionSnapshot(fullStoreState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
         assertTrue("Store Room is marked full when all primary resources reach storageCap", fullStoreSnap.isStoreRoomFull)
         assertEquals("Store Room resume threshold is half (50%) of storageCap", positiveSnap.storageCap * 0.50, fullStoreSnap.storeRoomResumeThreshold, 0.01)
-        assertEquals("When Store Room is full, total gross resource gathering per sec is 0.0", 0.0, fullStoreSnap.totalGrossResourceGainPerSec, 0.001)
-        assertEquals("When Store Room is full, Gold/s gathering is 0.0", 0.0, fullStoreSnap.goldPerSec, 0.001)
-        assertEquals("When Store Room is full, Research/s gathering is 0.0", 0.0, fullStoreSnap.researchPerSec, 0.001)
-        assertEquals("When Store Room is full, Mutagen/s gathering is 0.0", 0.0, fullStoreSnap.mutagenCoresPerSec, 0.001)
-        assertEquals("When Store Room is full, Daily Room Scrap Bonus is 0.0", 0.0, fullStoreSnap.dailyRoomScrapBonus, 0.001)
+        assertEquals("When Store Room is full, storageSlowdownMultiplier is 0.25 (25% speed)", 0.25, fullStoreSnap.storageSlowdownMultiplier, 0.001)
+        assertTrue(
+            "When Store Room is full, gross resource gathering slows down (> 0.0 and < unhalted gain)",
+            fullStoreSnap.totalGrossResourceGainPerSec > 0.0 && fullStoreSnap.totalGrossResourceGainPerSec < positiveSnap.totalGrossResourceGainPerSec
+        )
+        assertTrue(
+            "When Store Room is full, Daily Room Scrap Bonus is slowed to 25% (> 0.0 and < unhalted bonus)",
+            fullStoreSnap.dailyRoomScrapBonus > 0.0 && fullStoreSnap.dailyRoomScrapBonus < positiveSnap.dailyRoomScrapBonus
+        )
         assertFalse("Full Store Room does not trigger a false resource deficit shutdown", fullStoreSnap.isVaultResourceDeficit)
 
-        // Dropping slightly below full (e.g. 80% of storageCap, still above 50% half threshold) keeps gathering HALTED so alert doesn't flicker!
+        // Dropping slightly below full (e.g. 80% of storageCap, still above 50% half threshold) keeps gathering SLOWED at 25% until <= 50%!
         val aboveHalfState = fullStoreState.copy(
             scrap = positiveSnap.storageCap * 0.80,
             water = positiveSnap.storageCap * 0.80,
@@ -907,24 +911,27 @@ class ExampleUnitTest {
             bioFuel = positiveSnap.storageCap * 0.80
         )
         val aboveHalfSnap = OutpostCalculator.computeProductionSnapshot(aboveHalfState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
-        assertTrue("Resources above half capacity (80% > 50%) stay halted once full", aboveHalfSnap.isStoreRoomFull)
-        assertEquals("Gathering remains 0.0/s while all resources are still above half capacity", 0.0, aboveHalfSnap.totalGrossResourceGainPerSec, 0.001)
+        assertTrue("Resources above half capacity (80% > 50%) stay in storage-full slowdown once full", aboveHalfSnap.isStoreRoomFull)
+        assertEquals("Gathering remains slowed at 25% while all resources are still above half capacity", 0.25, aboveHalfSnap.storageSlowdownMultiplier, 0.001)
 
         // When Water & Food Rations fall to half of storage room capacity (<= 50%) from natural upkeep while Scrap is STILL at 90% (> 50%),
-        // Water & Food Rations immediately resume production without needing to spend Gold or drain Scrap!
+        // Water & Food Rations immediately resume 100% full-speed production without needing to spend Gold or drain Scrap!
         val waterAndFoodAtHalfState = fullStoreState.copy(
-            scrap = positiveSnap.storageCap * 0.90, // Still above 50% -> Scrap stays halted!
-            water = positiveSnap.storageCap * 0.50, // Fell to half (50%) -> Water resumes!
-            rations = positiveSnap.storageCap * 0.45, // Fell below half (45%) -> Food resumes!
-            bioFuel = positiveSnap.storageCap * 0.85 // Still above 50% -> Fuel stays halted!
+            scrap = positiveSnap.storageCap * 0.90, // Still above 50% -> Scrap stays slowed!
+            water = positiveSnap.storageCap * 0.50, // Fell to half (50%) -> Water resumes 100% speed!
+            rations = positiveSnap.storageCap * 0.45, // Fell below half (45%) -> Food resumes 100% speed!
+            bioFuel = positiveSnap.storageCap * 0.85 // Still above 50% -> Fuel stays slowed!
         )
         val partialResumeSnap = OutpostCalculator.computeProductionSnapshot(waterAndFoodAtHalfState, positiveBuildings, positiveWorkers, emptyMap(), 1000L)
-        assertTrue("Scrap (90% > 50%) stays halted", partialResumeSnap.isScrapHalted)
-        assertFalse("Water (50% <= 50%) automatically resumes production", partialResumeSnap.isWaterHalted)
-        assertFalse("Food Rations (45% <= 50%) automatically resumes production", partialResumeSnap.isRationsHalted)
-        assertTrue("Water & Food resume positive gross gathering even while Scrap is still halted at 90%", partialResumeSnap.totalGrossResourceGainPerSec > 0.0)
-        assertFalse("Store Room is no longer completely locked once Water & Food fall to half capacity", partialResumeSnap.isStoreRoomFull)
-        assertFalse("Partial Store Room halt does not trigger a false resource deficit shutdown", partialResumeSnap.isVaultResourceDeficit)
+        assertTrue("Scrap (90% > 50%) stays slowed", partialResumeSnap.isScrapHalted)
+        assertFalse("Water (50% <= 50%) automatically resumes 100% full-speed production", partialResumeSnap.isWaterHalted)
+        assertFalse("Food Rations (45% <= 50%) automatically resumes 100% full-speed production", partialResumeSnap.isRationsHalted)
+        assertTrue(
+            "Water & Food resume higher gross gathering than when all shelves were slowed",
+            partialResumeSnap.totalGrossResourceGainPerSec > fullStoreSnap.totalGrossResourceGainPerSec
+        )
+        assertFalse("Store Room is no longer completely full once Water & Food fall to half capacity", partialResumeSnap.isStoreRoomFull)
+        assertFalse("Partial Store Room slowdown does not trigger a false resource deficit shutdown", partialResumeSnap.isVaultResourceDeficit)
     }
 
     @Test
@@ -1157,7 +1164,7 @@ class ExampleUnitTest {
             ),
             snapLv3
         )
-        assertEquals("v24.0", widgetSnap.versionName)
+        assertEquals("v25.0", widgetSnap.versionName)
         assertEquals(88.0, widgetSnap.scrap, 0.01)
         assertEquals(42.0, widgetSnap.gold, 0.01)
         assertTrue("Phone widget snapshot includes Gold/s rate", widgetSnap.goldPerSec > 0.0)
@@ -1166,7 +1173,8 @@ class ExampleUnitTest {
         assertEquals(2, widgetSnap.totalSurvivors)
         assertEquals(4, widgetSnap.maxWorkerCapacity)
         assertEquals(1, widgetSnap.onlineRoomsCount)
-        assertTrue("v23.0 widget tracks 10-day preparation peace window and daily room Scrap upkeep", widgetSnap.isPreparationPeaceWindow && widgetSnap.dailyRoomScrapUpkeep > 0.0)
+        assertTrue("v25.0 widget tracks 10-day preparation peace window and daily room Scrap upkeep", widgetSnap.isPreparationPeaceWindow && widgetSnap.dailyRoomScrapUpkeep > 0.0)
+        assertTrue("v25.0 widget tracks storageFillPercent and storageStatusLine", widgetSnap.storageFillPercent > 0 && widgetSnap.storageStatusLine.contains("Storage"))
         assertEquals("Widget auto-refresh interval is 10 seconds (10,000 ms)", 10_000L, com.example.widget.VaultStatusAppWidgetProvider.AUTO_REFRESH_INTERVAL_MILLIS)
 
         val quickMineResult = com.example.widget.VaultStatusAppWidgetProvider.applyWidgetQuickMine(baseState, snapLv3, 2000L)
@@ -1176,6 +1184,18 @@ class ExampleUnitTest {
                 quickMineResult.updatedState.rations > baseState.rations &&
                 quickMineResult.updatedState.gold > baseState.gold &&
                 quickMineResult.updatedState.dwellerStaminaPercent == baseState.dwellerStaminaPercent - OutpostCalculator.MANUAL_ACTION_STAMINA_COST
+        )
+
+        val quickSupplyResult = com.example.widget.VaultStatusAppWidgetProvider.applyWidgetQuickSupply(
+            baseState.copy(oxygenPercent = 65, dwellerStaminaPercent = 70),
+            snapLv3,
+            2500L
+        )
+        assertTrue("Out-of-game Quick Supply (Ice & Food) boosts Water, Food, Oxygen, and Stamina",
+            quickSupplyResult.updatedState.water > baseState.water &&
+                quickSupplyResult.updatedState.rations > baseState.rations &&
+                quickSupplyResult.updatedState.oxygenPercent > 65 &&
+                quickSupplyResult.updatedState.dwellerStaminaPercent > 70
         )
 
         val quickStabilizeResult = com.example.widget.VaultStatusAppWidgetProvider.applyWidgetQuickStabilize(
