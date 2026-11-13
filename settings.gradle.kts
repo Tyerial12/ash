@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Vault City"
+rootProject.name = "Ares Outpost"
 
 include(":app")

@@ -322,7 +322,7 @@ fun WastelandSkyHeader(
                         StatusMiniText(autoDefLabel, autoDefColor)
 
                         val doorColor = if (state.needsDefenseRepair) WarningOrange else RadTeal
-                        StatusMiniText("DOOR: ${state.defenseIntegrityPercent}%", doorColor)
+                        StatusMiniText("GATE: ${state.defenseIntegrityPercent}%", doorColor)
                     }
 
                     LinearProgressIndicator(
@@ -497,7 +497,7 @@ private fun QuickSurvivalDrawerPanel(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            text = "⚡ OVERSEER EMERGENCY FIELD SURVIVAL ACTIONS",
+            text = "⚡ COMMANDER EMERGENCY FIELD SURVIVAL ACTIONS",
             style = MaterialTheme.typography.labelMedium,
             color = SurplusGreen,
             fontWeight = FontWeight.Bold
@@ -682,7 +682,7 @@ private fun ResourcesGatheredDrawerPanel(
         }
 
         Text(
-            text = "Vault Drain: -${formatRate(production.totalVaultResourceDrainPerSec)}/s (Reactors -${formatRate(production.reactorFuelUpkeepPerSec)}/s Fuel) vs Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s • 60s Feed (${state.dwellerFeedCycleSecondsRemaining}s): -${production.fiveMinDwellerFoodCost.roundToInt()}F/-${production.fiveMinDwellerWaterCost.roundToInt()}W (2m Tier ${production.dwellerUpkeepEscalationTier})",
+            text = "Outpost Drain: -${formatRate(production.totalVaultResourceDrainPerSec)}/s (Reactors -${formatRate(production.reactorFuelUpkeepPerSec)}/s Fuel) vs Gain +${formatRate(production.totalGrossResourceGainPerSec)}/s • 60s Feed (${state.dwellerFeedCycleSecondsRemaining}s): -${production.fiveMinDwellerFoodCost.roundToInt()}F/-${production.fiveMinDwellerWaterCost.roundToInt()}W (2m Tier ${production.dwellerUpkeepEscalationTier})",
             style = MaterialTheme.typography.labelSmall,
             color = if (production.isMakingPositiveResources) SurplusGreen else WarningOrange,
             fontWeight = FontWeight.Bold
@@ -781,9 +781,9 @@ private fun CurrentSystemsOnlineDrawerPanel(
                     VaultStatusAppWidgetProvider.pushLiveStateToWidgets(context, state, production)
                     val pinned = VaultStatusAppWidgetProvider.requestPinVaultWidget(context)
                     widgetFeedback = if (pinned) {
-                        "v25.0 Mars Command Widget pin requested & synced (Storage Bar + 3 Quick Actions ready)!"
+                        "v25.0 Ares Outpost Command Widget pin requested & synced (Storage Bar + 3 Quick Actions ready)!"
                     } else {
-                        "v25.0 Mars Command Widget synced! Long-press Home Screen -> Widgets -> Vault City."
+                        "v25.0 Ares Outpost Command Widget synced! Long-press Home Screen -> Widgets -> Ares Outpost."
                     }
                 }
                 .testTag("pin_phone_widget_btn")
@@ -795,7 +795,7 @@ private fun CurrentSystemsOnlineDrawerPanel(
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
-                    text = "📱 PIN / SYNC MARS COMMAND WIDGET v25.0 (STORAGE BAR + ⛏ DRILL • 💧 ICE & FOOD • ⚡ FIX)",
+                    text = "📱 PIN / SYNC ARES OUTPOST WIDGET v25.0 (STORAGE BAR + ⛏ DRILL • 💧 ICE & FOOD • ⚡ FIX)",
                     style = MaterialTheme.typography.labelSmall,
                     color = SolarAmber,
                     fontWeight = FontWeight.Bold

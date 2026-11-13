@@ -209,7 +209,7 @@ fun VaultAuthGate(
         if (user != null) {
             viewModel.startPublicNetworkSync(
                 userId = user.uid,
-                overseerName = user.displayName ?: "Overseer"
+                overseerName = user.displayName ?: "Commander"
             )
         }
     }
@@ -259,7 +259,7 @@ fun VaultAuthGate(
     AshfallOutpostApp(
         viewModel = viewModel,
         isGoogleSignedIn = currentUser != null,
-        overseerName = currentUser?.displayName ?: "Overseer",
+        overseerName = currentUser?.displayName ?: "Commander",
         userEmail = currentUser?.email ?: currentUser?.displayName,
         userId = currentUser?.uid ?: "local",
         authErrorMessage = authErrorMessage,
@@ -276,7 +276,7 @@ fun VaultAuthGate(
 fun AshfallOutpostApp(
     viewModel: OutpostViewModel,
     isGoogleSignedIn: Boolean = false,
-    overseerName: String = "Overseer",
+    overseerName: String = "Commander",
     userEmail: String? = null,
     userId: String = "local",
     authErrorMessage: String? = null,
@@ -663,7 +663,7 @@ fun AshfallOutpostApp(
                                 if (isGoogleSignedIn) {
                                     viewModel.publishMyVaultToNetwork(
                                         overseerName = overseerName,
-                                        vaultName = "Vault City #${userId.take(4).uppercase()}"
+                                        vaultName = "Ares Outpost #${userId.take(4).uppercase()}"
                                     )
                                 } else {
                                     onRequestGoogleSignIn()
@@ -744,7 +744,7 @@ fun AshfallOutpostApp(
                                 if (isGoogleSignedIn) {
                                     viewModel.publishMyVaultToNetwork(
                                         overseerName = overseerName,
-                                        vaultName = "Vault City #${userId.take(4).uppercase()}"
+                                        vaultName = "Ares Outpost #${userId.take(4).uppercase()}"
                                     )
                                 } else {
                                     onRequestGoogleSignIn()
@@ -840,7 +840,7 @@ private fun RestartGameConfirmDialog(
         containerColor = SteelPanel,
         title = {
             Text(
-                text = "RESTART VAULT SURVIVAL?",
+                text = "RESTART OUTPOST SURVIVAL?",
                 style = MaterialTheme.typography.titleLarge,
                 color = WarningOrange,
                 fontWeight = FontWeight.Bold
@@ -849,7 +849,7 @@ private fun RestartGameConfirmDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "You are currently on Day $dayCounter (Vault Command Lv.$commandLevel). Choose how you want to restart your bunker:",
+                    text = "You are currently on Day $dayCounter (Outpost Command Lv.$commandLevel). Choose how you want to restart your outpost:",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )
@@ -929,7 +929,7 @@ private fun VaultGameOverDialog(
         containerColor = SteelPanel,
         title = {
             Text(
-                text = "☠️ VAULT FALLEN — GAME OVER (DAY $dayReached)",
+                text = "☠️ OUTPOST FALLEN — GAME OVER (DAY $dayReached)",
                 style = MaterialTheme.typography.titleLarge,
                 color = HazardRed,
                 fontWeight = FontWeight.Bold
@@ -947,7 +947,7 @@ private fun VaultGameOverDialog(
                 ) {
                     Text(
                         text = reason.ifEmpty {
-                            "Your Vault succumbed to the nuclear wasteland on Day $dayReached (Vault Command Lv.$commandLevel)."
+                            "Your Outpost succumbed to the hostile frontier on Day $dayReached (Outpost Command Lv.$commandLevel)."
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextPrimary,
@@ -955,7 +955,7 @@ private fun VaultGameOverDialog(
                     )
                 }
                 Text(
-                    text = "Launch a new Vault expedition from Day 1 with your pickaxe:",
+                    text = "Launch a new Outpost expedition from Day 1 with your pickaxe:",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -973,7 +973,7 @@ private fun VaultGameOverDialog(
                 ) {
                     Text(
                         text = if (isGoogleSignedIn) {
-                            "NEW VAULT (KEEP $prestigeCores PRESTIGE CORES)"
+                            "NEW OUTPOST (KEEP $prestigeCores PRESTIGE CORES)"
                         } else {
                             "SIGN IN WITH GOOGLE TO KEEP PRESTIGE CORES"
                         },
@@ -1082,7 +1082,7 @@ private fun OfflineReportDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Your Vault City shelter operated across ${report.cyclesCompleted} day cycle(s) (${report.elapsedSeconds}s away):",
+                    text = "Your Ares Outpost operated across ${report.cyclesCompleted} day cycle(s) (${report.elapsedSeconds}s away):",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )
@@ -1126,7 +1126,7 @@ private fun OfflineReportDialog(
                             )
                         }
                         Text(
-                            text = "+${report.outpostXpEarned.roundToInt()} Vault XP" +
+                            text = "+${report.outpostXpEarned.roundToInt()} Outpost XP" +
                                 if (report.levelsGained > 0) " (+${report.levelsGained} Level-Up!)" else "",
                             style = MaterialTheme.typography.labelLarge,
                             color = XpGold

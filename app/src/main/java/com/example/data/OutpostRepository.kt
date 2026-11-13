@@ -109,9 +109,9 @@ class OutpostRepository(private val dao: OutpostDao) {
             EventLogEntity(
                 category = "RESTART",
                 message = if (keepPrestige) {
-                    "Legacy Restart! Day 1: Vault reset while preserving Prestige Rank ${freshState.prestigeLevel} & ${freshState.prestigeCores} Prestige Cores."
+                    "Legacy Restart! Day 1: Outpost reset while preserving Prestige Rank ${freshState.prestigeLevel} & ${freshState.prestigeCores} Prestige Cores."
                 } else {
-                    "Full Fresh Restart! Day 1: You start fresh in an empty broken Vault with your Rusty Pickaxe."
+                    "Full Fresh Restart! Day 1: You start fresh at an unfortified Ares Outpost with your Handheld Pickaxe."
                 }
             )
         )
@@ -161,8 +161,8 @@ class OutpostRepository(private val dao: OutpostDao) {
         if (isFirstLaunch) {
             dao.insertLog(
                 EventLogEntity(
-                    category = "VAULT",
-                    message = "Day 1: You have nothing but a Rusty Pickaxe. Mine stone, fuel & Gold to build a Power Generator and Vault Shelter before the Day 10 Siege!"
+                    category = "OUTPOST",
+                    message = "Day 1: You have nothing but a Handheld Pickaxe. Mine scrap, fuel & Gold to build a Power Generator and Survivor Bunkhouse before the Day 10 Siege!"
                 )
             )
         }

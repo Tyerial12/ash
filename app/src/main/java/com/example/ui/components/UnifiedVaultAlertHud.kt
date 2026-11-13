@@ -288,7 +288,7 @@ fun UnifiedVaultAlertHud(
         activeCrises.add(
             VaultCrisisAlert(
                 id = "crisis_starvation",
-                title = "DWELLER STARVATION / DEHYDRATION",
+                title = "SURVIVOR STARVATION / DEHYDRATION",
                 subtitle = "Rations or water depleted! All automated production is frozen.",
                 icon = Icons.Default.Restaurant,
                 accentColor = HazardRed,
@@ -304,7 +304,7 @@ fun UnifiedVaultAlertHud(
             VaultCrisisAlert(
                 id = "crisis_life_support",
                 title = "LIFE SUPPORT HAZARD (O2 ${state.oxygenPercent}% • ${state.radiationMillisieverts} mSv)",
-                subtitle = "Scrub air or flush radiation immediately to protect Dwellers!",
+                subtitle = "Scrub air or flush radiation immediately to protect Survivors!",
                 icon = Icons.Default.Warning,
                 accentColor = WarningOrange,
                 actionLabel = "STABILIZE",
@@ -335,7 +335,7 @@ fun UnifiedVaultAlertHud(
             VaultCrisisAlert(
                 id = "crisis_stamina_sickness",
                 title = "CREW EXHAUSTION / SICKNESS (STAMINA ${state.dwellerStaminaPercent}% • ${state.sickDwellersCount} SICK)",
-                subtitle = "Fatigue or dysentery throttling Vault production! Rotate bunks or cure crew.",
+                subtitle = "Fatigue or dysentery throttling Outpost production! Rotate bunks or cure crew.",
                 icon = Icons.Default.Warning,
                 accentColor = WarningOrange,
                 actionLabel = "QUARANTINE",
@@ -405,13 +405,13 @@ fun UnifiedVaultAlertHud(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "✓ ALL VAULT SYSTEMS & STORAGE SHELVES NOMINAL",
+                        text = "✓ ALL OUTPOST SYSTEMS & STORAGE SHELVES NOMINAL",
                         style = MaterialTheme.typography.labelMedium,
                         color = SurplusGreen,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "No active crises, leaks, or capped storage shelves. Resources pause at ${production.storageCap.toInt()} cap and auto-resume at ≤${production.storeRoomResumeThreshold.toInt()} (50%).",
+                        text = "No active crises, leaks, or capped storage shelves. Resources slow to 25% at ${production.storageCap.toInt()} cap and resume 100% at ≤${production.storeRoomResumeThreshold.toInt()} (50%).",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary
                     )
@@ -552,9 +552,9 @@ fun UnifiedVaultAlertHud(
                         ) {
                             Text(
                                 text = if (expandAllCrises) {
-                                    "▼ HIDE ${(displayCrises.size - 1).coerceAtLeast(1)} ADDITIONAL VAULT ALERTS"
+                                    "▼ HIDE ${(displayCrises.size - 1).coerceAtLeast(1)} ADDITIONAL OUTPOST ALERTS"
                                 } else {
-                                    "▶ +${(displayCrises.size - 1).coerceAtLeast(1)} OTHER CRITICAL VAULT ALERTS (Tap to expand all)"
+                                    "▶ +${(displayCrises.size - 1).coerceAtLeast(1)} OTHER CRITICAL OUTPOST ALERTS (Tap to expand all)"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = WarningOrange,
@@ -672,7 +672,7 @@ fun VaultAlertsTabScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.NotificationsActive,
-                            contentDescription = "Vault Alerts Center",
+                            contentDescription = "Outpost Alerts Center",
                             tint = if (activeAlertCount > 0) WarningOrange else SurplusGreen,
                             modifier = Modifier.size(26.dp)
                         )
@@ -680,16 +680,16 @@ fun VaultAlertsTabScreen(
                         Column {
                             Text(
                                 text = if (activeAlertCount > 0) {
-                                    "VAULT ALERTS CENTER ($activeAlertCount ACTIVE)"
+                                    "OUTPOST ALERTS CENTER ($activeAlertCount ACTIVE)"
                                 } else {
-                                    "VAULT ALERTS CENTER (ALL CLEAR)"
+                                    "OUTPOST ALERTS CENTER (ALL CLEAR)"
                                 },
                                 style = MaterialTheme.typography.titleSmall,
                                 color = if (activeAlertCount > 0) WarningOrange else SurplusGreen,
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(
-                                text = "All Vault warnings, storage shelf halts, room scrap upkeep alerts, and crisis actions are consolidated here.",
+                                text = "All Outpost warnings, storage shelf slowdowns, sector scrap upkeep alerts, and crisis actions are consolidated here.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
@@ -804,13 +804,13 @@ fun VaultAlertsTabScreen(
                         Text(
                             text = when {
                                 production.isDefenseShutDownByDeficit && production.isVaultBlackout ->
-                                    "BLACKOUT (${state.blackoutDaysCount}/6D) & RESOURCE DEFICIT (${state.deficitDaysCount}/6D): ALL ROOMS & DEFENSES SHUT DOWN!"
+                                    "BLACKOUT (${state.blackoutDaysCount}/6D) & RESOURCE DEFICIT (${state.deficitDaysCount}/6D): ALL SECTORS & DEFENSES SHUT DOWN!"
                                 production.isDefenseShutDownByDeficit ->
-                                    "RESOURCE DEPLETION / DEFICIT (${state.deficitDaysCount}/6D): VAULT LACKS RESOURCES — DEFENSES SHUT DOWN (6-DAY GAME OVER CLOCK)!"
+                                    "RESOURCE DEPLETION / DEFICIT (${state.deficitDaysCount}/6D): OUTPOST LACKS RESOURCES — DEFENSES SHUT DOWN (6-DAY GAME OVER CLOCK)!"
                                 production.isVaultBlackout ->
-                                    "POWER BLACKOUT (${state.blackoutDaysCount}/6D): ALL AUTOMATED ROOMS & TURRETS HALTED (6-DAY GAME OVER CLOCK)!"
+                                    "POWER BLACKOUT (${state.blackoutDaysCount}/6D): ALL AUTOMATED SECTORS & TURRETS HALTED (6-DAY GAME OVER CLOCK)!"
                                 else ->
-                                    "DWELLER STARVATION / DEHYDRATION: ALL WORKER PRODUCTION HALTED! FORAGE FOOD OR BOIL WATER!"
+                                    "SURVIVOR STARVATION / DEHYDRATION: ALL WORKER PRODUCTION HALTED! FORAGE FOOD OR BOIL WATER!"
                             },
                             style = MaterialTheme.typography.labelMedium,
                             color = HazardRed,

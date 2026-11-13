@@ -2859,7 +2859,7 @@ class OutpostViewModel(
                 }
                 val uniqueBanner = if (isUniqueDwellerGained) {
                     LevelUpBannerState(
-                        title = "★ UNIQUE VAULT DWELLER GAINED (8% RARE)!",
+                        title = "★ UNIQUE SPECIALIST SURVIVOR GAINED (8% RARE)!",
                         subtitle = "${candidate.name} \"${candidate.callsign}\" (${wType.displayName})",
                         rewardSummary = "+40% All-Resource Gathering Ability (Total Unique Bonus: +${newUniqueCount * 40}%)",
                         isCommandLevel = true
@@ -2873,8 +2873,8 @@ class OutpostViewModel(
 
             if (isUniqueDwellerGained) {
                 repository.logEvent(
-                    "UNIQUE DWELLER",
-                    "★ RARE 8% ROLL! Gained Unique Vault Dweller ${candidate.name} \"${candidate.callsign}\" (+40% All-Resource Gathering Ability, $newUniqueCount Unique Dweller(s) total)!"
+                    "UNIQUE SURVIVOR",
+                    "★ RARE 8% ROLL! Gained Unique Specialist Survivor ${candidate.name} \"${candidate.callsign}\" (+40% All-Resource Gathering Ability, $newUniqueCount Unique Survivor(s) total)!"
                 )
             } else {
                 repository.logEvent(
@@ -2903,7 +2903,7 @@ class OutpostViewModel(
                     )
                 )
             }
-            repository.logEvent("CARAVAN", "Broadcasted beacon (-6 Scrap): New worker contracts arrived (8% Unique Dweller chance per slot)!")
+            repository.logEvent("CARAVAN", "Broadcasted beacon (-6 Scrap): New worker contracts arrived (8% Unique Survivor chance per slot)!")
         }
     }
 
@@ -2962,8 +2962,8 @@ class OutpostViewModel(
                 overlayFlow.update {
                     it.copy(
                         levelUpBanner = LevelUpBannerState(
-                            title = "★ UNIQUE VAULT DWELLER RESCUED (8% RARE)!",
-                            subtitle = "Elite ${targetGuild.displayName} Joined Vault City",
+                            title = "★ UNIQUE SPECIALIST SURVIVOR RESCUED (8% RARE)!",
+                            subtitle = "Elite ${targetGuild.displayName} Joined Ares Outpost",
                             rewardSummary = "+40% All-Resource Gathering Ability (Total Unique Bonus: +${newUniqueCount * 40}%)",
                             isCommandLevel = true
                         )
@@ -2973,9 +2973,9 @@ class OutpostViewModel(
             repository.logEvent(
                 "RESCUE BEACON",
                 if (isUniqueRescued) {
-                    "★ RARE 8% ROLL! Rescue Beacon guided a Unique Vault Dweller into Vault City (+40% All-Resource Gathering Ability)!"
+                    "★ RARE 8% ROLL! Rescue Beacon guided a Unique Specialist Survivor into Ares Outpost (+40% All-Resource Gathering Ability)!"
                 } else {
-                    "Signal Beacon guided a stranded survivor into the outpost (+1 ${targetGuild.displayName}, $newTotalCitizens/${snap.maxWorkerCapacity} Citizens)!"
+                    "Signal Beacon guided a stranded survivor into the outpost (+1 ${targetGuild.displayName}, $newTotalCitizens/${snap.maxWorkerCapacity} Survivors)!"
                 }
             )
         }
@@ -2987,7 +2987,7 @@ class OutpostViewModel(
             if (current.activeConstruction != null) {
                 overlayFlow.update {
                     it.copy(
-                        lastSalvageFeedback = "Vault Construction Crew busy building ${current.activeConstruction.buildingType.displayName} (${current.activeConstruction.remainingSeconds}s left)! Hammer & Weld or Rush to finish faster."
+                        lastSalvageFeedback = "Outpost Construction Crew busy building ${current.activeConstruction.buildingType.displayName} (${current.activeConstruction.remainingSeconds}s left)! Hammer & Weld or Rush to finish faster."
                     )
                 }
                 return@launch
@@ -3387,7 +3387,7 @@ class OutpostViewModel(
             val currentStation = overlayFlow.value.overseerStation
             if (currentStation == station) {
                 overlayFlow.update {
-                    it.copy(lastSalvageFeedback = "Overseer stationed at ${station.shortTitle} — Ready to interact!")
+                    it.copy(lastSalvageFeedback = "Commander stationed at ${station.shortTitle} — Ready to interact!")
                 }
                 return@launch
             }
@@ -3398,7 +3398,7 @@ class OutpostViewModel(
             overlayFlow.update {
                 it.copy(
                     isOverseerWalking = true,
-                    lastSalvageFeedback = "Overseer walking via Vault Elevator to ${station.shortTitle}..."
+                    lastSalvageFeedback = "Commander moving via Outpost Lift to ${station.shortTitle}..."
                 )
             }
             delay(walkDurationMs)
@@ -3406,7 +3406,7 @@ class OutpostViewModel(
                 it.copy(
                     overseerStation = station,
                     isOverseerWalking = false,
-                    lastSalvageFeedback = "Arrived at ${station.shortTitle}! You can now upgrade, mine, or fish here."
+                    lastSalvageFeedback = "Arrived at ${station.shortTitle}! You can now upgrade, mine, or draw water here."
                 )
             }
         }
@@ -3429,7 +3429,7 @@ class OutpostViewModel(
                 storageCap = cap
             )
             repository.updateOutpostState(updated)
-            val msg = "EMERGENCY WORKER RATIONS ISSUED: +14 Food & +14 Water distributed to Vault Crew! Workers resumed room & defense operations."
+            val msg = "EMERGENCY WORKER RATIONS ISSUED: +14 Food & +14 Water distributed to Outpost Crew! Survivors resumed sector & defense operations."
             overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
             repository.logEvent("WORKER RATIONS", msg)
         }
@@ -3525,9 +3525,9 @@ class OutpostViewModel(
                         bonusUniqueChancePercent = rankHydro * 3
                     ),
                     levelUpBanner = LevelUpBannerState(
-                        title = "★ OVERSEER ASCENSION: PRESTIGE RANK $newPrestigeLevel!",
+                        title = "★ COMMANDER ASCENSION: PRESTIGE RANK $newPrestigeLevel!",
                         subtitle = "Earned +${preview.coresToEarn} Permanent Prestige Cores ($newPrestigeCores Available)",
-                        rewardSummary = "Global Production x${String.format("%.2f", preview.nextPrestigeMultiplier)} • Spend Prestige Cores in the Overseer Legacy Skill Branch!",
+                        rewardSummary = "Global Production x${String.format("%.2f", preview.nextPrestigeMultiplier)} • Spend Prestige Cores in the Commander Legacy Skill Branch!",
                         isCommandLevel = true
                     ),
                     lastSalvageFeedback = "ASCENDED TO PRESTIGE RANK $newPrestigeLevel! Earned +${preview.coresToEarn} Prestige Cores!"
@@ -3535,7 +3535,7 @@ class OutpostViewModel(
             }
             repository.logEvent(
                 "PRESTIGE",
-                "★ OVERSEER ASCENSION COMPLETE! Reached Prestige Rank $newPrestigeLevel and earned +${preview.coresToEarn} Permanent Prestige Cores ($newPrestigeCores total)!"
+                "★ COMMANDER ASCENSION COMPLETE! Reached Prestige Rank $newPrestigeLevel and earned +${preview.coresToEarn} Permanent Prestige Cores ($newPrestigeCores total)!"
             )
         }
     }
@@ -3571,7 +3571,7 @@ class OutpostViewModel(
                     if (firestoreError == null && error is CancellationException) throw error
                     val rootError = firestoreError ?: error
                     overlayFlow.update {
-                        it.copy(publicNetworkFeedback = "Public Vault Directory notice: ${rootError.message ?: "Offline"}")
+                        it.copy(publicNetworkFeedback = "Public Outpost Directory notice: ${rootError.message ?: "Offline"}")
                     }
                 }
                 .collect { vaults ->
@@ -3596,7 +3596,7 @@ class OutpostViewModel(
                 }
         }
 
-        publishMyVaultToNetwork(overseerName = overseerName, vaultName = "Vault City #${userId.take(4).uppercase()}")
+        publishMyVaultToNetwork(overseerName = overseerName, vaultName = "Ares Outpost #${userId.take(4).uppercase()}")
     }
 
     fun publishMyVaultToNetwork(overseerName: String, vaultName: String) {
@@ -3616,12 +3616,12 @@ class OutpostViewModel(
                 totalDefenseRating = p.totalDefenseRating
             )
             result.onSuccess {
-                val msg = "Synced $vaultName (Prestige ${s.prestigeLevel} • Lv.${s.commandLevel} • Day ${s.dayCounter}) to the Public Wasteland Leaderboard!"
+                val msg = "Synced $vaultName (Prestige ${s.prestigeLevel} • Lv.${s.commandLevel} • Day ${s.dayCounter}) to the Public Outpost Leaderboard!"
                 overlayFlow.update { it.copy(publicNetworkFeedback = msg) }
                 repository.logEvent("PUBLIC NETWORK", msg)
             }.onFailure { err ->
                 overlayFlow.update {
-                    it.copy(publicNetworkFeedback = "Could not sync Vault: ${err.localizedMessage ?: "Check connection"}")
+                    it.copy(publicNetworkFeedback = "Could not sync Outpost: ${err.localizedMessage ?: "Check connection"}")
                 }
             }
         }
@@ -3631,7 +3631,7 @@ class OutpostViewModel(
         senderName: String,
         resourceType: ResourceType,
         amount: Int = 25,
-        message: String = "Surplus Vault City supplies for fellow Overseers!"
+        message: String = "Surplus Ares Outpost supplies for fellow Commanders!"
     ) {
         val pubRepo = publicVaultRepository ?: return
         viewModelScope.launch {
@@ -4737,12 +4737,12 @@ class OutpostViewModel(
             val state = current.state
             if (state.mothballedBuildingsCsv.isBlank()) {
                 overlayFlow.update {
-                    it.copy(lastSalvageFeedback = "All constructed Vault rooms are already online!")
+                    it.copy(lastSalvageFeedback = "All constructed Outpost sectors are already online!")
                 }
                 return@launch
             }
             repository.updateOutpostState(state.copy(mothballedBuildingsCsv = ""))
-            val msg = "ALL SECTORS ONLINE: Restored all mothballed Vault rooms to full power & production!"
+            val msg = "ALL SECTORS ONLINE: Restored all mothballed Outpost sectors to full power & production!"
             overlayFlow.update {
                 it.copy(
                     lastSalvageFeedback = msg,
@@ -4785,7 +4785,7 @@ class OutpostViewModel(
                     lastSalvageFeedback = winMsg,
                     lastDefenseDamageFeedback = winMsg,
                     levelUpBanner = LevelUpBannerState(
-                        title = "★ OVERSEER DIRECTIVE TIER $nextTier COMPLETE!",
+                        title = "★ COMMANDER DIRECTIVE TIER $nextTier COMPLETE!",
                         subtitle = directive.title,
                         rewardSummary = "+${directive.rewardGold.toInt()} Gold • +${directive.rewardMutagenCores.toInt()} Core • Permanent +$totalOutBonus% Output & +$totalCapBonus Cap",
                         isCommandLevel = false

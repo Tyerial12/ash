@@ -509,9 +509,9 @@ fun HardcoreBuildingMaintenanceCard(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = if (hasIssues) {
-                        "WELD PIPE LEAKS & REINFORCE ROOMS (-$weldCost SCRAP)"
+                        "WELD PIPE LEAKS & REINFORCE SECTORS (-$weldCost SCRAP)"
                     } else {
-                        "ALL VAULT ROOM BULKHEADS & PIPES AT 100% INTEGRITY"
+                        "ALL OUTPOST SECTOR BULKHEADS & PIPES AT 100% INTEGRITY"
                     },
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.ExtraBold
@@ -766,19 +766,19 @@ fun VaultStatsTabScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Speed,
-                                contentDescription = "Vault Telemetry",
+                                contentDescription = "Outpost Telemetry",
                                 tint = headerAccent,
                                 modifier = Modifier.size(20.dp)
                             )
                             Column {
                                 Text(
-                                    text = "VAULT INFORMATION & RESOURCE LEVELS TELEMETRY",
+                                    text = "ARES OUTPOST INFORMATION & RESOURCE LEVELS TELEMETRY",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = headerAccent,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = "Read-Only Overseer Status Monitor • Every Action & Resource Counts",
+                                    text = "Read-Only Commander Status Monitor • Every Action & Resource Counts",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -857,9 +857,9 @@ fun VaultStatsTabScreen(
                             )
                             Text(
                                 text = if (peaceActive) {
-                                    "Strictly zero Raider or Mutant attacks on Days 1–10. Manually mine veins to build your Water Purifier, Hydroponics, Bio-Refinery & Turrets before the first attack on Day 11 (Requires ${snap.firstAttackDay11RequiredDefense} DEF; Current Vault Defense: ${snap.totalDefenseRating} DEF)."
+                                    "Strictly zero Raider or Mutant attacks on Days 1–10. Manually mine veins to build your Water Purifier, Hydroponics, Bio-Refinery & Turrets before the first attack on Day 11 (Requires ${snap.firstAttackDay11RequiredDefense} DEF; Current Outpost Defense: ${snap.totalDefenseRating} DEF)."
                                 } else {
-                                    "First attack window passed (Day 11+). Current Vault Defense: ${snap.totalDefenseRating} DEF vs Today's Required ${snap.todayRequiredDefense} DEF • Blast Door Lv.${state.blastDoorLevel} (${state.defenseIntegrityPercent}% Integrity) • Next 10-Day Boss in ${snap.daysUntilDay10Siege}d."
+                                    "First attack window passed (Day 11+). Current Outpost Defense: ${snap.totalDefenseRating} DEF vs Today's Required ${snap.todayRequiredDefense} DEF • Perimeter Gate Lv.${state.blastDoorLevel} (${state.defenseIntegrityPercent}% Integrity) • Next 10-Day Boss in ${snap.daysUntilDay10Siege}d."
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -880,7 +880,7 @@ fun VaultStatsTabScreen(
                         )
                         StatTileBox(
                             modifier = Modifier.weight(1f),
-                            label = "VAULT TECH ERA",
+                            label = "OUTPOST TECH ERA",
                             value = snap.vaultTechEra.shortBadge,
                             subtitle = "Global x${String.format(Locale.US, "%.2f", snap.commandLevelBonusMultiplier * snap.prestigeBonusMultiplier)}",
                             accent = AetherViolet
@@ -940,7 +940,7 @@ fun VaultStatsTabScreen(
                                     fontWeight = FontWeight.ExtraBold
                                 )
                                 Text(
-                                    text = "Running out of Vault Resources OR Power for 6 consecutive days triggers Game Over.",
+                                    text = "Running out of Outpost Resources OR Power for 6 consecutive days triggers Game Over.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -991,7 +991,7 @@ fun VaultStatsTabScreen(
                             )
                             Text(
                                 text = if (snap.isVaultResourceDeficit) {
-                                    "WARNING: Vault is depleted or in net resource deficit (${OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER - deficitDays} day(s) until collapse)! Defenses are shut down until positive supply is restored."
+                                    "WARNING: Outpost is depleted or in net resource deficit (${OutpostCalculator.MAX_DEFICIT_DAYS_BEFORE_GAME_OVER - deficitDays} day(s) until collapse)! Defenses are shut down until positive supply is restored."
                                 } else {
                                     "NOMINAL: Core resources are stocked and net production is stable (0/6 Days)."
                                 },
@@ -1123,7 +1123,7 @@ fun VaultStatsTabScreen(
                             )
                             Column {
                                 Text(
-                                    text = "VAULT RESOURCE LEVELS & STORAGE CAP LEDGER",
+                                    text = "OUTPOST RESOURCE LEVELS & STORAGE CAP LEDGER",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = ledgerAccent,
                                     fontWeight = FontWeight.ExtraBold
@@ -1170,7 +1170,7 @@ fun VaultStatsTabScreen(
                         color = CyanHydro
                     )
                     NetResourceLedgerRow(
-                        name = "Vault Food Rations ${if (!snap.hasHydroponicsRoom) "[MANUAL ONLY]" else if (snap.isRationsHalted) "[SLOWED 25% AT CAP]" else "[AUTO ONLINE]"}",
+                        name = "Outpost Food Rations ${if (!snap.hasHydroponicsRoom) "[MANUAL ONLY]" else if (snap.isRationsHalted) "[SLOWED 25% AT CAP]" else "[AUTO ONLINE]"}",
                         current = state.rations,
                         cap = snap.storageCap,
                         grossGain = snap.rationsPerSec + foodDrain,
@@ -1462,7 +1462,7 @@ fun VaultStatsTabScreen(
                     ) {
                         StatTileBox(
                             modifier = Modifier.weight(1f),
-                            label = "DWELLER CREW",
+                            label = "SURVIVOR CREW",
                             value = "${state.totalSurvivors}/${snap.maxWorkerCapacity}",
                             subtitle = "${snap.totalAssignedWorkers} Assigned • ${state.uniqueDwellersCount} Unique",
                             accent = BioGreen
@@ -1538,7 +1538,7 @@ private fun VaultEventLogTerminalCard(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = "VAULT OVERSEER TERMINAL EVENT LOG",
+                text = "ARES OUTPOST COMMANDER TERMINAL EVENT LOG",
                 style = MaterialTheme.typography.titleSmall,
                 color = CyanHydro,
                 fontWeight = FontWeight.ExtraBold
@@ -1717,7 +1717,7 @@ fun CurrentResourcesTabScreen(
                                 text = if (snap.isCryoPreservationActive) {
                                     "CRYO-PRESERVATION: 100% PRESERVED (0% Rot Loss)"
                                 } else {
-                                    "FOOD SPOILAGE: ${snap.foodSpoilagePercentPerDay}% Rot/Day (-${snap.dailyFoodSpoilageLoss.roundToInt()} Rations/Day • Build Cryo Vault Lv.5 to stop rot)"
+                                    "FOOD SPOILAGE: ${snap.foodSpoilagePercentPerDay}% Rot/Day (-${snap.dailyFoodSpoilageLoss.roundToInt()} Rations/Day • Build Cryo Silo Lv.5 to stop rot)"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
@@ -1749,7 +1749,7 @@ fun CurrentResourcesTabScreen(
                         color = CyanHydro
                     )
                     NetResourceLedgerRow(
-                        name = "Vault Food Rations",
+                        name = "Outpost Food Rations",
                         current = state.rations,
                         cap = snap.storageCap,
                         grossGain = snap.rationsPerSec + foodDrain,
@@ -1812,11 +1812,11 @@ fun CurrentResourcesTabScreen(
                                 Text(
                                     text = when {
                                         snap.isStoreRoomFull ->
-                                            "STORE ROOM FULL (CAP ${snap.storageCap.toInt()}/EA): AUTO-RESUMES AT ≤${snap.storeRoomResumeThreshold.toInt()} (50%)"
+                                            "SUPPLY DEPOT FULL (CAP ${snap.storageCap.toInt()}/EA): AUTO-RESUMES AT ≤${snap.storeRoomResumeThreshold.toInt()} (50%)"
                                         snap.isAnyStoreRoomResourceHalted ->
-                                            "${snap.haltedResourcesSummary.uppercase()} HALTED AT CAP (RESUMES AT ≤${snap.storeRoomResumeThreshold.toInt()} • OTHERS ACTIVE)"
+                                            "${snap.haltedResourcesSummary.uppercase()} SLOWED AT CAP (RESUMES AT ≤${snap.storeRoomResumeThreshold.toInt()} • OTHERS ACTIVE)"
                                         else ->
-                                            "VAULT STORE ROOM: MAX ${snap.storageCap.toInt()} PER RESOURCE (RESUME AT ≤${snap.storeRoomResumeThreshold.toInt()})"
+                                            "OUTPOST SUPPLY DEPOT: MAX ${snap.storageCap.toInt()} PER RESOURCE (RESUME AT ≤${snap.storeRoomResumeThreshold.toInt()})"
                                     },
                                     style = MaterialTheme.typography.titleSmall,
                                     color = if (snap.isStoreRoomFull) HazardRed else SolarAmber,
@@ -2481,7 +2481,7 @@ fun CrewAndPowerTabScreen(
                 Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "DWELLERS (${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity})",
+                    text = "SURVIVORS (${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity})",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.ExtraBold,
                     maxLines = 1

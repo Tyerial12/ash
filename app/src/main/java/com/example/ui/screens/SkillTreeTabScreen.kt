@@ -115,7 +115,7 @@ fun SkillTreeTabScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "VAULT CITY SKILL TREE • LEVEL ${uiState.state.commandLevel}/100",
+                            text = "ARES OUTPOST SKILL TREE • LEVEL ${uiState.state.commandLevel}/100",
                             style = MaterialTheme.typography.labelLarge,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold
@@ -274,20 +274,20 @@ private fun OverseerAscensionPrestigeCard(
                 ) {
                     Icon(
                         imageVector = if (isGoogleSignedIn) Icons.Default.AutoAwesome else Icons.Default.Lock,
-                        contentDescription = "Overseer Ascension Prestige",
+                        contentDescription = "Commander Ascension Prestige",
                         tint = if (isGoogleSignedIn) XpGold else SolarAmber,
                         modifier = Modifier.size(22.dp)
                     )
                     Column {
                         Text(
-                            text = "OVERSEER ASCENSION (PRESTIGE TIER P$prestigeLevel)",
+                            text = "COMMANDER ASCENSION (PRESTIGE TIER P$prestigeLevel)",
                             style = MaterialTheme.typography.titleSmall,
                             color = XpGold,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = if (isGoogleSignedIn) {
-                                "Reset Vault Rooms & Day Counter to earn Permanent Prestige Cores & +25% Global Yield/Tier. All Skill Tree Ranks & Unique Dwellers persist!"
+                                "Reset Outpost Sectors & Day Counter to earn Permanent Prestige Cores & +25% Global Yield/Tier. All Skill Tree Ranks & Unique Survivors persist!"
                             } else {
                                 "GOOGLE SIGN-IN REQUIRED FOR PRESTIGE: You can play offline without logging in, but Google Sign-In is required to Prestige, Save Progress to Cloud & use Multiplayer!"
                             },
@@ -311,7 +311,7 @@ private fun OverseerAscensionPrestigeCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (isGoogleSignedIn) requirementText else "Sign in with Google to unlock Overseer Ascension Prestige & Cloud Sync",
+                        text = if (isGoogleSignedIn) requirementText else "Sign in with Google to unlock Commander Ascension Prestige & Cloud Sync",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextMuted
                     )

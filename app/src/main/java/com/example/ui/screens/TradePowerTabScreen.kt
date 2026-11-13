@@ -273,7 +273,7 @@ fun TradePowerTabScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "No unclaimed supply drops in orbit. Broadcast a care package above to aid fellow Overseers!",
+                                text = "No unclaimed supply drops in orbit. Broadcast a care package above to aid fellow Commanders!",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMutedAsh,
                                 modifier = Modifier.padding(12.dp)
@@ -291,7 +291,7 @@ fun TradePowerTabScreen(
 
                 item(key = "public_leaderboard_header") {
                     Text(
-                        text = "GLOBAL MULTIPLAYER VAULT LEADERBOARD (${uiState.publicVaults.size})",
+                        text = "GLOBAL MULTIPLAYER OUTPOST LEADERBOARD (${uiState.publicVaults.size})",
                         style = MaterialTheme.typography.titleSmall,
                         color = XpGold,
                         fontWeight = FontWeight.Bold
@@ -306,7 +306,7 @@ fun TradePowerTabScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "No Vaults published yet. Click SAVE VAULT TO CLOUD above to broadcast your shelter to the global Wasteland!",
+                                text = "No Outposts published yet. Click SAVE OUTPOST TO CLOUD above to broadcast your stronghold to the global network!",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMutedAsh,
                                 modifier = Modifier.padding(12.dp)
@@ -416,7 +416,7 @@ private fun PublicWastelandNetworkCard(
                 }
             } else {
                 Text(
-                    text = "Signed in as ${userEmail ?: "Google Overseer"} • Save your Vault progress to the Cloud, Prestige, or trade Multiplayer Supply Drops!",
+                    text = "Signed in as ${userEmail ?: "Google Commander"} • Save your Outpost progress to the Cloud, Prestige, or trade Multiplayer Supply Drops!",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextMutedAsh
                 )
@@ -448,7 +448,7 @@ private fun PublicWastelandNetworkCard(
                     ) {
                         Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("SAVE VAULT TO CLOUD", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("SAVE OUTPOST TO CLOUD", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -576,7 +576,7 @@ private fun PublicLeaderboardEntryCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Prestige P${entry.prestigeLevel} • Lv.${entry.commandLevel} • Day ${entry.dayCounter} • ${entry.totalSurvivors} Dwellers",
+                        text = "Prestige P${entry.prestigeLevel} • Lv.${entry.commandLevel} • Day ${entry.dayCounter} • ${entry.totalSurvivors} Survivors",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextMutedAsh
                     )

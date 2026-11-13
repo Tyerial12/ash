@@ -379,14 +379,14 @@ fun OutpostTabScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "${activeIncident?.title ?: "⚠ VAULT ROOM INCIDENT"}: ${bType?.falloutRoomTitle ?: uiState.state.sabotagedBuildingId} (-${uiState.state.sabotagedBuildingPenaltyPercent}% Output)",
+                                    text = "${activeIncident?.title ?: "⚠ OUTPOST SECTOR INCIDENT"}: ${bType?.falloutRoomTitle ?: uiState.state.sabotagedBuildingId} (-${uiState.state.sabotagedBuildingPenaltyPercent}% Output)",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = incidentColor
                                 )
                                 Text(
                                     text = activeIncident?.emergencyPrompt
-                                        ?: "Emergency incident in progress! Clear immediately to restore 100% room output.",
+                                        ?: "Emergency incident in progress! Clear immediately to restore 100% sector output.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TextPrimary
                                 )
@@ -403,7 +403,7 @@ fun OutpostTabScreen(
                                     )
                                 ) {
                                     Text(
-                                        text = activeIncident?.resolveButtonLabel ?: "🧯 EXTINGUISH & RESTORE ROOM (+25 XP)",
+                                        text = activeIncident?.resolveButtonLabel ?: "🧯 EXTINGUISH & RESTORE SECTOR (+25 XP)",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -413,7 +413,7 @@ fun OutpostTabScreen(
                     }
                 }
 
-                // 5. Build & Repair Broken Vault Shelter Rooms Header & Category Filter Row
+                // 5. Build & Repair Outpost Sectors Header & Category Filter Row
                 item(key = "town_structures_header") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         val builtRoomsCount = BuildingType.entries.count { (uiState.buildingsMap[it.id] ?: 0) > 0 }
@@ -423,20 +423,20 @@ fun OutpostTabScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "PRESSURIZE & UPGRADE MARS HABITAT BAYS ($builtRoomsCount/${BuildingType.entries.size} SEALED)",
+                                text = "FORTIFY & UPGRADE ARES OUTPOST SECTORS ($builtRoomsCount/${BuildingType.entries.size} BUILT)",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = SolarAmber,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Astronauts: ${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity}",
+                                text = "Survivors: ${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (uiState.state.totalSurvivors == 0) WarningOrange else RadTeal,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         Text(
-                            text = "You landed in an unpressurized Mars Lava-Tube! Pressurize habitat modules on your own, then assign Astronauts to automate MOXIE O2 scrubbing, ice melting & aeroponics.",
+                            text = "You arrived at the fortified perimeter of Ares Outpost! Build and upgrade outpost sectors on your own, then assign Survivors to automate water distillation, greenhouse rations & fuel synthesis.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -670,16 +670,16 @@ private fun Interactive2dVaultCutawayCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "2D MARS LAVA-TUBE CUTAWAY MAP (EVA DRILL, ICE CORE & UPGRADE)",
+                        text = "2D ARES OUTPOST SECTOR MAP (MINE QUARRY, WELL & UPGRADE)",
                         style = MaterialTheme.typography.titleSmall,
                         color = RadTeal,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = if (isWalking) {
-                            "🧑‍🚀 Commander riding Lava-Tube Hoist to ${currentStation.shortTitle}..."
+                            "🪖 Commander moving via Outpost Lift to ${currentStation.shortTitle}..."
                         } else {
-                            "📍 Commander at: ${currentStation.shortTitle} • Tap any bay to move there, then tap again to Drill, Extract Ice, or Upgrade!"
+                            "📍 Commander at: ${currentStation.shortTitle} • Tap any sector to move there, then tap again to Mine, Draw Water, or Upgrade!"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isWalking) XpGold else TextPrimary
@@ -696,13 +696,13 @@ private fun Interactive2dVaultCutawayCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.DirectionsWalk,
-                            contentDescription = "Overseer Position",
+                            contentDescription = "Commander Position",
                             tint = XpGold,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (currentStation.floorIndex == 0) "SURFACE" else "FLOOR B${currentStation.floorIndex}",
+                            text = if (currentStation.floorIndex == 0) "SURFACE" else "SECTOR S${currentStation.floorIndex}",
                             style = MaterialTheme.typography.labelSmall,
                             color = XpGold,
                             fontWeight = FontWeight.Bold
@@ -759,7 +759,7 @@ private fun Interactive2dVaultCutawayCard(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = if (floorIdx == 0) "SURF" else "B$floorIdx",
+                                text = if (floorIdx == 0) "SURF" else "S$floorIdx",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isOverseerOnThisFloor) XpGold else TextSecondary,
                                 fontWeight = FontWeight.Bold
@@ -1030,11 +1030,11 @@ private fun VaultPowerAndDayControlCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     val gridHeadline = when {
-                        isDeficitShutdown -> "DEFENSES SHUT DOWN! (VAULT TAKES MORE TO RUN THAN GAINING • ${state.deficitDaysCount}/2D)"
-                        isStarving -> "CREW STARVING / DEHYDRATED! (WORKER ROOMS & TURRETS HALTED)"
+                        isDeficitShutdown -> "DEFENSES SHUT DOWN! (OUTPOST TAKES MORE TO RUN THAN GAINING • ${state.deficitDaysCount}/2D)"
+                        isStarving -> "CREW STARVING / DEHYDRATED! (WORKER SECTORS & TURRETS HALTED)"
                         isBrownout -> "GRID BROWNOUT (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • OUTAGE ${state.blackoutDaysCount}/6D)"
-                        isBlackout -> "VAULT POWER BLACKOUT! (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • OUTAGE ${state.blackoutDaysCount}/6D)"
-                        else -> "VAULT LIFE-SUPPORT ONLINE (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • WEAR ${state.generatorWearPercent}%)"
+                        isBlackout -> "OUTPOST POWER BLACKOUT! (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • OUTAGE ${state.blackoutDaysCount}/6D)"
+                        else -> "OUTPOST LIFE-SUPPORT ONLINE (${prod.totalMegawattGenerated.roundToInt()}/${prod.totalMegawattDemand.roundToInt()} MW • WEAR ${state.generatorWearPercent}%)"
                     }
                     Text(
                         text = gridHeadline,
@@ -1043,9 +1043,9 @@ private fun VaultPowerAndDayControlCard(
                         fontWeight = FontWeight.Bold
                     )
                     val autoRepairText = if (prod.needsAutomatedSystemRepair) {
-                        "-${prod.dailyRoomScrapUpkeep.toInt()}S Room Ops/Repair"
+                        "-${prod.dailyRoomScrapUpkeep.toInt()}S Sector Ops/Repair"
                     } else {
-                        "0S Room Ops"
+                        "0S Sector Ops"
                     }
                     val manualGateSuffix = when {
                         !prod.hasWaterPurifierRoom && !prod.hasHydroponicsRoom -> " • Water & Food: Manual Only (Need Purifier & Hydroponics)"
@@ -1054,7 +1054,7 @@ private fun VaultPowerAndDayControlCard(
                         else -> ""
                     }
                     Text(
-                        text = "Vault Lv.${state.commandLevel} + $builtRoomsCount Rooms Drain -${String.format(Locale.US, "%.1f", prod.totalVaultResourceDrainPerSec)}/s vs Gain +${String.format(Locale.US, "%.1f", prod.totalGrossResourceGainPerSec)}/s • Daily: -${prod.dailyFoodUpkeepPerDay.toInt()}F, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()}W, $autoRepairText, -${prod.dailyRoomFuelUpkeep.toInt()}Fuel$manualGateSuffix",
+                        text = "Outpost Lv.${state.commandLevel} + $builtRoomsCount Sectors Drain -${String.format(Locale.US, "%.1f", prod.totalVaultResourceDrainPerSec)}/s vs Gain +${String.format(Locale.US, "%.1f", prod.totalGrossResourceGainPerSec)}/s • Daily: -${prod.dailyFoodUpkeepPerDay.toInt()}F, -${(prod.dailyWaterUpkeepPerDay + prod.dailyRoomWaterUpkeep).toInt()}W, $autoRepairText, -${prod.dailyRoomFuelUpkeep.toInt()}Fuel$manualGateSuffix",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextPrimary
                     )
@@ -1127,16 +1127,16 @@ private fun VaultPowerAndDayControlCard(
                     )
                     val appetitePct = ((prod.dwellerUpkeepEscalationMultiplier - 1.0) * 100).roundToInt()
                     Text(
-                        text = "🍖 60S DWELLER FEEDING: ${state.dwellerFeedCycleSecondsRemaining}s left (-${prod.fiveMinDwellerFoodCost.roundToInt()} Food & -${prod.fiveMinDwellerWaterCost.roundToInt()} Water every 60s) • 2-Min Appetite Tier ${prod.dwellerUpkeepEscalationTier} (+$appetitePct% Drain)",
+                        text = "🍖 60S SURVIVOR FEEDING: ${state.dwellerFeedCycleSecondsRemaining}s left (-${prod.fiveMinDwellerFoodCost.roundToInt()} Food & -${prod.fiveMinDwellerWaterCost.roundToInt()} Water every 60s) • 2-Min Appetite Tier ${prod.dwellerUpkeepEscalationTier} (+$appetitePct% Drain)",
                         style = MaterialTheme.typography.labelSmall,
                         color = CryoCyan
                     )
                     if (state.dayCounter <= 10) {
                         Text(
                             text = if (prod.isEarlyBunkerGraceActive) {
-                                "🛡 EARLY BUNKER GRACE (DAYS 1-3): Resource Deficit Game Over paused while bootstrapping (<2 Rooms) & -45% Early Upkeep!"
+                                "🛡 EARLY OUTPOST GRACE (DAYS 1-3): Resource Deficit Game Over paused while bootstrapping (<2 Sectors) & -45% Early Upkeep!"
                             } else {
-                                "🛡 DAYS 1-10 EARLY SURVIVAL GRACE: -45% Early Room Upkeep & softer +8%/2m Dweller Appetite curve active!"
+                                "🛡 DAYS 1-10 EARLY SURVIVAL GRACE: -45% Early Sector Upkeep & softer +8%/2m Survivor Appetite curve active!"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = SurplusGreen,
@@ -1146,10 +1146,10 @@ private fun VaultPowerAndDayControlCard(
                 }
             }
 
-            // Vault Operational Posture Switcher (ECO_CONSERVATION / STANDARD / OVERCLOCK)
+            // Outpost Operational Posture Switcher (ECO_CONSERVATION / STANDARD / OVERCLOCK)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "VAULT OPERATIONAL POSTURE: ${activePosture.title.uppercase()} (Switch to ECO to cut -40% Upkeep & exit Resource Deficit!)",
+                    text = "OUTPOST OPERATIONAL POSTURE: ${activePosture.title.uppercase()} (Switch to ECO to cut -40% Upkeep & exit Resource Deficit!)",
                     style = MaterialTheme.typography.labelSmall,
                     color = activePosture.accentColor,
                     fontWeight = FontWeight.Bold
@@ -1410,13 +1410,13 @@ private fun VaultPowerGeneratorsSectionCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "VAULT POWER GENERATORS (REQUIRED FOR VAULT TO RUN)",
+                        text = "OUTPOST POWER GENERATORS (REQUIRED FOR OUTPOST TO RUN)",
                         style = MaterialTheme.typography.titleSmall,
                         color = CryoCyan,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Every Vault room and powered turret requires MW. Build generators here to prevent blackouts!",
+                        text = "Every Outpost sector and powered turret requires MW. Build generators here to prevent blackouts!",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -1689,7 +1689,7 @@ private fun WastelandSalvageFieldDeck(
 
             val isCappedBySmeltery = state.salvageRigLevel >= prod.maxPickaxeLevelAllowed
             Text(
-                text = "Pickaxe Tier Cap: Lv.${state.salvageRigLevel}/${prod.maxPickaxeLevelAllowed} (Build/Upgrade Vault Ore & Gold Smeltery for +2 Max Pickaxe Lv)",
+                text = "Pickaxe Tier Cap: Lv.${state.salvageRigLevel}/${prod.maxPickaxeLevelAllowed} (Build/Upgrade Outpost Ore & Gold Smeltery for +2 Max Pickaxe Lv)",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (isCappedBySmeltery) WarningOrange else RadTeal
             )
@@ -1903,7 +1903,7 @@ private fun SalvageProcessingBenchCard(
                     )
                     Text(
                         text = if (scrapperCount > 0) {
-                            "Each Ore Crate yields +10+ Gold, Scrap, Water, Food, Fuel & Tech. Assigned Vault Miners ($scrapperCount) also auto-process!"
+                            "Each Ore Crate yields +10+ Gold, Scrap, Water, Food, Fuel & Tech. Assigned Outpost Miners ($scrapperCount) also auto-process!"
                         } else {
                             "Crack open Mined Ore Crates or smelt resources below for Gold to hire Survivors!"
                         },
@@ -2135,7 +2135,7 @@ private fun BuildingStructureCard(
                         )
                         if (cost.exceedsCurrentStorageCap) {
                             Text(
-                                text = "📦 STORAGE CAP GATED: Upgrade other rooms or Vault Store Room to raise Resource Cap for this Lv.${level + 1} upgrade!",
+                                text = "📦 STORAGE CAP GATED: Upgrade other sectors or Outpost Supply Depot to raise Resource Cap for this Lv.${level + 1} upgrade!",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SolarAmber,
                                 fontWeight = FontWeight.Bold
@@ -2171,7 +2171,7 @@ private fun BuildingStructureCard(
 
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = "Pickaxe & Vault Bonus: ${type.manualSalvageBonusDesc}",
+                    text = "Pickaxe & Outpost Bonus: ${type.manualSalvageBonusDesc}",
                     style = MaterialTheme.typography.labelSmall,
                     color = XpGold
                 )
@@ -2190,7 +2190,7 @@ private fun BuildingStructureCard(
 
                 if (cost.willExceedPowerGrid) {
                     Text(
-                        text = "⚡ HIGH-LEVEL POWER WARNING: +${cost.additionalMegawattDraw} MW draw will exceed current Vault Power Grid! Build/upgrade a Power Generator.",
+                        text = "⚡ HIGH-LEVEL POWER WARNING: +${cost.additionalMegawattDraw} MW draw will exceed current Outpost Power Grid! Build/upgrade a Power Generator.",
                         style = MaterialTheme.typography.labelSmall,
                         color = WarningOrange,
                         fontWeight = FontWeight.Bold
@@ -2203,12 +2203,12 @@ private fun BuildingStructureCard(
                     val nextSpeedPct = (OutpostCalculator.computeRoomLevelOutputMultiplier(level + 1) * 100).roundToInt()
                     val speedNote = when {
                         level <= 0 -> "Lv.0 Worst Makeshift State ($speedPct% Speed -> $nextSpeedPct% at Lv.1; +18% each level!)"
-                        level <= 3 -> "Gradual Room Scaling ($speedPct% Speed -> $nextSpeedPct% at Lv.${level + 1}; +18% better each level!)"
+                        level <= 3 -> "Gradual Sector Scaling ($speedPct% Speed -> $nextSpeedPct% at Lv.${level + 1}; +18% better each level!)"
                         else -> "High-Level Overdrive ($speedPct% Speed -> $nextSpeedPct% at Lv.${level + 1})"
                     }
                     if (isVaultBlackout && level > 0 && type != BuildingType.BIO_SLUDGE_REFINERY) {
                         Text(
-                            text = "VAULT POWER BLACKOUT — Room Offline (0.0/s) until Power MW is restored!",
+                            text = "OUTPOST POWER BLACKOUT — Sector Offline (0.0/s) until Power MW is restored!",
                             style = MaterialTheme.typography.labelSmall,
                             color = HazardRed,
                             fontWeight = FontWeight.Bold
@@ -2365,7 +2365,7 @@ private fun BuildingStructureCard(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Think before you upgrade! Ensure your Vault resources and power grid can cover ongoing operating costs:",
+                        text = "Think before you upgrade! Ensure your Outpost resources and power grid can cover ongoing operating costs:",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextPrimary
                     )
@@ -2485,7 +2485,7 @@ fun SubterraneanDeepCoreDrillingCard(
                     )
                     Column {
                         Text(
-                            text = "SUBTERRANEAN DEEP-CORE BOREHOLE & RELIC VAULTS",
+                            text = "SUBTERRANEAN DEEP-CORE BOREHOLE & RELIC CHAMBERS",
                             style = MaterialTheme.typography.titleSmall,
                             color = accent,
                             fontWeight = FontWeight.ExtraBold

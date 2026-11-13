@@ -24,7 +24,7 @@ import com.example.model.ActiveBuildingConstruction
 object VaultNotificationHelper {
 
     const val CHANNEL_ID = "vault_city_offline_alerts"
-    const val CHANNEL_NAME = "Vault City Offline Alerts"
+    const val CHANNEL_NAME = "Ares Outpost Offline Alerts"
 
     const val ACTION_NOTIFY_ROOM_DONE = "com.example.notifications.ACTION_NOTIFY_ROOM_DONE"
     const val ACTION_NOTIFY_RESOURCES_MAX = "com.example.notifications.ACTION_NOTIFY_RESOURCES_MAX"
@@ -48,7 +48,7 @@ object VaultNotificationHelper {
                     CHANNEL_NAME,
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Alerts when Vault resources reach max capacity, power runs out, or a room finishes upgrading while Vault City is closed."
+                    description = "Alerts when Outpost resources reach max capacity, power runs out, or a sector finishes upgrading while Ares Outpost is closed."
                     enableVibration(true)
                 }
                 manager.createNotificationChannel(channel)
@@ -121,8 +121,8 @@ object VaultNotificationHelper {
         postVaultAlertNotification(
             context = context,
             notificationId = NOTIF_ID_ROOM_DONE,
-            title = "Vault Room Upgrade Complete!",
-            message = "$roomName has finished upgrading to Lv.$targetLevel! Open Vault City to inspect your new efficiency."
+            title = "Outpost Sector Upgrade Complete!",
+            message = "$roomName has finished upgrading to Lv.$targetLevel! Open Ares Outpost to inspect your new efficiency."
         )
     }
 
@@ -134,8 +134,8 @@ object VaultNotificationHelper {
         postVaultAlertNotification(
             context = context,
             notificationId = NOTIF_ID_RESOURCES_MAX,
-            title = "Vault Resources at Max Capacity!",
-            message = "Stockpiles full ($resourceSummary • Cap $storageCap). Return to Vault City to spend resources or upgrade your Store Room!"
+            title = "Outpost Resources at Max Capacity!",
+            message = "Stockpiles full ($resourceSummary • Cap $storageCap). Return to Ares Outpost to spend resources or upgrade your Logistics Depot!"
         )
     }
 
@@ -146,8 +146,8 @@ object VaultNotificationHelper {
         postVaultAlertNotification(
             context = context,
             notificationId = NOTIF_ID_POWER_OUT,
-            title = "CRITICAL ALERT: Vault Out of Power!",
-            message = "$reasonSummary Automated rooms & turrets are offline—return to crank the Emergency Dynamo or refuel reactors!"
+            title = "CRITICAL ALERT: Outpost Out of Power!",
+            message = "$reasonSummary Automated sectors & turrets are offline—return to crank the Emergency Dynamo or refuel reactors!"
         )
     }
 
@@ -188,8 +188,8 @@ object VaultNotificationHelper {
                 action = ACTION_NOTIFY_ROOM_DONE,
                 requestCode = NOTIF_ID_ROOM_DONE,
                 notificationId = NOTIF_ID_ROOM_DONE,
-                title = "Vault Room Upgrade Complete!",
-                message = "${schedule.upgradingRoomTitle} finished upgrading to Lv.${schedule.upgradingRoomTargetLevel}! Return to Vault City."
+                title = "Outpost Sector Upgrade Complete!",
+                message = "${schedule.upgradingRoomTitle} finished upgrading to Lv.${schedule.upgradingRoomTargetLevel}! Return to Ares Outpost."
             )
             alarmManager.set(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
@@ -204,8 +204,8 @@ object VaultNotificationHelper {
                 action = ACTION_NOTIFY_RESOURCES_MAX,
                 requestCode = NOTIF_ID_RESOURCES_MAX,
                 notificationId = NOTIF_ID_RESOURCES_MAX,
-                title = "Vault Resources at Max Capacity!",
-                message = "${schedule.maxResourceSummary} reached maximum storage! Spend resources or upgrade your Vault Store Room."
+                title = "Outpost Resources at Max Capacity!",
+                message = "${schedule.maxResourceSummary} reached maximum storage! Spend resources or upgrade your Outpost Depot."
             )
             alarmManager.set(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
@@ -220,8 +220,8 @@ object VaultNotificationHelper {
                 action = ACTION_NOTIFY_POWER_OUT,
                 requestCode = NOTIF_ID_POWER_OUT,
                 notificationId = NOTIF_ID_POWER_OUT,
-                title = "CRITICAL ALERT: Vault Out of Power!",
-                message = "${schedule.powerOutageReasonSummary} Return to Vault City to crank the Emergency Dynamo or refuel reactors!"
+                title = "CRITICAL ALERT: Outpost Out of Power!",
+                message = "${schedule.powerOutageReasonSummary} Return to Ares Outpost to crank the Emergency Dynamo or refuel reactors!"
             )
             alarmManager.set(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,

@@ -171,13 +171,13 @@ fun SurvivorsTabScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "ARES OUTPOST ASTRONAUT CENSUS & SOL UPKEEP",
+                                    text = "ARES OUTPOST SURVIVOR CENSUS & DAILY UPKEEP",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = SolarAmber,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Active Astronauts: ${state.totalSurvivors} / ${prod.maxWorkerCapacity} Hab Cap (15 Max Colony Cap) • Assigned: ${prod.totalAssignedWorkers} • Injured: ${state.injuredDwellersCount} • Lost: ${state.totalDwellersLost}",
+                                    text = "Active Survivors: ${state.totalSurvivors} / ${prod.maxWorkerCapacity} Bunk Cap (15 Max Outpost Cap) • Assigned: ${prod.totalAssignedWorkers} • Injured: ${state.injuredDwellersCount} • Lost: ${state.totalDwellersLost}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold
@@ -185,7 +185,7 @@ fun SurvivorsTabScreen(
                                 Text(
                                     text = String.format(
                                         Locale.US,
-                                        "Each New Sol Consumption: -%.0f Bio-Rations & -%.0f Water (-2 Bio-Rations & -2 Water per Astronaut each Sol!)",
+                                        "Each New Day Consumption: -%.0f Rations & -%.0f Water (-2 Rations & -2 Water per Survivor each Day!)",
                                         prod.dailyFoodUpkeepPerDay,
                                         prod.dailyWaterUpkeepPerDay
                                     ),
@@ -193,27 +193,27 @@ fun SurvivorsTabScreen(
                                     color = if (prod.citizenMoralePercent >= 100) SurplusGreen else WarningOrange
                                 )
                                 Text(
-                                    text = "★ Mission Commanders (${CaravanCandidateGenerator.UNIQUE_DWELLER_CHANCE_PERCENT}% Rare Chance): ${state.uniqueDwellersCount} (+${state.uniqueDwellersCount * 40}% All-Resource Output)",
+                                    text = "★ Specialist Leaders (${CaravanCandidateGenerator.UNIQUE_DWELLER_CHANCE_PERCENT}% Rare Chance): ${state.uniqueDwellersCount} (+${state.uniqueDwellersCount * 40}% All-Resource Output)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = BioluminescentViolet,
                                     fontWeight = FontWeight.Bold
                                 )
                                 if (state.totalSurvivors == 0) {
                                     Text(
-                                        text = "You landed ALONE in an unpressurized Mars Lava-Tube (0 Astronauts)! Pressurize Bay #1 (Astronaut Crew Quarters) in the Mine & Build tab, drill Gold Ore with your Laser Drill, and recruit Specialists below or fire the Orbital Drop Beacon.",
+                                        text = "You arrived ALONE at the fortified perimeter of Ares Outpost (0 Survivors)! Build Sector #1 (Survivor Bunkhouse) in Quarry & Base, mine Gold Ore in the quarry, and recruit Survivors below or fire the Rescue Beacon.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = XpGold
                                     )
                                 } else if (state.totalSurvivors >= OutpostCalculator.MAX_VAULT_DWELLERS) {
                                     Text(
-                                        text = "Maximum Mars Colony Astronaut limit reached (${state.totalSurvivors}/${OutpostCalculator.MAX_VAULT_DWELLERS} Max Colony Cap)!",
+                                        text = "Maximum Ares Outpost Survivor limit reached (${state.totalSurvivors}/${OutpostCalculator.MAX_VAULT_DWELLERS} Max Outpost Cap)!",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = SolarAmber,
                                         fontWeight = FontWeight.Bold
                                     )
                                 } else if (!hasHousingSpace) {
                                     Text(
-                                        text = "Astronaut Crew Quarters full (${state.totalSurvivors}/${prod.maxWorkerCapacity} • ${OutpostCalculator.MAX_VAULT_DWELLERS} Max Colony Cap)! Upgrade Crew Quarters in Mine & Build to house more Specialists.",
+                                        text = "Survivor Bunkhouse full (${state.totalSurvivors}/${prod.maxWorkerCapacity} • ${OutpostCalculator.MAX_VAULT_DWELLERS} Max Outpost Cap)! Upgrade Bunkhouse in Quarry & Base to house more Survivors.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = HazardRed
                                     )
@@ -366,13 +366,13 @@ fun SurvivorsTabScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
                                         Text(
-                                            text = "Vault Auto-Shift Protocol",
+                                            text = "Outpost Auto-Shift Protocol",
                                             style = MaterialTheme.typography.titleSmall,
                                             color = TextPrimary,
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = "Automatically rotates Dwellers between Day Mining & Night Recon shifts.",
+                                            text = "Automatically rotates Survivors between Day Mining & Night Recon shifts.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = TextSecondary
                                         )
@@ -429,13 +429,13 @@ fun SurvivorsTabScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "HIRE SURVIVORS WITH GOLD (8% RARE UNIQUE DWELLER CHANCE)",
+                                text = "HIRE SURVIVORS WITH GOLD (8% RARE UNIQUE SURVIVOR CHANCE)",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = XpGold,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Hire wasteland survivors with Gold! Rare 8% chance to gain a Unique Vault Dweller with +40% higher resource-gathering ability across the Vault.",
+                                text = "Hire wasteland survivors with Gold! Rare 8% chance to gain a Unique Specialist Survivor with +40% higher resource-gathering ability across the Outpost.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
@@ -657,13 +657,13 @@ private fun DwellerExpeditionsCard(
                     )
                     Column {
                         Text(
-                            text = "WASTELAND DWELLER EXPEDITIONS ($sampleRisk% EFFECTIVE RISK)",
+                            text = "SURFACE SURVIVOR EXPEDITIONS ($sampleRisk% EFFECTIVE RISK)",
                             style = MaterialTheme.typography.titleSmall,
                             color = WarningOrange,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Send a Dweller on expeditions to scavenge Dweller Armor (+12 DEF) & Weapons (+15 DEF) for permanent extra Outpost Defense!",
+                            text = "Send a Survivor on surface expeditions to scavenge Survivor Armor (+12 DEF) & Weapons (+15 DEF) for permanent extra Outpost Defense!",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -692,7 +692,7 @@ private fun DwellerExpeditionsCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "🛡 Dweller Armor: ${state.dwellerArmorCount} (+${state.dwellerArmorCount * OutpostCalculator.DWELLER_ARMOR_DEFENSE_BONUS} DEF) • 🔫 Dweller Weapons: ${state.dwellerWeaponsCount} (+${state.dwellerWeaponsCount * OutpostCalculator.DWELLER_WEAPON_DEFENSE_BONUS} DEF) • Total Extra DEF: +$totalGearDefBonus",
+                    text = "🛡 Survivor Armor: ${state.dwellerArmorCount} (+${state.dwellerArmorCount * OutpostCalculator.DWELLER_ARMOR_DEFENSE_BONUS} DEF) • 🔫 Survivor Weapons: ${state.dwellerWeaponsCount} (+${state.dwellerWeaponsCount * OutpostCalculator.DWELLER_WEAPON_DEFENSE_BONUS} DEF) • Total Extra DEF: +$totalGearDefBonus",
                     style = MaterialTheme.typography.labelSmall,
                     color = RadTeal,
                     fontWeight = FontWeight.Bold,
@@ -827,7 +827,7 @@ private fun DwellerExpeditionsCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (totalSurvivors == 0) "NEED DWELLER" else "SEND ($effectiveDeathRisk% RISK)",
+                                text = if (totalSurvivors == 0) "NEED SURVIVOR" else "SEND ($effectiveDeathRisk% RISK)",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
                             )

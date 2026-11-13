@@ -114,20 +114,20 @@ fun Vault3dHologramMapCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Layers,
-                            contentDescription = "3D Vault Map",
+                            contentDescription = "3D Outpost Map",
                             tint = CryoCyan,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "3D ISOMETRIC VAULT MAP & ROOM LEVELS",
+                            text = "3D ISOMETRIC OUTPOST MAP & SECTOR LEVELS",
                             style = MaterialTheme.typography.titleSmall,
                             color = CryoCyan,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     Text(
-                        text = "3D subterranean blueprint showing where every Vault room is located (Floors B1–B6), built status & live room levels.",
+                        text = "3D fortified outpost blueprint showing where every Outpost facility is located (Sectors S1–S6), built status & live sector levels.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -243,7 +243,7 @@ fun Vault3dHologramMapCard(
 
             // Interactive 3D Floor & Room Selector Grid (Tap any room to inspect its 3D location, level & upgrade)
             Text(
-                text = "TAP ANY VAULT ROOM BELOW TO INSPECT IN 3D & UPGRADE:",
+                text = "TAP ANY OUTPOST SECTOR BELOW TO INSPECT IN 3D & UPGRADE:",
                 style = MaterialTheme.typography.labelSmall,
                 color = SolarAmber,
                 fontWeight = FontWeight.Bold
@@ -281,7 +281,7 @@ fun Vault3dHologramMapCard(
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = if (floorIdx == 0) "SURF" else "B$floorIdx",
+                                    text = if (floorIdx == 0) "SURF" else "S$floorIdx",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (inspectedStation.floorIndex == floorIdx) CryoCyan else TextSecondary,
                                     fontWeight = FontWeight.Bold
@@ -395,7 +395,7 @@ fun Vault3dHologramMapCard(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val wingLabel = if (inspectedStation.wingColumn == 0) "Left Wing" else "Right Wing"
-                    val floorLabel = if (inspectedStation.floorIndex == 0) "Surface Level (0m)" else "Floor B${inspectedStation.floorIndex} (-${inspectedStation.floorIndex * 30}m)"
+                    val floorLabel = if (inspectedStation.floorIndex == 0) "Surface Perimeter (0m)" else "Sector S${inspectedStation.floorIndex}"
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -453,13 +453,13 @@ fun Vault3dHologramMapCard(
                             .testTag("vault_3d_upgrade_selected_button")
                     ) {
                         val btnLabel = when (inspectedStation) {
-                            VaultMapStation.SURFACE_MINE_SHAFT -> "⛏ MINE ORE AT SURFACE SHAFT (+SCRAP & +GOLD)"
-                            VaultMapStation.UNDERGROUND_FISHING_SUMP -> "🎣 FISH AT SUB-VAULT SUMP (+FOOD & +WATER)"
+                            VaultMapStation.SURFACE_MINE_SHAFT -> "⛏ MINE ORE AT SURFACE QUARRY (+SCRAP & +GOLD)"
+                            VaultMapStation.UNDERGROUND_FISHING_SUMP -> "🎣 HARVEST AT SUB-GLACIAL SUMP (+FOOD & +WATER)"
                             else -> {
                                 val sCost = selCost?.scrapCost?.toInt() ?: 0
                                 val bTime = selCost?.buildTimeSeconds ?: 10
                                 if (selLevel <= 0) {
-                                    "🔨 BUILD ${inspectedStation.shortTitle.uppercase()} IN 3D VAULT (${sCost} Scrap • ${bTime}s)"
+                                    "🔨 BUILD ${inspectedStation.shortTitle.uppercase()} IN OUTPOST (${sCost} Scrap • ${bTime}s)"
                                 } else {
                                     "⬆ UPGRADE ${inspectedStation.shortTitle.uppercase()} TO LV.${selLevel + 1} (${sCost} Scrap • ${bTime}s)"
                                 }
@@ -550,7 +550,7 @@ private fun Vault3dStationButton(
                     bType == null -> "Surface / Sump Station"
                     level <= 0 -> "Unbuilt • Tap to Construct"
                     bType == BuildingType.VAULT_STORE_ROOM -> "Built • +${OutpostCalculator.computeStoreRoomStorageBonus(level).toInt()} Cap"
-                    else -> "Built • Floor B${station.floorIndex} Online"
+                    else -> "Built • Sector S${station.floorIndex} Online"
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = if (isBuilt) station.accentColor else TextSecondary,
@@ -644,7 +644,7 @@ private fun DrawScope.draw3dVaultBunkerScene(
             size = Size(centerShaftWidth - 8f, boxHeight)
         )
         drawContext.canvas.nativeCanvas.drawText(
-            if (floorIdx == 0) "SRF" else "B$floorIdx",
+            if (floorIdx == 0) "SRF" else "S$floorIdx",
             centerShaftLeft + 8f,
             rowY + boxHeight * 0.62f,
             badgePaint.apply {

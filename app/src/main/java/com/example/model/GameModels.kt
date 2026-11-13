@@ -1061,16 +1061,16 @@ enum class BuildingType(
 ) {
     SURVIVOR_HAB_BLOCK(
         id = "SURVIVOR_HAB_BLOCK",
-        displayName = "Pressurized Astronaut Hab",
+        displayName = "Fortified Survivor Bunkhouse",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 1,
-        description = "Radiation-shielded pressurized quarters required to house Astronauts (+4 Crew per bay level, up to 30 Max Astronauts). Each upgrade merges lava-tube bays and expands Depot Storage.",
-        gameplayNeedSummary = "REQUIRED TO RECRUIT ASTRONAUTS: +4 Max Crew/Lv (Up to 30 Max Crew), +Storage Cap/Lv & -4% Ration Upkeep/Lv",
+        description = "Reinforced surface outpost quarters required to house Survivors (+4 Crew per bay level, up to 30 Max Survivors). Each upgrade merges outpost bays and expands Depot Storage.",
+        gameplayNeedSummary = "REQUIRED TO RECRUIT SURVIVORS: +4 Max Crew/Lv (Up to 30 Max Crew), +Storage Cap/Lv & -4% Ration Upkeep/Lv",
         primaryResource = ResourceType.RATIONS,
         baseOutputPerLevel = 0.35,
         megawattDemandPerLevel = 3.5,
         baseBuildTimeSeconds = 12,
-        manualSalvageBonusDesc = "+4 Max Astronaut Capacity (Max 30), +Storage Cap & +5% Crew Morale per level",
+        manualSalvageBonusDesc = "+4 Max Survivor Capacity (Max 30), +Storage Cap & +5% Crew Morale per level",
         baseScrapCost = 42.0,
         baseWaterCost = 18.0,
         favoredWorkerClass = null,
@@ -1209,16 +1209,16 @@ enum class BuildingType(
     ),
     CRYO_STASIS_VAULT(
         id = "CRYO_STASIS_VAULT",
-        displayName = "Martian Permafrost Cryo-Vault",
+        displayName = "Sub-Zero Ration & Seed Silo",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 4,
-        description = "Sub-zero lava-tube preservation vaults on Deck L5 that cut Astronaut 60s & Sol Food/Water appetite by -8%/Lv and add +400 Cryo Storage/Lv.",
-        gameplayNeedSummary = "CUTS ASTRONAUT CONSUMPTION (LAVA TUBE L5): -8% Crew 60s & Sol Food/Water Drain/Lv & +400 Cryo Storage/Lv",
+        description = "Sub-zero preservation silos in Sector S5 that cut Survivor 60s & daily Food/Water appetite by -8%/Lv and add +400 Cold Storage/Lv.",
+        gameplayNeedSummary = "CUTS SURVIVOR CONSUMPTION (SECTOR S5): -8% Crew 60s & Daily Food/Water Drain/Lv & +400 Storage/Lv",
         primaryResource = ResourceType.RATIONS,
         baseOutputPerLevel = 1.00,
         megawattDemandPerLevel = 5.0,
         baseBuildTimeSeconds = 42,
-        manualSalvageBonusDesc = "-8% Astronaut Food/Water Consumption & +400 Outpost Storage per level",
+        manualSalvageBonusDesc = "-8% Survivor Food/Water Consumption & +400 Outpost Storage per level",
         baseScrapCost = 200.0,
         baseWaterCost = 55.0,
         baseFuelCost = 38.0,
@@ -1227,7 +1227,7 @@ enum class BuildingType(
     ),
     VAULT_STORE_ROOM(
         id = "VAULT_STORE_ROOM",
-        displayName = "Lava-Tube Logistics Depot",
+        displayName = "Fortified Outpost Logistics Depot",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 1,
         description = "Pressurized basalt lava-tube cargo cavern with automated racking required to raise resource caps for higher-level habitat bay expansions.",
@@ -1276,8 +1276,8 @@ enum class SkillBranch(val displayName: String, val tagline: String, val accentC
         accentColor = BioluminescentViolet
     ),
     OVERSEER_LEGACY(
-        displayName = "Overseer Legacy (Prestige)",
-        tagline = "Permanent Prestige Core upgrades that persist across all Vault Ascensions!",
+        displayName = "Commander Legacy (Prestige)",
+        tagline = "Permanent Prestige Core upgrades that persist across all Outpost Ascensions!",
         accentColor = XpGold
     )
 }
@@ -1365,7 +1365,7 @@ object SkillTreeCatalog {
             baseResearchCost = 280.0,
             baseGoldCost = 180.0,
             baseCoresCost = 5.0,
-            effectSummaryPerRank = "+30% global resource output & +25% Vault capacity per rank"
+            effectSummaryPerRank = "+30% global resource output & +25% Outpost storage capacity per rank"
         ),
 
         // Branch 2: Trade, Convoys & Crew
@@ -1505,13 +1505,13 @@ object SkillTreeCatalog {
             effectSummaryPerRank = "+35% all-phase output & +40% Power Grid Overclock multiplier"
         ),
 
-        // Branch 4: Overseer Legacy (Permanent Prestige Branch)
+        // Branch 4: Commander Legacy (Permanent Prestige Branch)
         SkillNodeDefinition(
             id = "LEG_CRYO_AWAKENING",
             branch = SkillBranch.OVERSEER_LEGACY,
             tier = 1,
-            title = "Cryo-Supply Awakening Protocol",
-            description = "Permanent Prestige Legacy: Start every new ascended Vault with bonus Scrap, Food, Water & Bio-Fuel and boost all production.",
+            title = "Supply Cache Awakening Protocol",
+            description = "Permanent Prestige Legacy: Start every new ascended Outpost with bonus Scrap, Food, Water & Bio-Fuel and boost all production.",
             maxRank = 5,
             prerequisiteId = null,
             skillPointCostPerRank = 0,
@@ -1524,39 +1524,39 @@ object SkillTreeCatalog {
             branch = SkillBranch.OVERSEER_LEGACY,
             tier = 2,
             title = "Nano-Fabrication Schematics",
-            description = "Permanent Prestige Legacy: High-speed robotic welding reduces Room Construction & Armory Item Crafting timers.",
+            description = "Permanent Prestige Legacy: High-speed robotic welding reduces Sector Construction & Armory Item Crafting timers.",
             maxRank = 5,
             prerequisiteId = "LEG_CRYO_AWAKENING",
             skillPointCostPerRank = 0,
             baseResearchCost = 0.0,
             prestigeCoreCostPerRank = 1,
-            effectSummaryPerRank = "-12% Room Build Time & -12% Item Crafting Time per rank"
+            effectSummaryPerRank = "-12% Sector Build Time & -12% Item Crafting Time per rank"
         ),
         SkillNodeDefinition(
             id = "LEG_HYDRO_RECYCLING",
             branch = SkillBranch.OVERSEER_LEGACY,
             tier = 3,
-            title = "Genetic Vault Lineage & Ration Loop",
-            description = "Permanent Prestige Legacy: Lowers Daily Worker Food & Water Upkeep and increases Rare Unique Vault Dweller recruitment rate.",
+            title = "Outpost Lineage & Ration Loop",
+            description = "Permanent Prestige Legacy: Lowers Daily Survivor Food & Water Upkeep and increases Rare Specialist Survivor recruitment rate.",
             maxRank = 5,
             prerequisiteId = "LEG_NANO_SCHEMATICS",
             skillPointCostPerRank = 0,
             baseResearchCost = 0.0,
             prestigeCoreCostPerRank = 2,
-            effectSummaryPerRank = "-10% Daily Worker Food/Water Upkeep & +3% Unique Dweller Chance per rank"
+            effectSummaryPerRank = "-10% Daily Survivor Food/Water Upkeep & +3% Unique Specialist Chance per rank"
         ),
         SkillNodeDefinition(
             id = "LEG_FUSION_OVERCLOCK",
             branch = SkillBranch.OVERSEER_LEGACY,
             tier = 4,
-            title = "Overseer Auxiliary Fusion Core",
-            description = "Permanent Prestige Legacy: Provides permanent auxiliary Vault Megawatts (MW) and amplifies Automated Turret & Blast Door Defense.",
+            title = "Commander Auxiliary Fusion Core",
+            description = "Permanent Prestige Legacy: Provides permanent auxiliary Outpost Megawatts (MW) and amplifies Automated Turret & Perimeter Gate Defense.",
             maxRank = 5,
             prerequisiteId = "LEG_HYDRO_RECYCLING",
             skillPointCostPerRank = 0,
             baseResearchCost = 0.0,
             prestigeCoreCostPerRank = 2,
-            effectSummaryPerRank = "+10 Base Vault MW & +25% Total Defense Rating per rank"
+            effectSummaryPerRank = "+10 Base Outpost MW & +25% Total Defense Rating per rank"
         )
     )
 }
@@ -1587,7 +1587,7 @@ enum class VaultMapStation(
     ),
     ROOM_1_QUARTERS(
         id = "ROOM_1_QUARTERS",
-        shortTitle = "#1 Astronaut Hab",
+        shortTitle = "#1 Survivor Bunkhouse",
         floorIndex = 1,
         wingColumn = 0,
         buildingType = BuildingType.SURVIVOR_HAB_BLOCK,
@@ -1619,7 +1619,7 @@ enum class VaultMapStation(
     ),
     ROOM_5_MEDBAY_AIRLOCK(
         id = "ROOM_5_MEDBAY_AIRLOCK",
-        shortTitle = "#5 MOXIE O2 & Medbay",
+        shortTitle = "#5 O2 Scrubber & Medbay",
         floorIndex = 3,
         wingColumn = 0,
         buildingType = BuildingType.REINFORCED_SILO,
@@ -1635,7 +1635,7 @@ enum class VaultMapStation(
     ),
     ROOM_7_RADAR_ARRAY(
         id = "ROOM_7_RADAR_ARRAY",
-        shortTitle = "#7 Deep-Space Telemetry",
+        shortTitle = "#7 Outpost Radar Array",
         floorIndex = 4,
         wingColumn = 0,
         buildingType = BuildingType.SIGNAL_RESEARCH_ARRAY,
@@ -1643,7 +1643,7 @@ enum class VaultMapStation(
     ),
     ROOM_8_MUTAGEN_LAB(
         id = "ROOM_8_MUTAGEN_LAB",
-        shortTitle = "#8 Astrobiology Lab",
+        shortTitle = "#8 Xenobiology Lab",
         floorIndex = 4,
         wingColumn = 1,
         buildingType = BuildingType.NOCTURNAL_EXTRACTION_RIG,
@@ -1651,7 +1651,7 @@ enum class VaultMapStation(
     ),
     ROOM_9_GEOTHERMAL(
         id = "ROOM_9_GEOTHERMAL",
-        shortTitle = "#9 Areothermal Vent",
+        shortTitle = "#9 Geothermal Tap",
         floorIndex = 5,
         wingColumn = 0,
         buildingType = BuildingType.GEOTHERMAL_TAP,
@@ -1659,7 +1659,7 @@ enum class VaultMapStation(
     ),
     ROOM_10_CRYO_VAULT(
         id = "ROOM_10_CRYO_VAULT",
-        shortTitle = "#10 Cryo Seed Vault",
+        shortTitle = "#10 Sub-Zero Ration Silo",
         floorIndex = 5,
         wingColumn = 1,
         buildingType = BuildingType.CRYO_STASIS_VAULT,
@@ -1667,7 +1667,7 @@ enum class VaultMapStation(
     ),
     ROOM_11_STORE_ROOM(
         id = "ROOM_11_STORE_ROOM",
-        shortTitle = "#11 Cargo Hold Depot",
+        shortTitle = "#11 Outpost Depot",
         floorIndex = 6,
         wingColumn = 0,
         buildingType = BuildingType.VAULT_STORE_ROOM,
@@ -2156,7 +2156,7 @@ enum class VaultTechEra(
         eraNumber = 3,
         title = "Era III: Tharsis Areothermal Colony",
         shortBadge = "ERA III • AREOTHERMAL",
-        milestoneSummary = "Tap Level B5 Areothermal Vents & Seed Vaults, drill past 300m Crustal Bosses, and survive Aphelion Freeze.",
+        milestoneSummary = "Tap Sector S5 Geothermal Vents & Ration Silos, drill past 300m Crustal Bosses, and survive Aphelion Freeze.",
         accentColor = RadTeal
     ),
     ERA_4_ATOMIC_AUTOMATION(
@@ -2265,17 +2265,17 @@ val BuildingType.primarySpecialStat: SpecialStat
 
 val BuildingType.falloutRoomTitle: String
     get() = when (this) {
-        BuildingType.SURVIVOR_HAB_BLOCK -> "Astronaut Crew Quarters (C)"
+        BuildingType.SURVIVOR_HAB_BLOCK -> "Survivor Bunkhouse (C)"
         BuildingType.SALVAGE_YARD -> "Regolith Sintering Foundry (S)"
         BuildingType.ATMOSPHERIC_CONDENSER -> "Glacial Ice Melter (P)"
         BuildingType.HYDROPONIC_GREENHOUSE -> "Aeroponic Bio-Dome (A)"
-        BuildingType.REINFORCED_SILO -> "MOXIE O2 & Medbay (I)"
+        BuildingType.REINFORCED_SILO -> "O2 Scrubber & Medbay (I)"
         BuildingType.BIO_SLUDGE_REFINERY -> "Sabatier Methane Plant (E)"
-        BuildingType.SIGNAL_RESEARCH_ARRAY -> "Deep-Space Telemetry Dish (C)"
-        BuildingType.NOCTURNAL_EXTRACTION_RIG -> "Astrobiology Core Lab (I)"
-        BuildingType.GEOTHERMAL_TAP -> "Areothermal Magma Vent (S)"
-        BuildingType.CRYO_STASIS_VAULT -> "Cryo-Seed & Ration Vault (E)"
-        BuildingType.VAULT_STORE_ROOM -> "Pressurized Cargo Hold (E)"
+        BuildingType.SIGNAL_RESEARCH_ARRAY -> "Outpost Radar Array (C)"
+        BuildingType.NOCTURNAL_EXTRACTION_RIG -> "Xenobiology Core Lab (I)"
+        BuildingType.GEOTHERMAL_TAP -> "Geothermal Magma Tap (S)"
+        BuildingType.CRYO_STASIS_VAULT -> "Sub-Zero Ration Silo (E)"
+        BuildingType.VAULT_STORE_ROOM -> "Fortified Outpost Depot (E)"
     }
 
 val WorkerClassType.primarySpecialStat: SpecialStat

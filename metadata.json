@@ -1,6 +1,6 @@
 {
-  "name": "Vault City",
-  "description": "A Mars outpost and lava-tube colony survival RPG where you start on Sol 1 with a laser core cutter, manage solar/RTG megawatts, oxygen & glacial water ice, recruit astronaut specialists, launch Mars rover expeditions, survive planet-wide dust storms, and progress to Level 100.",
+  "name": "Ares Outpost",
+  "description": "A fortified surface outpost survival strategy RPG where you start on Day 1 with a laser core cutter, manage solar/RTG megawatts, water & rations, recruit specialist Survivors, launch surface recon expeditions, defend the Perimeter Gate against sieges, and progress to Commander Level 100.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
