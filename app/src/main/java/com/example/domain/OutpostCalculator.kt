@@ -22,9 +22,12 @@ import com.example.model.VaultDirectiveStatus
 import com.example.model.VaultOperationalPosture
 import com.example.model.VaultRationingPolicy
 import com.example.model.VaultTechEra
+import com.example.model.RoomMergeTier
 import com.example.model.WastelandExpeditionType
 import com.example.model.WastelandSeason
 import com.example.model.WorkerClassType
+import com.example.model.computeSpecialProfile
+import com.example.model.primarySpecialStat
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -2988,5 +2991,99 @@ object OutpostCalculator {
             )
         )
     }
+
+    /**
+     * Maps a Vault room's upgrade level to its Fallout Shelter 1x / 2x / 3x Room Merge tier.
+     */
+    fun computeRoomMergeTier(level: Int): RoomMergeTier {
+        return when {
+            level <= 0 -> RoomMergeTier.UNBUILT_0X
+            level == 1 -> RoomMergeTier.SINGLE_1X
+            level == 2 -> RoomMergeTier.DOUBLE_2X
+            else -> RoomMergeTier.TRIPLE_3X
+        }
+    }
+
+    /**
+     * Resolves the active Fallout Shelter room incident type when a room has an active incident/sabotage.
+     */
+    fun resolveActiveIncidentType(
+        sabotagedBuildingId: String,
+        dayCounter: Int = 1
+    ): com.example.model.VaultIncidentType? {
+        if (sabotagedBuildingId.isBlank()) return null
+        val index = kotlin.math.abs(sabotagedBuildingId.hashCode() + dayCounter) % com.example.model.VaultIncidentType.entries.size
+        return com.example.model.VaultIncidentType.entries[index]
+    }
+
+    /**
+     * Computes Fallout Shelter "RUSH ROOM" instant payout & incident risk percentage.
+     * Higher matching S.P.E.C.I.A.L. stats + Luck reduce incident risk and boost instant resource & Bottle Cap/Gold payout!
+     */
+    fun computeRushRoomPreview(
+        buildingType: BuildingType,
+        level: Int,
+        state: OutpostStateEntity,
+        workersMap: Map<String, WorkerClassEntity>,
+        consecutiveRushes: Int = 0
+    ): com.example.model.RushRoomPreview {
+        val mergeTier = computeRoomMergeTier(level)
+        val specialStat = buildingType.primarySpecialStat
+        val favoredWorker = buildingType.favoredWorkerClass
+        val workerEntity = favoredWorker?.let { workersMap[it.id] }
+        val assignedCount = workerEntity?.assignedCount ?: (if (state.totalSurvivors > 0) 1 else 0)
+        val workerLv = workerEntity?.classLevel ?: 1
+        val hasUnique = state.uniqueDwellersCount > 0
+
+        val profile = (favoredWorker ?: WorkerClassType.SCRAPPER).computeSpecialProfile(workerLv, hasUnique)
+        val statValue = profile.statFor(specialStat)
+        val luckValue = profile.luck
+        val effectiveSpecialScore = (statValue + assignedCount.coerceAtMost(4)).coerceIn(1, 14)
+
+        // Base Rush failure chance starts at 38%, lowered by matching SPECIAL & Luck, increased by consecutive rushes
+        val rawRisk = 42 - (effectiveSpecialScore * 2) - luckValue + (consecutiveRushes * 14) +
+            (if (state.dwellerStaminaPercent < 35) 10 else 0)
+        val clampedRisk = rawRisk.coerceIn(12, 78)
+
+        val mergeMult = 1.0 + (mergeTier.outputMergeBonusPercent / 100.0)
+        val specialMult = 1.0 + (effectiveSpecialScore * 0.06)
+        val baseAmount = (6.0 + level.coerceAtLeast(1) * 4.5) * mergeMult * specialMult
+        val roundedResource = ((baseAmount * 10.0).roundToInt() / 10.0).coerceAtLeast(4.0)
+        val capsGold = ((2.0 + level.coerceAtLeast(1) * 1.5 + luckValue * 0.4) * mergeMult * 10.0).roundToInt() / 10.0
+        val xpReward = (18.0 + level.coerceAtLeast(1) * 4.0)
+
+        val resLabel = when (buildingType) {
+            BuildingType.SALVAGE_YARD -> "Scrap"
+            BuildingType.ATMOSPHERIC_CONDENSER -> "Purified Water"
+            BuildingType.HYDROPONIC_GREENHOUSE, BuildingType.CRYO_STASIS_VAULT -> "Food Rations"
+            BuildingType.BIO_SLUDGE_REFINERY, BuildingType.GEOTHERMAL_TAP -> "Bio-Fuel"
+            BuildingType.SIGNAL_RESEARCH_ARRAY, BuildingType.NOCTURNAL_EXTRACTION_RIG -> "Research Data"
+            BuildingType.SURVIVOR_HAB_BLOCK, BuildingType.REINFORCED_SILO, BuildingType.VAULT_STORE_ROOM -> "Scrap & Supplies"
+        }
+
+        val isSabotaged = state.sabotagedBuildingId == buildingType.id
+        val canRush = level > 0 && !isSabotaged
+        val note = when {
+            level <= 0 -> "Repair room to Lv.1 first to unlock Fallout Shelter Room Rushing!"
+            isSabotaged -> "Incident active in this room! Extinguish/clear incident before rushing again."
+            else -> "⚡ Rush (${clampedRisk}% Risk): Instant +${roundedResource.toInt()} $resLabel, +${capsGold.toInt()} Gold Caps & +${xpReward.toInt()} XP (${specialStat.code}:$effectiveSpecialScore)"
+        }
+
+        return com.example.model.RushRoomPreview(
+            buildingType = buildingType,
+            roomLevel = level,
+            mergeTier = mergeTier,
+            primarySpecial = specialStat,
+            matchingSpecialScore = effectiveSpecialScore,
+            incidentRiskPercent = clampedRisk,
+            instantResourceAmount = roundedResource,
+            instantResourceLabel = resLabel,
+            bonusGoldCaps = capsGold,
+            xpReward = xpReward,
+            canRush = canRush,
+            statusNote = note
+        )
+    }
 }
+
 

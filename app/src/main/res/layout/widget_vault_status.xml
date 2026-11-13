@@ -31,7 +31,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="VAULT CITY v23.0 • DAY 1 • LV.1"
+                android:text="VAULT CITY v24.0 • DAY 1 • LV.1"
                 android:textColor="#FFD54F"
                 android:textSize="11sp"
                 android:textStyle="bold" />

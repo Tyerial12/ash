@@ -78,10 +78,14 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.example.model.FishingSpot
+import com.example.model.RoomMergeTier
+import com.example.model.RushRoomPreview
 import com.example.model.VaultCascadeStage
 import com.example.model.VaultMapStation
 import com.example.model.VaultOperationalPosture
 import com.example.model.VaultRationingPolicy
+import com.example.model.falloutRoomTitle
+import com.example.model.primarySpecialStat
 import com.example.ui.components.Vault3dHologramMapCard
 import com.example.ui.components.formatCompact
 import com.example.ui.theme.BioluminescentViolet
@@ -148,6 +152,7 @@ fun OutpostTabScreen(
     onMothballNonEssentialRooms: () -> Unit = {},
     onResumeAllMothballedRooms: () -> Unit = {},
     onClaimVaultDirective: () -> Unit = {},
+    onRushRoom: (BuildingType) -> Unit = {},
     initialSubViewName: String? = null,
     modifier: Modifier = Modifier
 ) {
@@ -355,37 +360,53 @@ fun OutpostTabScreen(
 
                 if (uiState.state.sabotagedBuildingId.isNotBlank()) {
                     item(key = "sabotaged_room_alert_card") {
+                        val activeIncident = OutpostCalculator.resolveActiveIncidentType(
+                            uiState.state.sabotagedBuildingId,
+                            uiState.state.dayCounter
+                        )
+                        val bType = BuildingType.entries.find { it.id == uiState.state.sabotagedBuildingId }
+                        val incidentColor = activeIncident?.accentColor ?: HazardRed
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("active_vault_incident_card"),
                             shape = RoundedCornerShape(12.dp),
-                            color = HazardRed.copy(alpha = 0.2f),
-                            border = BorderStroke(1.5.dp, HazardRed)
+                            color = incidentColor.copy(alpha = 0.2f),
+                            border = BorderStroke(1.5.dp, incidentColor)
                         ) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "⚠ FACILITY SABOTAGED: ${uiState.state.sabotagedBuildingId} (-${uiState.state.sabotagedBuildingPenaltyPercent}% Output)",
+                                    text = "${activeIncident?.title ?: "⚠ VAULT ROOM INCIDENT"}: ${bType?.falloutRoomTitle ?: uiState.state.sabotagedBuildingId} (-${uiState.state.sabotagedBuildingPenaltyPercent}% Output)",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = HazardRed
+                                    color = incidentColor
                                 )
                                 Text(
-                                    text = "Raider sappers bypassed the perimeter and crippled this facility! Repair immediately with Scrap to restore normal output.",
+                                    text = activeIncident?.emergencyPrompt
+                                        ?: "Emergency incident in progress! Clear immediately to restore 100% room output.",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
+                                    color = TextPrimary
                                 )
                                 Button(
                                     onClick = onRepairSabotagedBuilding,
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("resolve_vault_incident_button"),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = HazardRed,
+                                        containerColor = incidentColor,
                                         contentColor = Color.White
                                     )
                                 ) {
-                                    Text("REPAIR SABOTAGED ROOM (-25 SCRAP)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = activeIncident?.resolveButtonLabel ?: "🧯 EXTINGUISH & RESTORE ROOM (+25 XP)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
@@ -402,20 +423,20 @@ fun OutpostTabScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "REPAIR & UPGRADE VAULT ROOMS ($builtRoomsCount/${BuildingType.entries.size} REPAIRED)",
+                                text = "PRESSURIZE & UPGRADE MARS HABITAT BAYS ($builtRoomsCount/${BuildingType.entries.size} SEALED)",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = SolarAmber,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Dwellers: ${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity}",
+                                text = "Astronauts: ${uiState.state.totalSurvivors}/${uiState.production.maxWorkerCapacity}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (uiState.state.totalSurvivors == 0) WarningOrange else RadTeal,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         Text(
-                            text = "You start in an empty, broken Vault! Repair broken rooms on your own, then hire Vault Dwellers to automate production, O2 scrubbing & Medbay care.",
+                            text = "You landed in an unpressurized Mars Lava-Tube! Pressurize habitat modules on your own, then assign Astronauts to automate MOXIE O2 scrubbing, ice melting & aeroponics.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -467,6 +488,13 @@ fun OutpostTabScreen(
                         uiState.workersMap[it.id]?.assignedCount ?: 0
                     } ?: uiState.state.totalSurvivors
 
+                    val rushPreview = OutpostCalculator.computeRushRoomPreview(
+                        buildingType = buildingType,
+                        level = currentLevel,
+                        state = uiState.state,
+                        workersMap = uiState.workersMap
+                    )
+
                     BuildingStructureCard(
                         type = buildingType,
                         level = currentLevel,
@@ -475,8 +503,10 @@ fun OutpostTabScreen(
                         isVaultBlackout = uiState.production.isVaultBlackout,
                         isMothballed = buildingType.id in uiState.production.mothballedBuildingIds,
                         activeConstruction = uiState.activeConstruction,
+                        rushPreview = rushPreview,
                         onUpgrade = { onUpgradeBuilding(buildingType) },
-                        onToggleMothball = { onToggleBuildingMothball(buildingType) }
+                        onToggleMothball = { onToggleBuildingMothball(buildingType) },
+                        onRushRoom = { onRushRoom(buildingType) }
                     )
                 }
             }
@@ -640,16 +670,16 @@ private fun Interactive2dVaultCutawayCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "2D VAULT CUTAWAY MAP (WALK TO MINE, FISH & UPGRADE)",
+                        text = "2D MARS LAVA-TUBE CUTAWAY MAP (EVA DRILL, ICE CORE & UPGRADE)",
                         style = MaterialTheme.typography.titleSmall,
                         color = RadTeal,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = if (isWalking) {
-                            "🚶 Overseer taking Vault Elevator to ${currentStation.shortTitle}..."
+                            "🧑‍🚀 Commander riding Lava-Tube Hoist to ${currentStation.shortTitle}..."
                         } else {
-                            "📍 Overseer at: ${currentStation.shortTitle} • Tap any room to walk there, then tap again to Mine, Fish, or Upgrade!"
+                            "📍 Commander at: ${currentStation.shortTitle} • Tap any bay to move there, then tap again to Drill, Extract Ice, or Upgrade!"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isWalking) XpGold else TextPrimary
@@ -847,14 +877,14 @@ private fun Interactive2dVaultCutawayCard(
             ) {
                 val actionLabel = when (currentStation) {
                     VaultMapStation.SURFACE_MINE_SHAFT ->
-                        "⛏ MINE ORE HERE AT SURFACE SHAFT (+SCRAP, +GOLD & +XP)"
+                        "⛏ LASER-DRILL REGOLITH AT SURFACE CRATER (+REGOLITH, +GOLD & +XP)"
                     VaultMapStation.UNDERGROUND_FISHING_SUMP ->
-                        "🎣 CAST LINE HERE AT SUB-VAULT SUMP (+FOOD, +WATER & +GOLD)"
+                        "❄ EXTRACT BRINE & ALGAE AT SUB-GLACIAL SUMP (+BIO-RATIONS, +WATER & +GOLD)"
                     else -> {
                         val bTime = activeRoomCost?.buildTimeSeconds ?: 10
                         val sCost = activeRoomCost?.scrapCost?.toInt() ?: 0
                         if (currentRoomLv == 0) {
-                            "🔧 REPAIR ${currentStation.shortTitle.uppercase()} HERE (${sCost}S • ${bTime}s)"
+                            "🔧 PRESSURIZE ${currentStation.shortTitle.uppercase()} HERE (${sCost}S • ${bTime}s)"
                         } else {
                             "⬆ UPGRADE ${currentStation.shortTitle.uppercase()} TO LV.${currentRoomLv + 1} (${sCost}S • ${bTime}s)"
                         }
@@ -881,21 +911,25 @@ private fun Vault2dRoomCell(
     val bType = station.buildingType
     val roomLevel = bType?.let { uiState.buildingsMap[it.id] ?: 0 } ?: 1
     val isConstructingThis = bType != null && uiState.activeConstruction?.buildingType == bType
+    val mergeTier = if (bType != null) OutpostCalculator.computeRoomMergeTier(roomLevel) else RoomMergeTier.SINGLE_1X
+    val specialTag = bType?.primarySpecialStat?.code?.let { "[$it] " } ?: ""
 
     val statusBadge = when {
         station == VaultMapStation.SURFACE_MINE_SHAFT -> "⛏ MINE"
         station == VaultMapStation.UNDERGROUND_FISHING_SUMP -> "🎣 FISH"
         isConstructingThis -> "⏱ ${uiState.activeConstruction?.remainingSeconds ?: 0}s"
-        roomLevel <= 0 -> "BROKEN"
-        else -> "LV.$roomLevel"
+        roomLevel <= 0 -> "0x BROKEN"
+        else -> "${mergeTier.bayWidth}x•LV.$roomLevel"
     }
 
     val actionPrompt = when {
-        !isOverseerHere -> "Tap to Walk Here"
+        !isOverseerHere -> "${specialTag}Tap to Walk Here"
         station == VaultMapStation.SURFACE_MINE_SHAFT -> "🧍 HERE • Tap to Mine!"
         station == VaultMapStation.UNDERGROUND_FISHING_SUMP -> "🧍 HERE • Tap to Fish!"
-        roomLevel <= 0 -> "🧍 HERE • Tap to Repair!"
-        else -> "🧍 HERE • Tap to Upgrade!"
+        roomLevel <= 0 -> "🧍 HERE • Tap to Excavate 1x Bay!"
+        roomLevel == 1 -> "🧍 HERE • Merge to 2x Double Bay!"
+        roomLevel == 2 -> "🧍 HERE • Merge to 3x Triple Hall!"
+        else -> "🧍 HERE • Upgrade 3x Merged Room!"
     }
 
     Surface(
@@ -1968,8 +2002,10 @@ private fun BuildingStructureCard(
     isVaultBlackout: Boolean,
     isMothballed: Boolean = false,
     activeConstruction: ActiveBuildingConstruction?,
+    rushPreview: RushRoomPreview? = null,
     onUpgrade: () -> Unit,
-    onToggleMothball: () -> Unit = {}
+    onToggleMothball: () -> Unit = {},
+    onRushRoom: () -> Unit = {}
 ) {
     val icon: ImageVector = when (type) {
         BuildingType.SALVAGE_YARD -> Icons.Default.Build
@@ -2031,6 +2067,9 @@ private fun BuildingStructureCard(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
+                        val mergeTier = OutpostCalculator.computeRoomMergeTier(level)
+                        val nextMergeTier = OutpostCalculator.computeRoomMergeTier(level + 1)
+                        val specialStat = type.primarySpecialStat
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -2055,6 +2094,12 @@ private fun BuildingStructureCard(
                                 )
                             }
                         }
+                        Text(
+                            text = "🏗 ${type.falloutRoomTitle} • ${mergeTier.badgeLabel} -> Lv.${level + 1} (${nextMergeTier.badgeLabel}) • S.P.E.C.I.A.L.: [${specialStat.code}] ${specialStat.fullName}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = mergeTier.accentColor,
+                            fontWeight = FontWeight.Bold
+                        )
                         Text(
                             text = "⏱ Build Time (Lv.${cost.targetRoomLevel}): ${cost.buildTimeSeconds}s -> Next Lv.${cost.targetRoomLevel + 1}: ${cost.nextLevelBuildTimeSeconds}s",
                             style = MaterialTheme.typography.labelSmall,
@@ -2257,6 +2302,30 @@ private fun BuildingStructureCard(
 
             if (level > 0) {
                 Spacer(modifier = Modifier.height(6.dp))
+                if (rushPreview != null) {
+                    Button(
+                        onClick = onRushRoom,
+                        enabled = rushPreview.canRush && !isMothballed && !isVaultBlackout,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = XpGold,
+                            contentColor = BunkerCharcoal,
+                            disabledContainerColor = ElevatedSlate,
+                            disabledContentColor = TextMuted
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("rush_building_${type.id.lowercase()}")
+                    ) {
+                        Text(
+                            text = "⚡ OVERCLOCK BAY (${rushPreview.incidentRiskPercent}% HAZARD RISK • +${rushPreview.instantResourceAmount.toInt()} ${rushPreview.instantResourceLabel.uppercase()} & +${rushPreview.bonusGoldCaps.toInt()} GOLD)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
                 OutlinedButton(
                     onClick = onToggleMothball,
                     border = BorderStroke(1.dp, if (isMothballed) SurplusGreen else WarningOrange),
@@ -2665,13 +2734,13 @@ fun HardcoreVaultGovernanceAndDirectivesCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "5-DAY WASTELAND SEASON: ${season.title.uppercase()}",
+                            text = "5-SOL MARTIAN ORBITAL WEATHER: ${season.title.uppercase()}",
                             style = MaterialTheme.typography.labelMedium,
                             color = CryoCyan,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "Next: ${nextSeason.shortLabel} in ${prod.daysRemainingInSeason}d",
+                            text = "Next: ${nextSeason.shortLabel} in ${prod.daysRemainingInSeason} Sols",
                             style = MaterialTheme.typography.labelSmall,
                             color = SolarAmber,
                             fontWeight = FontWeight.Bold
@@ -2685,9 +2754,9 @@ fun HardcoreVaultGovernanceAndDirectivesCard(
                 }
             }
 
-            // Overseer Rationing Decree Selector
+            // Flight Director Rationing Protocol Selector
             Text(
-                text = "OVERSEER RATIONING DECREE (${activeRation.title}: ${activeRation.effectSummary})",
+                text = "FLIGHT DIRECTOR RATIONING PROTOCOL (${activeRation.title}: ${activeRation.effectSummary})",
                 style = MaterialTheme.typography.labelSmall,
                 color = SolarAmber,
                 fontWeight = FontWeight.Bold

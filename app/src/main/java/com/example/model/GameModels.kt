@@ -20,15 +20,15 @@ enum class ResourceType(
     val color: Color,
     val isRare: Boolean = false
 ) {
-    SCRAP("Scrap Metal", "SCRAP", SolarAmber),
-    WATER("Purified Water", "WATER", CryoCyan),
-    RATIONS("Food Rations", "FOOD", SurplusGreen),
-    BIO_FUEL("Bio-Fuel", "FUEL", RustCopper),
-    RESEARCH_DATA("Research Data", "TECH", RadTeal),
-    GOLD("Gold Sovereigns", "GOLD", XpGold),
-    THORIUM_RODS("Thorium Rods", "THORIUM", WarningOrange, isRare = true),
-    AETHER_CELLS("Aether Capacitors", "AETHER", CryoCyan, isRare = true),
-    MUTAGEN_CORES("Mutagen Cores", "CORES", BioluminescentViolet, isRare = true)
+    SCRAP("Regolith Alloy", "SCRAP", SolarAmber),
+    WATER("Glacial Water", "WATER", CryoCyan),
+    RATIONS("Bio-Dome Rations", "FOOD", SurplusGreen),
+    BIO_FUEL("Methane-LOX Fuel", "FUEL", RustCopper),
+    RESEARCH_DATA("Orbital Telemetry", "TECH", RadTeal),
+    GOLD("Martian Gold Ore", "GOLD", XpGold),
+    THORIUM_RODS("Kilopower RTG Rods", "THORIUM", WarningOrange, isRare = true),
+    AETHER_CELLS("Solar Super-Capacitors", "AETHER", CryoCyan, isRare = true),
+    MUTAGEN_CORES("Xenobiology Cores", "CORES", BioluminescentViolet, isRare = true)
 }
 
 enum class DayNightPhase(
@@ -45,10 +45,10 @@ enum class DayNightPhase(
     val accentColor: Color
 ) {
     DAWN(
-        displayName = "Condensation Dawn",
+        displayName = "Frost-Sublimation Dawn",
         startFraction = 0.0f,
         endFraction = 0.15f,
-        tagline = "Morning mist boosts Water (+35%), Oasis Spire pays +35% Gold, grazing beasts active.",
+        tagline = "Polar frost sublimation boosts Water Ice (+35%), Valles Dome pays +35% Gold, surface EVA active.",
         scrapMultiplier = 1.05,
         waterMultiplier = 1.35,
         rationsMultiplier = 1.15,
@@ -58,10 +58,10 @@ enum class DayNightPhase(
         accentColor = CryoCyan
     ),
     SCORCHING_DAY(
-        displayName = "Scorching Day",
+        displayName = "Perihelion Solar Sol",
         startFraction = 0.15f,
         endFraction = 0.55f,
-        tagline = "Peak solar glare: Solar Stations surge (+50% MW), Ironforge pays +35% Gold for Scrap.",
+        tagline = "Peak Martian insolation: Solar Arrays surge (+50% MW), Ares Prime pays +35% Gold for Regolith Alloy.",
         scrapMultiplier = 1.30,
         waterMultiplier = 0.90,
         rationsMultiplier = 1.35,
@@ -71,10 +71,10 @@ enum class DayNightPhase(
         accentColor = SolarAmber
     ),
     DUSK(
-        displayName = "Ashfall Dusk",
+        displayName = "Dust-Devil Dusk",
         startFraction = 0.55f,
         endFraction = 0.70f,
-        tagline = "Cooling winds: Prime hunting hour (+25% Hunt Food), +15% Dusk Raid Threat & rising fallout.",
+        tagline = "Rising crater winds: Prime EVA harvest hour (+25% Bio-Rations), +15% Dust Squall Threat & cosmic flux.",
         scrapMultiplier = 1.05,
         waterMultiplier = 1.25,
         rationsMultiplier = 1.05,
@@ -84,10 +84,10 @@ enum class DayNightPhase(
         accentColor = RustCopper
     ),
     RAD_NIGHT(
-        displayName = "Bioluminescent Night",
+        displayName = "Cryo-Radiation Night (-110°C)",
         startFraction = 0.70f,
         endFraction = 1.0f,
-        tagline = "HIGH DANGER: +35% Mutant Swarm Threat, +Radiation Surge, +6% Expedition Risk & Solar thermal storage at 65%!",
+        tagline = "HIGH DANGER: +35% Meteor & Dust-Storm Impact, +Cosmic Ray Surge, +6% Rover Risk & Solar storage at 65%!",
         scrapMultiplier = 0.75,
         waterMultiplier = 1.05,
         rationsMultiplier = 0.80,
@@ -108,8 +108,8 @@ enum class DayNightPhase(
 }
 
 enum class CraftItemCategory(val label: String) {
-    HUNTING("Hunting & Food"),
-    DEFENSE("Outpost Defense")
+    HUNTING("EVA Harvest & Rations"),
+    DEFENSE("Dome Shield & Defense")
 }
 
 enum class CraftableItemType(
@@ -131,20 +131,20 @@ enum class CraftableItemType(
 ) {
     HARPOON_SPEAR(
         id = "HARPOON_SPEAR",
-        title = "Scrap-Tipped Harpoon Spear",
+        title = "Thermal Ice-Core Lance",
         category = CraftItemCategory.HUNTING,
-        description = "Barbed throwing spear forged from salvaged hull steel. Used to hunt wasteland beasts for Food Rations.",
-        effectSummary = "Crafts +2 Hunting Spears (Used in Active Beast Hunts)",
+        description = "Heated titanium core-lance forged from sintered hull alloy. Used to harvest Martian lava-tube extremophiles & ice-pods for Bio-Rations.",
+        effectSummary = "Crafts +2 Thermal Core Lances (Used in Active Lava-Tube Harvests)",
         scrapCost = 12.0,
         baseCraftTimeSeconds = 6,
         accentColor = SurplusGreen
     ),
     SNARE_TRAP(
         id = "SNARE_TRAP",
-        title = "High-Tension Snare Trap",
+        title = "Automated Aeroponic Spore-Pod",
         category = CraftItemCategory.HUNTING,
-        description = "Spring-loaded canyon snare that passively catches small game (+0.6 Food/s each) & baits large hunts.",
-        effectSummary = "+1 Active Snare Trap (+0.6 Food/s passive & used in Canyon Hunts)",
+        description = "Pressurized micro-greenhouse pod that passively cultures spirulina & tubers (+0.6 Food/s each) & supports deep-tube harvests.",
+        effectSummary = "+1 Active Spore-Pod (+0.6 Food/s passive & used in Crater Harvests)",
         scrapCost = 18.0,
         fuelCost = 5.0,
         baseCraftTimeSeconds = 9,
@@ -153,10 +153,10 @@ enum class CraftableItemType(
     ),
     AETHER_CROSSBOW(
         id = "AETHER_CROSSBOW",
-        title = "Aether-Bolt Hunting Crossbow",
+        title = "Solar-Arc Plasma Harvester",
         category = CraftItemCategory.HUNTING,
-        description = "High-velocity magnetic crossbow built with an Aether Capacitor. Permanently boosts all Hunting Food yields!",
-        effectSummary = "Permanent Upgrade: +40% Food from all Hunts & unlocks Apex Behemoth Hunt",
+        description = "High-velocity magnetic plasma cutter built with a Solar Super-Capacitor. Permanently boosts all EVA Harvest Rations!",
+        effectSummary = "Permanent Upgrade: +40% Food from all EVA Harvests & unlocks Deep-Rift Lithic Wyrm",
         scrapCost = 35.0,
         goldCost = 20.0,
         aetherCost = 1.0,
@@ -166,10 +166,10 @@ enum class CraftableItemType(
     ),
     SHRAPNEL_MINE(
         id = "SHRAPNEL_MINE",
-        title = "Shrapnel Barricade Mine",
+        title = "Kinetic Micrometeoroid Interceptor",
         category = CraftItemCategory.DEFENSE,
-        description = "Perimeter blast charge that fortifies the outpost (+15 Defense) and auto-triggers on Raider Sieges.",
-        effectSummary = "Crafts +2 Barricade Mines (+30 Total Defense & Auto-Counter-Strike)",
+        description = "Perimeter counter-charge that fortifies the habitat dome (+15 Defense) and auto-detonates incoming meteor debris.",
+        effectSummary = "Crafts +2 Kinetic Interceptors (+30 Total Defense & Auto-Counter-Strike)",
         scrapCost = 16.0,
         fuelCost = 6.0,
         baseCraftTimeSeconds = 10,
@@ -178,10 +178,10 @@ enum class CraftableItemType(
     ),
     AUTO_SENTRY_TURRET(
         id = "AUTO_SENTRY_TURRET",
-        title = "Automated Sentry Turret",
+        title = "Point-Defense Laser Turret",
         category = CraftItemCategory.DEFENSE,
-        description = "Aether-targeted twin autocannon that automatically intercepts Day Raider attacks & Night Mutant Swarms.",
-        effectSummary = "+45 Permanent Auto-Defense & +10% Convoy Security",
+        description = "Capacitor-fed twin laser turret that automatically vaporizes incoming Micrometeoroids & Dust-Storm Debris.",
+        effectSummary = "+45 Permanent Auto-Defense & +10% Rover Convoy Security",
         scrapCost = 42.0,
         goldCost = 25.0,
         aetherCost = 1.0,
@@ -191,10 +191,10 @@ enum class CraftableItemType(
     ),
     THORIUM_PLASMA_CANNON(
         id = "THORIUM_PLASMA_CANNON",
-        title = "Thorium Plasma Battery",
+        title = "Kilopower Ion Shield Battery",
         category = CraftItemCategory.DEFENSE,
-        description = "Heavy automated citadel emplacement fueled by a Thorium Rod. Vaporizes lethal Night Mutant Swarms for Gold.",
-        effectSummary = "+120 Permanent Auto-Defense & +25% Raider Bounty Gold",
+        description = "Heavy planetary defense array fueled by a Kilopower RTG Rod. Deflects lethal Sol-10 Dust-Storm Cyclones & Meteor Swarms.",
+        effectSummary = "+120 Permanent Auto-Defense & +25% Storm Salvage Gold",
         scrapCost = 75.0,
         goldCost = 45.0,
         thoriumCost = 1.0,
@@ -205,10 +205,10 @@ enum class CraftableItemType(
     ),
     BALLISTIC_AMMO_CRATE(
         id = "BALLISTIC_AMMO_CRATE",
-        title = "Ballistic Ammo Crate (+30 Rds)",
+        title = "Point-Defense Capacitor Crate (+30 Rds)",
         category = CraftItemCategory.DEFENSE,
-        description = "Pressed brass & lead rounds for Powered Auto-Turrets during daily/night attacks and armed Wasteland Expeditions.",
-        effectSummary = "+30 Ammo Rounds (Powers Auto-Turrets at 100% DEF & +25% Expedition Loot)",
+        description = "High-density slug & laser charge packs for Point-Defense Turrets during dust storms and armed Mars Rover Expeditions.",
+        effectSummary = "+30 Defense Charges (Powers Auto-Turrets at 100% DEF & +25% Rover Loot)",
         scrapCost = 14.0,
         fuelCost = 4.0,
         baseCraftTimeSeconds = 7,
@@ -216,10 +216,10 @@ enum class CraftableItemType(
     ),
     GAS_MASK(
         id = "GAS_MASK",
-        title = "Charcoal Filter Gas Mask",
+        title = "Perchlorate Dust Rebreather",
         category = CraftItemCategory.HUNTING,
-        description = "Activated-carbon respirator that filters radioactive fallout dust on Wasteland Expeditions.",
-        effectSummary = "+1 Gas Mask (-3% Expedition Death Risk & -40% Expedition Radiation)",
+        description = "Closed-loop MOXIE oxygen rebreather that filters toxic Martian perchlorate dust on Rover Expeditions.",
+        effectSummary = "+1 O2 Rebreather (-3% Rover Crew Risk & -40% Cosmic Radiation)",
         scrapCost = 16.0,
         fuelCost = 4.0,
         baseCraftTimeSeconds = 11,
@@ -227,10 +227,10 @@ enum class CraftableItemType(
     ),
     HAZMAT_SUIT(
         id = "HAZMAT_SUIT",
-        title = "Lead-Lined Hazmat Suit",
+        title = "Mark-IV Pressurized EVA Space Suit",
         category = CraftItemCategory.HUNTING,
-        description = "Full-body radiation suit for Ground-Zero scavenging runs and high-fallout Night expeditions.",
-        effectSummary = "+1 Hazmat Suit (-4% Expedition Death Risk & -70% Radiation Intake)",
+        description = "Lead-polymer pressurized astronaut EVA suit for deep-crater rover treks and solar proton storms.",
+        effectSummary = "+1 EVA Space Suit (-4% Rover Crew Risk & -70% Cosmic Ray Intake)",
         scrapCost = 28.0,
         fuelCost = 8.0,
         goldCost = 12.0,
@@ -239,10 +239,10 @@ enum class CraftableItemType(
     ),
     MEDKIT_RADAWAY_PACK(
         id = "MEDKIT_RADAWAY_PACK",
-        title = "Field Medkit & RadAway Pack",
+        title = "Cryo-Trauma & Anti-Rad Medpack",
         category = CraftItemCategory.DEFENSE,
-        description = "Emergency trauma bandages and intravenous chelating RadAway to flush radiation and heal injured Dwellers.",
-        effectSummary = "+1 Field Medkit (+35% Health) & +1 RadAway (-40 mSv Rads)",
+        description = "Pressurized bio-foam trauma kit and potassium-iodide chelators to flush cosmic radiation and heal injured Astronauts.",
+        effectSummary = "+1 Flight Medkit (+35% Health) & +1 Anti-Rad Dose (-40 mSv Rads)",
         scrapCost = 12.0,
         fuelCost = 5.0,
         goldCost = 8.0,
@@ -274,8 +274,8 @@ enum class HuntingTarget(
 ) {
     DUNE_RAZORBACK(
         id = "DUNE_RAZORBACK",
-        title = "Stalk Dune Razorback",
-        subtitle = "Fast canyon boar rich in protein & bone-scrap",
+        title = "Harvest Lava-Tube Fungus Pod",
+        subtitle = "Fast-growing subterranean geothermal mushroom cluster rich in protein & water ice",
         spearsRequired = 1,
         trapsRequired = 0,
         requiresCrossbow = false,
@@ -288,8 +288,8 @@ enum class HuntingTarget(
     ),
     CANYON_PACK_STALKER(
         id = "CANYON_PACK_STALKER",
-        title = "Trap Canyon Stalker Pack",
-        subtitle = "Lure pack predators into a high-tension snare line for a meat & pelt haul",
+        title = "Extract Valles Brine Crustaceans",
+        subtitle = "Deploy automated spore-traps into warm hydrothermal vents for high-protein biomass & gold",
         spearsRequired = 1,
         trapsRequired = 1,
         requiresCrossbow = false,
@@ -302,8 +302,8 @@ enum class HuntingTarget(
     ),
     APEX_RAD_BEHEMOTH(
         id = "APEX_RAD_BEHEMOTH",
-        title = "Hunt Apex Rad-Behemoth",
-        subtitle = "Requires Aether Crossbow: Massive mutant beast yielding Food Rations, Gold & Mutagen Core",
+        title = "Excavate Martian Lithic Behemoth",
+        subtitle = "Requires Solar-Arc Harvester: Silicon-armored lava-tube organism yielding Rations, Gold & Xeno-Core",
         spearsRequired = 2,
         trapsRequired = 1,
         requiresCrossbow = true,
@@ -316,8 +316,8 @@ enum class HuntingTarget(
     ),
     GLOWING_LEVIATHAN_WYRM(
         id = "GLOWING_LEVIATHAN_WYRM",
-        title = "Slay Glowing Leviathan Wyrm",
-        subtitle = "Apex Crater Boss (Requires Crossbow + 2 Spears + 2 Traps): Food, Water, Gold & +2 Mutagen Cores",
+        title = "Core-Harvest Olympus Magma Leviathan",
+        subtitle = "Apex Caldera Organism (Requires Harvester + 2 Lances + 2 Pods): Food, Water, Gold & +2 Xeno-Cores",
         spearsRequired = 2,
         trapsRequired = 2,
         requiresCrossbow = true,
@@ -344,8 +344,8 @@ enum class FishingSpot(
 ) {
     CRATER_SHALLOWS_TROUT(
         id = "CRATER_SHALLOWS_TROUT",
-        title = "Cast Line: Blind Cave Trout",
-        subtitle = "Free hand-line fishing in the subterranean aquifer for scarce Food & Clean Water",
+        title = "Melt Core: Sub-Glacial Ice & Spirulina",
+        subtitle = "Zero-gear thermal borehole extraction from Martian permafrost for Kelp Rations & Glacial Water",
         requiresSnareNet = false,
         requiresHarpoonSpear = false,
         baseFoodReward = 6.0,
@@ -356,8 +356,8 @@ enum class FishingSpot(
     ),
     RAD_KELP_CATFISH(
         id = "RAD_KELP_CATFISH",
-        title = "Net Glowing Crater Catfish",
-        subtitle = "Cast a snare-net into deep kelp trenches for fillets & sunken coins",
+        title = "Siphon Hydrothermal Kelp Basin",
+        subtitle = "Deploy a spore-pod filter into warm lava-tube aquifers for nutrient kelp & gold nuggets",
         requiresSnareNet = true,
         requiresHarpoonSpear = false,
         baseFoodReward = 13.0,
@@ -368,8 +368,8 @@ enum class FishingSpot(
     ),
     ABYSSAL_VAULT_STURGEON(
         id = "ABYSSAL_VAULT_STURGEON",
-        title = "Harpoon Armored Vault Sturgeon",
-        subtitle = "Uses 1 Harpoon Spear: Giant underground fish with Food, Water & Gold",
+        title = "Deep-Lance Polar Ice-Cap Cavern",
+        subtitle = "Uses 1 Thermal Core Lance: Pressurized sub-glacial pocket rich in Bio-Rations, Water & Gold Ore",
         requiresSnareNet = false,
         requiresHarpoonSpear = true,
         baseFoodReward = 24.0,
@@ -385,22 +385,22 @@ enum class WastelandExpeditionType(
     val title: String,
     val subtitle: String,
     val durationSeconds: Int,
-    val deathChancePercent: Int = 10, // Explicit 10% chance the dweller dies!
+    val deathChancePercent: Int = 10, // Explicit 10% chance the astronaut is lost in a dust storm!
     val goldReward: Double,
     val foodReward: Double,
     val waterReward: Double,
     val scrapReward: Double,
     val fuelReward: Double,
     val coresReward: Double = 0.0,
-    val armorReward: Int = 1, // Dweller Armor salvaged on expedition (+12 DEF each)
-    val weaponsReward: Int = 1, // Dweller Weapons salvaged on expedition (+15 DEF each)
+    val armorReward: Int = 1, // EVA Suit Plating salvaged on rover run (+12 DEF each)
+    val weaponsReward: Int = 1, // Laser Defense Modules salvaged on rover run (+15 DEF each)
     val xpReward: Double,
     val accentColor: Color
 ) {
     SUPERMARKET_SUPPLY_RUN(
         id = "SUPERMARKET_SUPPLY_RUN",
-        title = "RuinedSupermarket Scavenge",
-        subtitle = "Send 1 Dweller for Dweller Armor/Weapons (+27 DEF), Food, Water & Gold (10% Risk)",
+        title = "Jezero Crater SupplyPod Rover Run",
+        subtitle = "Dispatch 1 Astronaut for EVA Plating/Lasers (+27 DEF), Rations, Water Ice & Gold (10% Risk)",
         durationSeconds = 12,
         deathChancePercent = 10,
         goldReward = 12.0,
@@ -415,8 +415,8 @@ enum class WastelandExpeditionType(
     ),
     OLD_BANK_VAULT_HEIST(
         id = "OLD_BANK_VAULT_HEIST",
-        title = "Collapsed Bank & Foundry Run",
-        subtitle = "Send 1 Dweller for Guard Armor & Weapons (+27 DEF), Gold, Scrap & Fuel (10% Risk)",
+        title = "Viking & Pathfinder Lander Salvage",
+        subtitle = "Dispatch 1 Astronaut for Shielding & Lasers (+27 DEF), Gold Ore, Alloy & Propellant (10% Risk)",
         durationSeconds = 16,
         deathChancePercent = 10,
         goldReward = 26.0,
@@ -431,8 +431,8 @@ enum class WastelandExpeditionType(
     ),
     GLOWING_CRATER_CORE_RAID(
         id = "GLOWING_CRATER_CORE_RAID",
-        title = "Ground-Zero Reactor Core Raid",
-        subtitle = "Send 1 Dweller for +2 Armor & +1 Weapon (+39 DEF), Gold, Fuel & Core (10% Risk)",
+        title = "Olympus Mons Caldera RTG Recovery",
+        subtitle = "Dispatch 1 Astronaut for +2 Shielding & +1 Laser (+39 DEF), Gold, Fuel & Xeno-Core (10% Risk)",
         durationSeconds = 20,
         deathChancePercent = 10,
         goldReward = 42.0,
@@ -448,8 +448,8 @@ enum class WastelandExpeditionType(
     ),
     SUNKEN_SUBMARINE_REACTOR(
         id = "SUNKEN_SUBMARINE_REACTOR",
-        title = "Sunken Ballistic Sub Salvage",
-        subtitle = "Deep trench dive for +2 Armor & +2 Weapons (+54 DEF), Gold & +2 Cores (10% Risk)",
+        title = "Valles Marineris Abyssal Rift Trek",
+        subtitle = "Deep canyon rover descent for +2 Shielding & +2 Lasers (+54 DEF), Gold & +2 Cores (10% Risk)",
         durationSeconds = 25,
         deathChancePercent = 10,
         goldReward = 62.0,
@@ -483,9 +483,9 @@ enum class VaultOperationalPosture(
 ) {
     ECO_CONSERVATION(
         id = "ECO_CONSERVATION",
-        shortLabel = "ECO (-40% DRAIN)",
-        title = "Eco-Conservation Protocol",
-        summary = "Cuts Vault & Room Resource Upkeep by -40% and MW draw by -15% (-15% Output) — ideal to exit Resource Deficits & restore Defenses!",
+        shortLabel = "LOW-POWER (-40% DRAIN)",
+        title = "Low-Power Life-Support Protocol",
+        summary = "Cuts Habitat & Bay Resource Upkeep by -40% and MW draw by -15% (-15% Output) — ideal to survive Dust Storms & restore Dome Shields!",
         outputMultiplier = 0.85,
         upkeepMultiplier = 0.60,
         megawattDemandMultiplier = 0.85,
@@ -493,9 +493,9 @@ enum class VaultOperationalPosture(
     ),
     STANDARD(
         id = "STANDARD",
-        shortLabel = "STANDARD (100%)",
-        title = "Standard Bunker Posture",
-        summary = "Balanced 100% Vault resource production, standard room upkeep, and normal Megawatt draw.",
+        shortLabel = "NOMINAL (100%)",
+        title = "Nominal Mission Control Posture",
+        summary = "Balanced 100% Mars Outpost resource synthesis, standard bay upkeep, and nominal Megawatt load.",
         outputMultiplier = 1.0,
         upkeepMultiplier = 1.0,
         megawattDemandMultiplier = 1.0,
@@ -503,9 +503,9 @@ enum class VaultOperationalPosture(
     ),
     OVERCLOCK(
         id = "OVERCLOCK",
-        shortLabel = "OVERCLOCK (+30%)",
-        title = "High-Yield Overclock",
-        summary = "Boosts all Vault Resource & XP Output by +30%, but increases Room Upkeep by +25% and MW draw by +15%.",
+        shortLabel = "OVERDRIVE (+30%)",
+        title = "High-Thrust Colony Overdrive",
+        summary = "Boosts all Mars Habitat Resource & XP Output by +30%, but increases Bay Upkeep by +25% and MW draw by +15%.",
         outputMultiplier = 1.30,
         upkeepMultiplier = 1.25,
         megawattDemandMultiplier = 1.15,
@@ -532,8 +532,8 @@ enum class SiegeCountermeasureType(
 ) {
     FLAK_VOLLEY(
         id = "FLAK_VOLLEY",
-        buttonLabel = "FLAK VOLLEY (8 AMMO)",
-        description = "Fires concentrated flak salvos to shred incoming raiders (-25% Siege DEF Req & +10s timer).",
+        buttonLabel = "LASER SALVO (8 AMMO)",
+        description = "Fires point-defense laser salvos to vaporize incoming meteoroids (-25% Storm DEF Req & +10s timer).",
         defenseReductionPercent = 25,
         bonusIntegrityRestore = 0,
         ammoCost = 8,
@@ -541,8 +541,8 @@ enum class SiegeCountermeasureType(
     ),
     EMP_PULSE(
         id = "EMP_PULSE",
-        buttonLabel = "EMP PULSE (20 FUEL)",
-        description = "Detonates an electromagnetic shockwave that cripples Warlord armor (-35% Siege DEF Req).",
+        buttonLabel = "ION DEFLECTOR (20 FUEL)",
+        description = "Projects an electrostatic magnetosphere pulse that disperses charged dust vortices (-35% Storm DEF Req).",
         defenseReductionPercent = 35,
         bonusIntegrityRestore = 0,
         bioFuelCost = 20.0,
@@ -550,8 +550,8 @@ enum class SiegeCountermeasureType(
     ),
     EMERGENCY_WELD(
         id = "EMERGENCY_WELD",
-        buttonLabel = "DOOR WELD (25 SCRAP)",
-        description = "Welds emergency blast plates mid-siege (+25% Door Integrity immediately & -15% Siege DEF Req).",
+        buttonLabel = "DOME SEAL (25 SCRAP)",
+        description = "Sinters titanium Whipple-shield plates mid-storm (+25% Airlock Integrity immediately & -15% Storm DEF Req).",
         defenseReductionPercent = 15,
         bonusIntegrityRestore = 25,
         scrapCost = 25.0,
@@ -561,13 +561,13 @@ enum class SiegeCountermeasureType(
 
 object PickaxeTier {
     fun nameForLevel(level: Int): String = when {
-        level <= 1 -> "Rusty Iron Pickaxe"
-        level == 2 -> "Reinforced Steel Pickaxe"
-        level == 3 -> "Carbide Quarry Pickaxe"
-        level == 4 -> "Pneumatic Impact Drill"
-        level in 5..6 -> "Laser-Tipped Bore Pickaxe"
-        level in 7..9 -> "Plasma Core Excavator"
-        else -> "Atomic Fission Pickaxe Mk.$level"
+        level <= 1 -> "Handheld Regolith Pickaxe"
+        level == 2 -> "Titanium Core Hammer"
+        level == 3 -> "Ultrasonic Basalt Splitter"
+        level == 4 -> "Pneumatic Permafrost Drill"
+        level in 5..6 -> "Laser-Tipped Regolith Cutter"
+        level in 7..9 -> "Plasma Core Lava-Tube Bore"
+        else -> "Kilopower Mantle Excavator Mk.$level"
     }
 }
 
@@ -605,9 +605,9 @@ enum class TradeTown(
 ) {
     IRONFORGE_BASTION(
         id = "IRONFORGE_BASTION",
-        displayName = "Ironforge Bastion",
+        displayName = "Ares Prime Foundry Dome",
         distanceKm = 42,
-        description = "Armored foundry town. Pays +35% premium Gold for Scrap Metal & Bio-Fuel (peaks during Scorching Day).",
+        description = "Industrial crater colony. Pays +35% premium Gold for Regolith Alloy & Methane-LOX Fuel (peaks during Solar Sol).",
         favoredResource1 = ResourceType.SCRAP,
         favoredResource2 = ResourceType.BIO_FUEL,
         favoredPhase = DayNightPhase.SCORCHING_DAY,
@@ -618,9 +618,9 @@ enum class TradeTown(
     ),
     OASIS_SPIRE(
         id = "OASIS_SPIRE",
-        displayName = "Oasis Spire",
+        displayName = "Valles Bio-Dome Spire",
         distanceKm = 58,
-        description = "Canyon agricultural hub. Pays +35% premium Gold for Purified Water & Food Rations (peaks at Dawn/Dusk).",
+        description = "Canyon hydroponic settlement. Pays +35% premium Gold for Glacial Water & Bio-Rations (peaks at Dawn/Dusk).",
         favoredResource1 = ResourceType.WATER,
         favoredResource2 = ResourceType.RATIONS,
         favoredPhase = DayNightPhase.DAWN,
@@ -631,9 +631,9 @@ enum class TradeTown(
     ),
     NEON_VAULT_88(
         id = "NEON_VAULT_88",
-        displayName = "Neon Vault 88",
+        displayName = "Phobos Orbital Skyhook",
         distanceKm = 85,
-        description = "High-tech syndicate enclave. Pays +40% premium Gold for Research Data & Bio-Fuel (peaks during Rad-Night).",
+        description = "Deep-space orbital research tether. Pays +40% premium Gold for Orbital Telemetry & Methane-LOX (peaks during Cryo-Night).",
         favoredResource1 = ResourceType.RESEARCH_DATA,
         favoredResource2 = ResourceType.BIO_FUEL,
         favoredPhase = DayNightPhase.RAD_NIGHT,
@@ -655,24 +655,24 @@ enum class RareSyndicateItem(
     THORIUM_FUEL_ROD(
         id = "THORIUM_FUEL_ROD",
         resourceType = ResourceType.THORIUM_RODS,
-        title = "Thorium Fission Rod",
-        usageSummary = "Used in Thorium Power Stations, 60s Grid Overclock, Armored Convoys & Plasma Defense Batteries.",
+        title = "Kilopower Uranium-RTG Rod",
+        usageSummary = "Used in Kilopower RTG Plants, 60s Grid Overclock, Pressurized Rover Convoys & Ion Shield Batteries.",
         baseGoldCost = 38.0,
         batchSize = 1.0
     ),
     AETHER_CAPACITOR(
         id = "AETHER_CAPACITOR",
         resourceType = ResourceType.AETHER_CELLS,
-        title = "Aether Super-Capacitor",
-        usageSummary = "Used in Armored Convoy Engines, Solar Substations, Aether Crossbows & Auto Sentry Turrets.",
+        title = "Graphene Solar Super-Capacitor",
+        usageSummary = "Used in Rover Traction Drives, Heliostat Arrays, Solar-Arc Harvesters & Point-Defense Lasers.",
         baseGoldCost = 42.0,
         batchSize = 1.0
     ),
     MUTAGENIC_CORE(
         id = "MUTAGENIC_CORE",
         resourceType = ResourceType.MUTAGEN_CORES,
-        title = "Refined Mutagenic Core",
-        usageSummary = "Rare bio-catalyst used in Apex Skill Tree nodes, Aether Substations, and Plasma Defense.",
+        title = "Martian Xenobiology Core",
+        usageSummary = "Rare extremophile bio-catalyst used in Apex Mission Directives, Orbital Substations, and Ion Shields.",
         baseGoldCost = 55.0,
         batchSize = 1.0
     );
@@ -695,8 +695,8 @@ enum class PowerStationType(
 ) {
     BIO_SLUDGE_TURBINE(
         id = "BIO_SLUDGE_TURBINE",
-        displayName = "Bio-Sludge Combustion Turbine",
-        description = "High-efficiency turbine that burns small amounts of Bio-Fuel for steady 24/7 Megawatts (MW) and retains 80% backup vapor power if fuel runs dry.",
+        displayName = "Methane-LOX Fuel Cell Turbine",
+        description = "High-efficiency Sabatier turbine that burns small amounts of Methane-LOX for steady 24/7 Megawatts (MW) and retains 80% backup thermal power if fuel runs dry.",
         baseMegawattsPerLevel = 16.0,
         fuelUpkeepPerLevel = 0.09,
         baseScrapCost = 35.0,
@@ -705,8 +705,8 @@ enum class PowerStationType(
     ),
     SOLAR_HELIOSTAT_TOWER(
         id = "SOLAR_HELIOSTAT_TOWER",
-        displayName = "Heliostat Solar Power Tower",
-        description = "Built with Aether Capacitors & molten-salt thermal storage. Surges +50% MW during Scorching Day and retains 65% thermal MW at Night with minimal fuel upkeep.",
+        displayName = "Martian Heliostat Solar Array",
+        description = "Built with Graphene Super-Capacitors & molten-salt storage. Surges +50% MW during Perihelion Sol and retains 65% thermal MW at Night with minimal fuel upkeep.",
         baseMegawattsPerLevel = 26.0,
         fuelUpkeepPerLevel = 0.02,
         baseScrapCost = 60.0,
@@ -717,8 +717,8 @@ enum class PowerStationType(
     ),
     THORIUM_FISSION_REACTOR(
         id = "THORIUM_FISSION_REACTOR",
-        displayName = "Thorium Fission Power Plant",
-        description = "Powered by rare Thorium Rods. Generates immense 24/7 MW & +8% output/lv with efficient secondary Bio-Fuel coolant loops.",
+        displayName = "Kilopower Fission RTG Reactor",
+        description = "Powered by rare Kilopower RTG Rods. Generates immense 24/7 dust-storm-proof MW & +8% output/lv with closed-loop coolant.",
         baseMegawattsPerLevel = 52.0,
         fuelUpkeepPerLevel = 0.16,
         baseScrapCost = 110.0,
@@ -729,8 +729,8 @@ enum class PowerStationType(
     ),
     AETHER_RESONANCE_SUBSTATION(
         id = "AETHER_RESONANCE_SUBSTATION",
-        displayName = "Aether High-Voltage Substation",
-        description = "Uses Aether Capacitors & Mutagen Cores to amplify total Grid MW by +20%/lv with low stabilizer fuel draw.",
+        displayName = "Orbital Microwave Beam Substation",
+        description = "Uses Super-Capacitors & Xenobiology Cores to amplify total Mars Outpost Grid MW by +20%/lv with low stabilizer draw.",
         baseMegawattsPerLevel = 32.0,
         fuelUpkeepPerLevel = 0.07,
         baseScrapCost = 150.0,
@@ -768,8 +768,8 @@ enum class SalvageNodeType(
 ) {
     ARMORED_CONVOY_WRECK(
         id = "ARMORED_CONVOY_WRECK",
-        title = "Armored Paymaster Wreck",
-        subtitle = "Extract scarce Scrap, Bio-Fuel & real small amounts of Gold",
+        title = "Crashed Ares Cargo Lander Hull",
+        subtitle = "Cut titanium hull plating for Regolith Alloy, Methane-LOX & Martian Gold Ore",
         primaryResource = ResourceType.SCRAP,
         secondaryResource = ResourceType.BIO_FUEL,
         basePrimaryYield = 4.5,
@@ -782,8 +782,8 @@ enum class SalvageNodeType(
     ),
     DEW_VAPOR_GEYSER(
         id = "DEW_VAPOR_GEYSER",
-        title = "Subterranean Dew & Coin Pocket",
-        subtitle = "Siphon condensed canyon water, rations & trace gold dust",
+        title = "Sub-Surface Permafrost Ice Vein",
+        subtitle = "Melt glacial permafrost pockets for Glacial Water, Bio-Rations & Gold dust",
         primaryResource = ResourceType.WATER,
         secondaryResource = ResourceType.RATIONS,
         basePrimaryYield = 4.0,
@@ -796,8 +796,8 @@ enum class SalvageNodeType(
     ),
     OVERGROWN_BIO_DOME(
         id = "OVERGROWN_BIO_DOME",
-        title = "Overgrown Ag-Dome Vault",
-        subtitle = "Harvest wild rations, bio-fuel & trace trade coins",
+        title = "Abandoned Pioneer Hydro-Pod",
+        subtitle = "Salvage vacuum-sealed rations, methane fuel cells & gold Foil contacts",
         primaryResource = ResourceType.RATIONS,
         secondaryResource = ResourceType.BIO_FUEL,
         basePrimaryYield = 4.2,
@@ -810,8 +810,8 @@ enum class SalvageNodeType(
     ),
     ENCRYPTED_ORBITAL_POD(
         id = "ENCRYPTED_ORBITAL_POD",
-        title = "Pre-Fall Syndicate Pay-Pod",
-        subtitle = "Crack black-box vaults for Research Data, Scrap & small Gold",
+        title = "De-Orbited Telemetry Black-Box",
+        subtitle = "Crack orbital probe cores for Telemetry Data, Alloy & Gold circuitry",
         primaryResource = ResourceType.RESEARCH_DATA,
         secondaryResource = ResourceType.SCRAP,
         basePrimaryYield = 3.4,
@@ -824,8 +824,8 @@ enum class SalvageNodeType(
     ),
     BIOLUMINESCENT_METEOR_VEIN(
         id = "BIOLUMINESCENT_METEOR_VEIN",
-        title = "Bioluminescent Gold & Core Vein",
-        subtitle = "Nocturnal crystal fissure with Mutagen Cores, Tech & small Gold",
+        title = "Chondrite Asteroid & Xeno-Core Fissure",
+        subtitle = "Nocturnal impact crater rich in Xenobiology Cores, Telemetry & Gold Ore",
         primaryResource = ResourceType.MUTAGEN_CORES,
         secondaryResource = ResourceType.RESEARCH_DATA,
         basePrimaryYield = 1.0,
@@ -838,8 +838,8 @@ enum class SalvageNodeType(
     ),
     RADIOACTIVE_SLUDGE_TANKER(
         id = "RADIOACTIVE_SLUDGE_TANKER",
-        title = "Rad-Sludge Escort Tanker",
-        subtitle = "Drain volatile Bio-Fuel, Scrap & small Gold traces",
+        title = "Pressurized Sabatier Propellant Tank",
+        subtitle = "Siphon volatile Methane-LOX Fuel, Alloy & Gold catalyst plates",
         primaryResource = ResourceType.BIO_FUEL,
         secondaryResource = ResourceType.SCRAP,
         basePrimaryYield = 3.8,
@@ -875,17 +875,17 @@ data class HireableCandidate(
 )
 
 object CaravanCandidateGenerator {
-    const val UNIQUE_DWELLER_CHANCE_PERCENT = 8 // Rare 8% chance to gain a Unique Vault Dweller!
+    const val UNIQUE_DWELLER_CHANCE_PERCENT = 8 // Rare 8% chance to recruit a Mission Specialist Commander!
 
-    private val firstNames = listOf("Kael", "Vesper", "Rook", "Nyx", "Juno", "Dax", "Sora", "Marrow", "Vane", "Lyra", "Tark", "Zed")
+    private val firstNames = listOf("Watney", "Lewis", "Vogel", "Beck", "Johanssen", "Martinez", "Kael", "Vesper", "Juno", "Dax", "Lyra", "Tark")
     private val callsigns = listOf(
-        "Ironjaw", "Gearwright", "Mistwalker", "Cinder", "Sparkplug",
-        "Wraith", "Rusthound", "Volt", "Dune-Strider", "Hex", "Welder", "Echo"
+        "Red-Dust", "Star-Nav", "Ice-Core", "Sol-Walker", "MOXIE-Tech",
+        "Apex-EVA", "Crater-Hound", "Kilopower", "Tharsis", "Sabatier", "Permafrost", "Phobos"
     )
-    private val uniqueNames = listOf("Vance", "Aria", "Gideon", "Nova", "Orion", "Kratos", "valkyrie", "Zephyr")
+    private val uniqueNames = listOf("Commander Vance", "Dr. Aria", "Capt. Gideon", "Dr. Nova", "Chief Orion", "Col. Kratos", "Valkyrie", "Zephyr")
     private val uniqueTitles = listOf(
-        "Prime Overseer", "Pre-War Prodigy", "Vault-Tec Chief", "Apex Harvester",
-        "Quantum Savant", "Core Titan", "Aether Vanguard", "Master Forger"
+        "Ares Mission Director", "JPL Chief Botanist", "Orbital Flight Surgeon", "Prime Astro-Engineer",
+        "Kilopower Architect", "Lava-Tube Pioneer", "Valles Pathfinder", "Master Terraformer"
     )
 
     fun generateBoard(
@@ -908,13 +908,13 @@ object CaravanCandidateGenerator {
             val bonusXp = ((40.0 + commandLevel * 15.0) * (if (isUnique) 2.5 else 1.0)).roundToInt().toDouble()
 
             val trait = if (isUnique) {
-                "★ UNIQUE VAULT DWELLER (8% RARE): +40% All-Resource Gathering Ability (Vault, Pickaxe, Hunting, Fishing & Expeditions) + ${bonusXp.toInt()} Class XP!"
+                "★ ARES MISSION COMMANDER (8% RARE): +40% All-Resource Synthesis Ability (Habitat, Core Drill, EVA Harvest, Ice Bore & Rovers) + ${bonusXp.toInt()} Class XP!"
             } else {
                 when (targetClass) {
-                    WorkerClassType.SCRAPPER -> "Vault Miner & Guard (+${bonusXp.toInt()} XP • 8% Awaken Chance • Takes 2 Food & 2 Water/Day)"
-                    WorkerClassType.HYDRO_ENGINEER -> "Water & Farm Tech (+${bonusXp.toInt()} XP • 8% Awaken Chance • Takes 2 Food & 2 Water/Day)"
-                    WorkerClassType.NIGHT_STALKER -> "Wasteland Scout & Guard (+${bonusXp.toInt()} XP • 8% Awaken Chance • Takes 2 Food & 2 Water/Day)"
-                    WorkerClassType.TECH_SAVANT -> "Reactor & Turret Engineer (+${bonusXp.toInt()} XP • 8% Awaken Chance • Takes 2 Food & 2 Water/Day)"
+                    WorkerClassType.SCRAPPER -> "Regolith Drill Engineer (+${bonusXp.toInt()} XP • 8% Commander Chance • Takes 2 Food & 2 Water/Sol)"
+                    WorkerClassType.HYDRO_ENGINEER -> "Cryo-Hydrologist & Botanist (+${bonusXp.toInt()} XP • 8% Commander Chance • Takes 2 Food & 2 Water/Sol)"
+                    WorkerClassType.NIGHT_STALKER -> "EVA Rover Pathfinder (+${bonusXp.toInt()} XP • 8% Commander Chance • Takes 2 Food & 2 Water/Sol)"
+                    WorkerClassType.TECH_SAVANT -> "Astro-Systems & RTG Savant (+${bonusXp.toInt()} XP • 8% Commander Chance • Takes 2 Food & 2 Water/Sol)"
                 }
             }
 
@@ -956,8 +956,8 @@ enum class WorkerClassType(
 ) {
     SCRAPPER(
         id = "SCRAPPER",
-        displayName = "Wasteland Scrapper",
-        roleSummary = "Extracts Scrap (with small Gold sifting), dismantles Caches & mans barricades (+8 Defense each).",
+        displayName = "Regolith Drill Engineer",
+        roleSummary = "Sinters Regolith Alloy (with Martian Gold Ore sifting), cracks Core Crates & mans Whipple Shields (+8 Defense each).",
         favoredPhases = listOf(DayNightPhase.DAWN, DayNightPhase.SCORCHING_DAY),
         primaryResource = ResourceType.SCRAP,
         baseOutputPerSecond = 1.15,
@@ -965,16 +965,16 @@ enum class WorkerClassType(
         nightProductivityMultiplier = 0.80,
         accentColor = SolarAmber,
         perks = listOf(
-            VeteranPerk(5, "Plasma Torch Cutters", "+25% Scrapper speed & +20% manual node Scrap."),
-            VeteranPerk(10, "Byproduct Siphoning", "Scrappers also refine +0.20 Bio-Fuel/s each."),
-            VeteranPerk(15, "Floodlight Visors", "Halves the Rad-Night productivity penalty."),
-            VeteranPerk(20, "Titan Wreck Breakers", "+45% Scrap output & auto-dismantles 2x more caches.")
+            VeteranPerk(5, "Laser Sintering Cutters", "+25% Drill Engineer speed & +20% manual vein Alloy."),
+            VeteranPerk(10, "Sabatier Off-Gas Siphoning", "Drill Engineers also refine +0.20 Methane-LOX Fuel/s each."),
+            VeteranPerk(15, "Heated EVA Visors", "Halves the Cryo-Night (-110°C) productivity penalty."),
+            VeteranPerk(20, "Mantle Bore Titans", "+45% Regolith Alloy output & auto-cracks 2x more core crates.")
         )
     ),
     HYDRO_ENGINEER(
         id = "HYDRO_ENGINEER",
-        displayName = "Hydro & Bio Engineer",
-        roleSummary = "Refines salvaged moisture & hunted game into Water, Food Rations & Fuel (+30% Dawn/Dusk).",
+        displayName = "Cryo-Hydrologist & Botanist",
+        roleSummary = "Melts permafrost ice & cultivates aeroponic tubers into Glacial Water, Bio-Rations & Propellant (+30% Dawn/Dusk).",
         favoredPhases = listOf(DayNightPhase.DAWN, DayNightPhase.DUSK),
         primaryResource = ResourceType.WATER,
         baseOutputPerSecond = 0.95,
@@ -982,16 +982,16 @@ enum class WorkerClassType(
         nightProductivityMultiplier = 1.15,
         accentColor = CryoCyan,
         perks = listOf(
-            VeteranPerk(5, "Vapor Recovery Membranes", "+25% Water & Rations yield from hired engineers."),
-            VeteranPerk(10, "Catalytic Sludge Cracking", "+0.30 Bio-Fuel/s per assigned Hydro-Engineer."),
-            VeteranPerk(15, "Closed-Loop Irrigation", "Reduces Greenhouse water upkeep by 50%."),
-            VeteranPerk(20, "Cryo-Fusion Turbines", "+40% all-facility output & +15% Storage cap.")
+            VeteranPerk(5, "Sublimation Recovery Membranes", "+25% Water Ice & Bio-Rations yield from Hydrologists."),
+            VeteranPerk(10, "Sabatier Methanation Loop", "+0.30 Methane-LOX Fuel/s per assigned Cryo-Hydrologist."),
+            VeteranPerk(15, "Closed-Loop Aeroponics", "Reduces Bio-Dome water ice upkeep by 50%."),
+            VeteranPerk(20, "Sub-Glacial Fusion Pumps", "+40% all-module output & +15% Depot Storage cap.")
         )
     ),
     NIGHT_STALKER(
         id = "NIGHT_STALKER",
-        displayName = "Nocturnal Stalker",
-        roleSummary = "Master hunter (+15% Hunt Food & +15 Defense each), escorts convoys & harvests Mutagen Rigs.",
+        displayName = "EVA Rover Pathfinder",
+        roleSummary = "Surface reconnaissance specialist (+15% EVA Harvest Food & +15 Defense each), pilots Rovers & extracts Xeno-Cores.",
         favoredPhases = listOf(DayNightPhase.DUSK, DayNightPhase.RAD_NIGHT),
         primaryResource = ResourceType.MUTAGEN_CORES,
         baseOutputPerSecond = 0.07,
@@ -999,16 +999,16 @@ enum class WorkerClassType(
         nightProductivityMultiplier = 1.65,
         accentColor = BioluminescentViolet,
         perks = listOf(
-            VeteranPerk(5, "Geiger Echo-Optics", "+30% Mutagen Core harvesting & +15% Convoy Gold."),
-            VeteranPerk(10, "UV Thermal Cloaks", "Removes daytime heat sluggishness (+35% Day output)."),
-            VeteranPerk(15, "Shadow Cache Hauling", "Stalkers bring back +0.85 Scrap/s & +0.35 Fuel/s at night."),
-            VeteranPerk(20, "Apex Wraith Protocol", "Doubles Mutagen Core yield during Bioluminescent Night.")
+            VeteranPerk(5, "Lidar Terrain Optics", "+30% Xenobiology Core harvesting & +15% Rover Convoy Gold."),
+            VeteranPerk(10, "Solar-Reflective EVA Suits", "Removes daytime thermal sluggishness (+35% Sol output)."),
+            VeteranPerk(15, "Nocturnal Regolith Hauling", "Pathfinders bring back +0.85 Alloy/s & +0.35 Fuel/s at night."),
+            VeteranPerk(20, "Olympus Vanguard Protocol", "Doubles Xenobiology Core yield during Cryo-Radiation Night.")
         )
     ),
     TECH_SAVANT(
         id = "TECH_SAVANT",
-        displayName = "Cyber-Tech Savant",
-        roleSummary = "Optimizes Power Stations & Sentry Turrets, decodes Research Data & boosts Outpost XP (+15%).",
+        displayName = "Astro-Systems Savant",
+        roleSummary = "Optimizes Solar/RTG Grids & Point-Defense Lasers, decodes Orbital Telemetry & boosts Mission XP (+15%).",
         favoredPhases = listOf(DayNightPhase.DUSK, DayNightPhase.RAD_NIGHT),
         primaryResource = ResourceType.RESEARCH_DATA,
         baseOutputPerSecond = 0.55,
@@ -1016,10 +1016,10 @@ enum class WorkerClassType(
         nightProductivityMultiplier = 1.35,
         accentColor = XpGold,
         perks = listOf(
-            VeteranPerk(5, "Neural Co-Processors", "+25% Research Data & +15% Power Grid MW."),
-            VeteranPerk(10, "Automated Drone Relays", "+10% global production across all Outpost structures."),
-            VeteranPerk(15, "Mentor Broadcasts", "All hired Survivor Classes gain +35% faster shift XP."),
-            VeteranPerk(20, "Singularity Uplink", "+35% Research Data & -20% Phase Shift cooldowns.")
+            VeteranPerk(5, "Flight Computer Co-Processors", "+25% Orbital Telemetry & +15% Power Grid MW."),
+            VeteranPerk(10, "Autonomous Maintenance Drones", "+10% global production across all Mars Habitat bays."),
+            VeteranPerk(15, "Mission Control Simulators", "All Astronaut Specialist Classes gain +35% faster shift XP."),
+            VeteranPerk(20, "Deep-Space Relay Uplink", "+35% Telemetry Data & -20% Orbital Power cooldowns.")
         )
     );
 
@@ -1031,9 +1031,9 @@ enum class WorkerClassType(
 }
 
 enum class BuildingCategory(val label: String) {
-    EXTRACTION("Salvage & Extraction"),
-    REFINERY("Refining & Tech"),
-    INFRASTRUCTURE("Housing & Vaults")
+    EXTRACTION("Ice, Regolith & Bio-Domes"),
+    REFINERY("Sabatier & Deep-Space Tech"),
+    INFRASTRUCTURE("Pressurized Habs & Lava Tubes")
 }
 
 enum class BuildingType(
@@ -1061,16 +1061,16 @@ enum class BuildingType(
 ) {
     SURVIVOR_HAB_BLOCK(
         id = "SURVIVOR_HAB_BLOCK",
-        displayName = "Vault Living Quarters",
+        displayName = "Pressurized Astronaut Hab",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 1,
-        description = "Radiation-shielded dormitories required to house Dwellers (+4 Dwellers per room level, up to 30 Max Vault Dwellers). Each room upgrade also expands Vault storage capacity and takes more daily maintenance.",
-        gameplayNeedSummary = "REQUIRED TO HIRE DWELLERS: +4 Max Dwellers/Lv (Up to 30 Max Dwellers), +Storage Cap/Lv & -4% Dweller Upkeep/Lv",
+        description = "Radiation-shielded pressurized quarters required to house Astronauts (+4 Crew per bay level, up to 30 Max Astronauts). Each upgrade merges lava-tube bays and expands Depot Storage.",
+        gameplayNeedSummary = "REQUIRED TO RECRUIT ASTRONAUTS: +4 Max Crew/Lv (Up to 30 Max Crew), +Storage Cap/Lv & -4% Ration Upkeep/Lv",
         primaryResource = ResourceType.RATIONS,
         baseOutputPerLevel = 0.35,
         megawattDemandPerLevel = 3.5,
         baseBuildTimeSeconds = 12,
-        manualSalvageBonusDesc = "+4 Max Dweller Capacity (Max 30), +Storage Cap & +5% Morale per level",
+        manualSalvageBonusDesc = "+4 Max Astronaut Capacity (Max 30), +Storage Cap & +5% Crew Morale per level",
         baseScrapCost = 42.0,
         baseWaterCost = 18.0,
         favoredWorkerClass = null,
@@ -1078,46 +1078,46 @@ enum class BuildingType(
     ),
     SALVAGE_YARD(
         id = "SALVAGE_YARD",
-        displayName = "Vault Gold Mine & Ore Smeltery",
+        displayName = "Regolith Smelter & Gold Sifter",
         category = BuildingCategory.EXTRACTION,
         requiredCommandLevel = 1,
-        description = "High-voltage magnetic crushers, gold sifters & shale-gas vents. Gathers real small amounts of Gold along with small amounts of Bio-Fuel while extracting Scrap, and expands resource storage cap per upgrade.",
-        gameplayNeedSummary = "GOLD MINE + SMALL FUEL: Max Pickaxe Lv = (2 + 2×Lv), Sifts Small Gold/s + Small Fuel/s from Scrap & +Storage Cap/Lv",
+        description = "High-voltage microwave regolith sinterers, gold-ore magnetic separators & methane vents. Sifts Martian Gold Ore and trace Methane-LOX Fuel while smelting Regolith Alloy.",
+        gameplayNeedSummary = "GOLD ORE + METHANE TRICKLE: Max Laser Drill Lv = (2 + 2×Lv), Sifts Gold/s + Fuel/s from Regolith & +Storage Cap/Lv",
         primaryResource = ResourceType.SCRAP,
         baseOutputPerLevel = 1.55,
         megawattDemandPerLevel = 4.0,
         baseBuildTimeSeconds = 15,
-        manualSalvageBonusDesc = "+25% Pickaxe Scrap/Gold, Sifts Small Gold & +Small Bio-Fuel per Gold Mine upgrade level",
+        manualSalvageBonusDesc = "+25% Core Drill Alloy/Gold, Sifts Gold Ore & +Methane-LOX Fuel per Smelter upgrade level",
         baseScrapCost = 28.0,
         favoredWorkerClass = WorkerClassType.SCRAPPER
     ),
     ATMOSPHERIC_CONDENSER(
         id = "ATMOSPHERIC_CONDENSER",
-        displayName = "Subterranean Water Purifier",
+        displayName = "Sub-Glacial Ice Extractor",
         category = BuildingCategory.EXTRACTION,
         requiredCommandLevel = 1,
-        description = "Deep-aquifer filtration turbines required for automated Water production (without this room, you can only get Water manually). Each level expands resource storage cap and takes more Scrap, Water & Fuel per day to maintain.",
-        gameplayNeedSummary = "REQUIRED FOR AUTO-WATER (MANUAL ONLY WITHOUT ROOM): +3 Daily Water/Lv, +Storage Cap/Lv & +25% Fish Yield/Lv",
+        description = "Rodriguez-well thermal ice melters & perchlorate filters required for automated Glacial Water production (manual ice-core melting only until built). Expands storage cap per level.",
+        gameplayNeedSummary = "REQUIRED FOR AUTO-WATER (MANUAL ICE MELT ONLY WITHOUT BAY): +3 Sol Water/Lv, +Storage Cap/Lv & +25% Brine Yield/Lv",
         primaryResource = ResourceType.WATER,
         baseOutputPerLevel = 1.25,
         megawattDemandPerLevel = 4.0,
         baseBuildTimeSeconds = 18,
-        manualSalvageBonusDesc = "+25% Fishing Yield & +3 Clean Water every New Day per level",
+        manualSalvageBonusDesc = "+25% Ice-Bore Yield & +3 Glacial Water every New Sol per level",
         baseScrapCost = 32.0,
         favoredWorkerClass = WorkerClassType.HYDRO_ENGINEER
     ),
     HYDROPONIC_GREENHOUSE(
         id = "HYDROPONIC_GREENHOUSE",
-        displayName = "UV Hydroponic Farm",
+        displayName = "Aeroponic Potato & Kelp Dome",
         category = BuildingCategory.EXTRACTION,
         requiredCommandLevel = 1,
-        description = "High-intensity UV crop bays required for automated Food Rations production (without this room, you can only get Food manually). Each level expands resource storage cap and takes more Scrap, Water & Fuel per day to maintain.",
-        gameplayNeedSummary = "REQUIRED FOR AUTO-FOOD (MANUAL ONLY WITHOUT ROOM): +4 Daily Food/Lv, +Storage Cap/Lv & +25% Hunting/Trap Food/Lv",
+        description = "Pressurized full-spectrum LED bio-dome cultivating Martian potatoes & spirulina kelp required for automated Bio-Rations production (manual EVA harvest only until built).",
+        gameplayNeedSummary = "REQUIRED FOR AUTO-FOOD (MANUAL EVA ONLY WITHOUT DOME): +4 Sol Food/Lv, +Storage Cap/Lv & +25% Spore-Pod Food/Lv",
         primaryResource = ResourceType.RATIONS,
         baseOutputPerLevel = 1.20,
         megawattDemandPerLevel = 5.0,
         baseBuildTimeSeconds = 21,
-        manualSalvageBonusDesc = "+25% Hunting Food & +4 Food Rations every New Day per level",
+        manualSalvageBonusDesc = "+25% EVA Harvest Food & +4 Bio-Rations every New Sol per level",
         waterUpkeepPerLevel = 0.30,
         baseScrapCost = 40.0,
         baseWaterCost = 15.0,
@@ -1125,16 +1125,16 @@ enum class BuildingType(
     ),
     REINFORCED_SILO(
         id = "REINFORCED_SILO",
-        displayName = "Decontamination Airlock & Medbay",
+        displayName = "MOXIE O2 & Perchlorate Medbay",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 2,
-        description = "Lead-shielded decontamination showers, trauma medbay & armored airlock that scrub Vault radiation, heal Dwellers, and add +350 Silo Storage per level.",
-        gameplayNeedSummary = "REQUIRED FOR RADS, HEALING & SIEGE: Scrubs Rads, Heals Dwellers, +28 Defense/Lv & +350 Silo Storage/Lv",
+        description = "Atmospheric CO2-to-O2 MOXIE scrubbers, perchlorate dust airlock showers & flight surgery medbay that scrub cosmic radiation, heal Astronauts, and add +350 Depot Storage/Lv.",
+        gameplayNeedSummary = "REQUIRED FOR O2, RADS & STORM DEFENSE: Scrubs Rads, Heals Crew, +28 Dome Defense/Lv & +350 Storage/Lv",
         primaryResource = ResourceType.SCRAP,
         baseOutputPerLevel = 0.70,
         megawattDemandPerLevel = 4.0,
         baseBuildTimeSeconds = 24,
-        manualSalvageBonusDesc = "Auto-scrubs Vault Rads, +28 Defense, -4% Door Damage & +350 Silo Storage/Lv",
+        manualSalvageBonusDesc = "Auto-scrubs Cosmic Rads, +28 Dome Defense, -4% Airlock Damage & +350 Storage/Lv",
         baseScrapCost = 85.0,
         baseWaterCost = 30.0,
         favoredWorkerClass = WorkerClassType.SCRAPPER,
@@ -1143,16 +1143,16 @@ enum class BuildingType(
     ),
     BIO_SLUDGE_REFINERY(
         id = "BIO_SLUDGE_REFINERY",
-        displayName = "Bio-Fuel & Munitions Refinery",
+        displayName = "Sabatier Methane-LOX Refinery",
         category = BuildingCategory.REFINERY,
         requiredCommandLevel = 2,
-        description = "Distills reactor fuel and manufactures ammunition & repair alloys for Vault defenses. Each upgrade also expands Vault storage capacity.",
-        gameplayNeedSummary = "REQUIRED FOR TURRETS & REPAIRS: Unlocks Mine/Turret Crafting, -10% Door Repair Cost/Lv, +Fuel & +Storage Cap/Lv",
+        description = "Synthesizes liquid methane/oxygen rocket & turbine propellant from Martian CO2 and manufactures point-defense charges & hull repair alloy.",
+        gameplayNeedSummary = "REQUIRED FOR TURRETS & DOME REPAIRS: Unlocks Laser/Shield Crafting, -10% Dome Repair Cost/Lv, +Fuel & +Storage Cap/Lv",
         primaryResource = ResourceType.BIO_FUEL,
         baseOutputPerLevel = 1.45,
         megawattDemandPerLevel = 6.0,
         baseBuildTimeSeconds = 27,
-        manualSalvageBonusDesc = "-10% Vault Door Repair Cost & +25% Bio-Fuel Yield per level",
+        manualSalvageBonusDesc = "-10% Airlock Dome Repair Cost & +25% Methane-LOX Yield per level",
         waterUpkeepPerLevel = 0.18,
         baseScrapCost = 115.0,
         baseWaterCost = 42.0,
@@ -1160,32 +1160,32 @@ enum class BuildingType(
     ),
     SIGNAL_RESEARCH_ARRAY(
         id = "SIGNAL_RESEARCH_ARRAY",
-        displayName = "Wasteland Radar & Recon Array",
+        displayName = "Deep-Space Telemetry Dish",
         category = BuildingCategory.REFINERY,
         requiredCommandLevel = 3,
-        description = "Long-range telemetry dish that guides wasteland expeditions away from lethal ambushes and expands data/resource storage.",
-        gameplayNeedSummary = "REQUIRED FOR SAFE EXPEDITIONS: -1% Dweller Death Risk/Lv, +20% Expedition Loot, +15% XP/Lv & +Storage Cap/Lv",
+        description = "High-gain X-band orbital dish & Doppler dust-storm radar that routes Mars Rover expeditions around lethal canyon storms and expands telemetry storage.",
+        gameplayNeedSummary = "REQUIRED FOR SAFE ROVER TREKS: -1% Astronaut Loss Risk/Lv, +20% Rover Loot, +15% XP/Lv & +Storage Cap/Lv",
         primaryResource = ResourceType.RESEARCH_DATA,
         baseOutputPerLevel = 0.85,
         megawattDemandPerLevel = 9.0,
         baseBuildTimeSeconds = 30,
-        manualSalvageBonusDesc = "-1% Dweller Expedition Death Risk & +15% Vault XP per level",
+        manualSalvageBonusDesc = "-1% Mars Rover Expedition Risk & +15% Commander XP per level",
         baseScrapCost = 170.0,
         baseFuelCost = 40.0,
         favoredWorkerClass = WorkerClassType.TECH_SAVANT
     ),
     NOCTURNAL_EXTRACTION_RIG(
         id = "NOCTURNAL_EXTRACTION_RIG",
-        displayName = "Deep-Core Aether & Mutagen Lab",
+        displayName = "Xenobiology & Core Lab",
         category = BuildingCategory.REFINERY,
         requiredCommandLevel = 4,
-        description = "High-energy particle collider that synthesizes Mutagen Cores, overclocks Vault Power Generators, and expands high-tier storage.",
-        gameplayNeedSummary = "REQUIRED FOR APEX TECH: +12% Total Vault Power MW/Lv, Unlocks Plasma Shield, +Mutagen Cores & +Storage Cap/Lv",
+        description = "Pressurized astrobiology & plasma physics lab that isolates Martian Xenobiology Cores, overclocks RTG/Solar grids, and expands high-tier storage.",
+        gameplayNeedSummary = "REQUIRED FOR APEX MARS TECH: +12% Total Outpost Power MW/Lv, Unlocks Ion Shield, +Xeno-Cores & +Storage Cap/Lv",
         primaryResource = ResourceType.MUTAGEN_CORES,
         baseOutputPerLevel = 0.12,
         megawattDemandPerLevel = 14.0,
         baseBuildTimeSeconds = 34,
-        manualSalvageBonusDesc = "+12% Total Power Grid MW & +1 Bonus Core on Vein Break per level",
+        manualSalvageBonusDesc = "+12% Total Power Grid MW & +1 Bonus Xeno-Core on Vein Break per level",
         baseScrapCost = 250.0,
         baseFuelCost = 85.0,
         baseCoresCost = 1.0,
@@ -1193,11 +1193,11 @@ enum class BuildingType(
     ),
     GEOTHERMAL_TAP(
         id = "GEOTHERMAL_TAP",
-        displayName = "Deep-Core Geothermal Tap",
+        displayName = "Tharsis Magma Borehole Tap",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 3,
-        description = "Subterranean Floor B5 magma bore that generates +7.5 MW/Lv clean 24/7 power, reduces Generator Wear, and expands bunker storage.",
-        gameplayNeedSummary = "CLEAN 24/7 POWER (FLOOR B5): +7.5 MW/Lv Continuous Power, -10% Generator Wear/Lv & +Storage Cap/Lv",
+        description = "Subterranean Lava-Tube Deck L5 geothermal bore that generates +7.5 MW/Lv dust-storm-proof 24/7 power, reduces Turbine Wear, and expands storage.",
+        gameplayNeedSummary = "STORM-PROOF 24/7 POWER (LAVA TUBE L5): +7.5 MW/Lv Continuous Power, -10% Turbine Wear/Lv & +Storage Cap/Lv",
         primaryResource = ResourceType.BIO_FUEL,
         baseOutputPerLevel = 0.65,
         megawattDemandPerLevel = 1.0,
@@ -1209,16 +1209,16 @@ enum class BuildingType(
     ),
     CRYO_STASIS_VAULT(
         id = "CRYO_STASIS_VAULT",
-        displayName = "Cryo-Stasis & Ration Vault",
+        displayName = "Martian Permafrost Cryo-Vault",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 4,
-        description = "Deep-freeze preservation vaults on Floor B5 that cut Dweller 60s & daily Food/Water appetite by -8%/Lv and add +400 Cryo Storage/Lv.",
-        gameplayNeedSummary = "CUTS DWELLER HUNGER (FLOOR B5): -8% Dweller 60s & Daily Food/Water Drain/Lv & +400 Cryo Storage/Lv",
+        description = "Sub-zero lava-tube preservation vaults on Deck L5 that cut Astronaut 60s & Sol Food/Water appetite by -8%/Lv and add +400 Cryo Storage/Lv.",
+        gameplayNeedSummary = "CUTS ASTRONAUT CONSUMPTION (LAVA TUBE L5): -8% Crew 60s & Sol Food/Water Drain/Lv & +400 Cryo Storage/Lv",
         primaryResource = ResourceType.RATIONS,
         baseOutputPerLevel = 1.00,
         megawattDemandPerLevel = 5.0,
         baseBuildTimeSeconds = 42,
-        manualSalvageBonusDesc = "-8% Dweller Food/Water Appetite Drain & +400 Vault Storage per level",
+        manualSalvageBonusDesc = "-8% Astronaut Food/Water Consumption & +400 Outpost Storage per level",
         baseScrapCost = 200.0,
         baseWaterCost = 55.0,
         baseFuelCost = 38.0,
@@ -1227,16 +1227,16 @@ enum class BuildingType(
     ),
     VAULT_STORE_ROOM(
         id = "VAULT_STORE_ROOM",
-        displayName = "Vault Supply Store Room",
+        displayName = "Lava-Tube Logistics Depot",
         category = BuildingCategory.INFRASTRUCTURE,
         requiredCommandLevel = 1,
-        description = "Reinforced subterranean cargo bay with expandable high-density shelving required to raise resource caps for higher-level room upgrades.",
-        gameplayNeedSummary = "UPGRADABLE RESOURCE STORAGE (FLOOR B6): +1,000+ Escalating Max Resource Storage/Lv & +10% Crate Yield/Lv",
+        description = "Pressurized basalt lava-tube cargo cavern with automated racking required to raise resource caps for higher-level habitat bay expansions.",
+        gameplayNeedSummary = "UPGRADABLE RESOURCE STORAGE (LAVA TUBE L6): +1,000+ Escalating Max Resource Storage/Lv & +10% Core Crate Yield/Lv",
         primaryResource = ResourceType.SCRAP,
         baseOutputPerLevel = 0.85,
         megawattDemandPerLevel = 2.0,
         baseBuildTimeSeconds = 46,
-        manualSalvageBonusDesc = "+1,000+ Escalating Max Resource Storage & +10% Salvage Crate Yield per level",
+        manualSalvageBonusDesc = "+1,000+ Escalating Max Resource Storage & +10% Core Crate Yield per level",
         baseScrapCost = 38.0,
         baseWaterCost = 12.0,
         favoredWorkerClass = WorkerClassType.SCRAPPER,
@@ -1571,7 +1571,7 @@ enum class VaultMapStation(
 ) {
     SURFACE_MINE_SHAFT(
         id = "SURFACE_MINE_SHAFT",
-        shortTitle = "Surface Ore Mine",
+        shortTitle = "Surface Crater Drill",
         floorIndex = 0,
         wingColumn = 0,
         buildingType = null,
@@ -1579,7 +1579,7 @@ enum class VaultMapStation(
     ),
     UNDERGROUND_FISHING_SUMP(
         id = "UNDERGROUND_FISHING_SUMP",
-        shortTitle = "Sub-Vault Fishing Sump",
+        shortTitle = "Sub-Glacial Ice Sump",
         floorIndex = 0,
         wingColumn = 1,
         buildingType = null,
@@ -1587,7 +1587,7 @@ enum class VaultMapStation(
     ),
     ROOM_1_QUARTERS(
         id = "ROOM_1_QUARTERS",
-        shortTitle = "#1 Living Quarters",
+        shortTitle = "#1 Astronaut Hab",
         floorIndex = 1,
         wingColumn = 0,
         buildingType = BuildingType.SURVIVOR_HAB_BLOCK,
@@ -1595,7 +1595,7 @@ enum class VaultMapStation(
     ),
     ROOM_2_SMELTERY(
         id = "ROOM_2_SMELTERY",
-        shortTitle = "#2 Ore & Gold Smeltery",
+        shortTitle = "#2 Regolith Refinery",
         floorIndex = 1,
         wingColumn = 1,
         buildingType = BuildingType.SALVAGE_YARD,
@@ -1603,7 +1603,7 @@ enum class VaultMapStation(
     ),
     ROOM_3_WATER_PURIFIER(
         id = "ROOM_3_WATER_PURIFIER",
-        shortTitle = "#3 Water Purifier",
+        shortTitle = "#3 Glacial Ice Melter",
         floorIndex = 2,
         wingColumn = 0,
         buildingType = BuildingType.ATMOSPHERIC_CONDENSER,
@@ -1611,7 +1611,7 @@ enum class VaultMapStation(
     ),
     ROOM_4_HYDROPONICS(
         id = "ROOM_4_HYDROPONICS",
-        shortTitle = "#4 Hydroponic Farm",
+        shortTitle = "#4 Aeroponic Bio-Dome",
         floorIndex = 2,
         wingColumn = 1,
         buildingType = BuildingType.HYDROPONIC_GREENHOUSE,
@@ -1619,7 +1619,7 @@ enum class VaultMapStation(
     ),
     ROOM_5_MEDBAY_AIRLOCK(
         id = "ROOM_5_MEDBAY_AIRLOCK",
-        shortTitle = "#5 Decon & Medbay",
+        shortTitle = "#5 MOXIE O2 & Medbay",
         floorIndex = 3,
         wingColumn = 0,
         buildingType = BuildingType.REINFORCED_SILO,
@@ -1627,7 +1627,7 @@ enum class VaultMapStation(
     ),
     ROOM_6_MUNITIONS_REFINERY(
         id = "ROOM_6_MUNITIONS_REFINERY",
-        shortTitle = "#6 Fuel & Munitions",
+        shortTitle = "#6 Sabatier CH4 Plant",
         floorIndex = 3,
         wingColumn = 1,
         buildingType = BuildingType.BIO_SLUDGE_REFINERY,
@@ -1635,7 +1635,7 @@ enum class VaultMapStation(
     ),
     ROOM_7_RADAR_ARRAY(
         id = "ROOM_7_RADAR_ARRAY",
-        shortTitle = "#7 Recon Radar",
+        shortTitle = "#7 Deep-Space Telemetry",
         floorIndex = 4,
         wingColumn = 0,
         buildingType = BuildingType.SIGNAL_RESEARCH_ARRAY,
@@ -1643,7 +1643,7 @@ enum class VaultMapStation(
     ),
     ROOM_8_MUTAGEN_LAB(
         id = "ROOM_8_MUTAGEN_LAB",
-        shortTitle = "#8 Deep Mutagen Lab",
+        shortTitle = "#8 Astrobiology Lab",
         floorIndex = 4,
         wingColumn = 1,
         buildingType = BuildingType.NOCTURNAL_EXTRACTION_RIG,
@@ -1651,7 +1651,7 @@ enum class VaultMapStation(
     ),
     ROOM_9_GEOTHERMAL(
         id = "ROOM_9_GEOTHERMAL",
-        shortTitle = "#9 Geothermal Tap",
+        shortTitle = "#9 Areothermal Vent",
         floorIndex = 5,
         wingColumn = 0,
         buildingType = BuildingType.GEOTHERMAL_TAP,
@@ -1659,7 +1659,7 @@ enum class VaultMapStation(
     ),
     ROOM_10_CRYO_VAULT(
         id = "ROOM_10_CRYO_VAULT",
-        shortTitle = "#10 Cryo Ration Vault",
+        shortTitle = "#10 Cryo Seed Vault",
         floorIndex = 5,
         wingColumn = 1,
         buildingType = BuildingType.CRYO_STASIS_VAULT,
@@ -1667,7 +1667,7 @@ enum class VaultMapStation(
     ),
     ROOM_11_STORE_ROOM(
         id = "ROOM_11_STORE_ROOM",
-        shortTitle = "#11 Supply Store Room",
+        shortTitle = "#11 Cargo Hold Depot",
         floorIndex = 6,
         wingColumn = 0,
         buildingType = BuildingType.VAULT_STORE_ROOM,
@@ -1720,17 +1720,17 @@ object CommandLevelProgression {
     }
 
     fun rankTitleForLevel(level: Int): String = when {
-        level <= 1 -> "Lone Pickaxe Survivor"
-        level in 2..3 -> "Crater Bedrock Miner"
-        level in 4..6 -> "Bunker Shelter Builder"
-        level in 7..9 -> "Vault Gate Defender"
-        level in 10..14 -> "Day-10 Siege Veteran"
-        level in 15..24 -> "Subterranean Vault Warden"
-        level in 25..39 -> "Nuclear Reactor Commander"
-        level in 40..59 -> "Wasteland Fortress Overseer"
-        level in 60..79 -> "Apex Atomic Archon"
-        level in 80..99 -> "Supreme Vault Sovereign"
-        else -> "Level 100 Grand Vault Legend"
+        level <= 1 -> "Lone Mars Pioneer"
+        level in 2..3 -> "Crater Regolith Prospector"
+        level in 4..6 -> "Pressurized Hab Builder"
+        level in 7..9 -> "Dome Airlock Warden"
+        level in 10..14 -> "Sol-10 Storm Veteran"
+        level in 15..24 -> "Lava-Tube Base Director"
+        level in 25..39 -> "Kilopower Reactor Commander"
+        level in 40..59 -> "Ares Colony Flight Director"
+        level in 60..79 -> "Planetary Terraform Archon"
+        level in 80..99 -> "Supreme Mars Sovereign"
+        else -> "Level 100 Grand Ares Legend"
     }
 
     fun skillPointsForReachingLevel(newLevel: Int): Int {
@@ -1756,8 +1756,8 @@ enum class GridLoadBreakerMode(
     BALANCED(
         id = "BALANCED",
         shortLabel = "BALANCED",
-        title = "Balanced Sector Breakers",
-        summary = "100% standard Megawatt distribution across all Vault floors, turrets, and life support.",
+        title = "Balanced Habitat Bus Breakers",
+        summary = "100% standard Megawatt distribution across all Mars habitat bays, point-defense turrets, and MOXIE life support.",
         megawattDemandMultiplier = 1.0,
         defenseBonusMultiplier = 1.0,
         oxygenBonusPerSec = 0.0,
@@ -1766,9 +1766,9 @@ enum class GridLoadBreakerMode(
     ),
     LIFE_SUPPORT_FIRST(
         id = "LIFE_SUPPORT_FIRST",
-        shortLabel = "LIFE SUPPORT (-22% MW)",
-        title = "Priority Life Support & Air Scrubbers",
-        summary = "Sheds non-essential industrial load (-22% MW demand) and boosts O2/Decon scrubbers (+1.2 O2/s).",
+        shortLabel = "MOXIE O2 (-22% MW)",
+        title = "Priority MOXIE Life Support & Scrubbers",
+        summary = "Sheds non-essential industrial load (-22% MW demand) and boosts MOXIE O2 scrubbers (+1.2 O2/s).",
         megawattDemandMultiplier = 0.78,
         defenseBonusMultiplier = 0.95,
         oxygenBonusPerSec = 1.2,
@@ -1777,9 +1777,9 @@ enum class GridLoadBreakerMode(
     ),
     DEFENSE_SURGE(
         id = "DEFENSE_SURGE",
-        shortLabel = "TURRET SURGE (+25% DEF)",
-        title = "Perimeter Turret & Bulkhead Surge",
-        summary = "Routes high-voltage capacitor banks to Sentry Turrets & Blast Doors (+25% Defense Rating, +10% MW draw).",
+        shortLabel = "DOME SHIELD (+25% DEF)",
+        title = "Perimeter Laser & Whipple Shield Surge",
+        summary = "Routes high-voltage capacitor banks to Point-Defense Turrets & Airlock Bulkheads (+25% Defense Rating, +10% MW draw).",
         megawattDemandMultiplier = 1.10,
         defenseBonusMultiplier = 1.25,
         oxygenBonusPerSec = 0.0,
@@ -1788,9 +1788,9 @@ enum class GridLoadBreakerMode(
     ),
     DRILL_OVERDRIVE(
         id = "DRILL_OVERDRIVE",
-        shortLabel = "DEEP DRILL (+35% ORE)",
-        title = "Subterranean Borehole Overdrive",
-        summary = "Overclocks deep-core drill motors & ore smelters (+35% Deep Drill & Pickaxe yield, +12% MW draw).",
+        shortLabel = "CORE DRILL (+35% ORE)",
+        title = "Subterranean Lava-Tube Borehole Overdrive",
+        summary = "Overclocks deep-crust laser drills & regolith smelters (+35% Deep Drill & Laser Drill yield, +12% MW draw).",
         megawattDemandMultiplier = 1.12,
         defenseBonusMultiplier = 0.95,
         oxygenBonusPerSec = 0.0,
@@ -1820,9 +1820,9 @@ enum class TurretAmmoType(
 ) {
     STANDARD_FMJ(
         id = "STANDARD_FMJ",
-        shortLabel = "FMJ BALLISTIC",
-        title = "Standard 7.62mm FMJ Ballistic",
-        summary = "Reliable standard-issue turret & rifle ammunition (100% baseline Defense & Hunt efficiency).",
+        shortLabel = "KINETIC SLUG",
+        title = "Standard Railgun Kinetic Slugs",
+        summary = "Reliable standard-issue point-defense & EVA rifle slugs (100% baseline Defense & Recon efficiency).",
         defenseBonusMultiplier = 1.0,
         nightSwarmBonusMultiplier = 1.0,
         warlordArmorBonusMultiplier = 1.0,
@@ -1830,9 +1830,9 @@ enum class TurretAmmoType(
     ),
     ARMOR_PIERCING(
         id = "ARMOR_PIERCING",
-        shortLabel = "AP SABOT (+20% DEF)",
-        title = "Tungsten Armor-Piercing Sabot",
-        summary = "Penetrates heavy raider plating & Day-10 Warlord tanks (+20% Total Defense & +35% vs Warlords).",
+        shortLabel = "TUNGSTEN SABOT (+20% DEF)",
+        title = "Tungsten Hyper-Velocity Sabot",
+        summary = "Shatters dense bolide meteors & Sol-10 Rogue Mech plating (+20% Total Defense & +35% vs Bosses).",
         defenseBonusMultiplier = 1.20,
         nightSwarmBonusMultiplier = 1.10,
         warlordArmorBonusMultiplier = 1.35,
@@ -1840,9 +1840,9 @@ enum class TurretAmmoType(
     ),
     INCENDIARY_NAPALM(
         id = "INCENDIARY_NAPALM",
-        shortLabel = "INCENDIARY (+30% NIGHT)",
-        title = "Thermite Incendiary Shells",
-        summary = "Ignites nocturnal mutant swarms & beast packs (+15% Defense & +30% vs Night Swarms/Hunts).",
+        shortLabel = "PLASMA TORCH (+30% NIGHT)",
+        title = "Solar-Plasma Thermal Shells",
+        summary = "Vaporizes cryo-night ice shards & rogue drone swarms (+15% Defense & +30% vs Night Hazards).",
         defenseBonusMultiplier = 1.15,
         nightSwarmBonusMultiplier = 1.30,
         warlordArmorBonusMultiplier = 1.10,
@@ -1850,9 +1850,9 @@ enum class TurretAmmoType(
     ),
     EMP_ARC_SHELLS(
         id = "EMP_ARC_SHELLS",
-        shortLabel = "EMP ARC (ANTI-SABOTAGE)",
-        title = "Overcharged EMP Arc Munitions",
-        summary = "Disrupts raider breach charges & robotic drones (+18% Defense & halves room sabotage penalties).",
+        shortLabel = "EMP PULSE (ANTI-SABOTAGE)",
+        title = "Overcharged EMP Ion Munitions",
+        summary = "Disrupts Electrostatic Dust-Storm arcs & rogue syndicate crawlers (+18% Defense & halves bay incident penalties).",
         defenseBonusMultiplier = 1.18,
         nightSwarmBonusMultiplier = 1.15,
         warlordArmorBonusMultiplier = 1.25,
@@ -1883,8 +1883,8 @@ enum class SubterraneanBossType(
     MAGMA_BROODMOTHER(
         id = "MAGMA_BROODMOTHER",
         depthThresholdMeters = 300,
-        title = "Magma Tunnel Broodmother (300m)",
-        subtitle = "Colossal armored arachnid nesting in the 300m geothermal fissure. Blocks deeper drilling until slain!",
+        title = "Tharsis Magma-Vent Lithovore (300m)",
+        subtitle = "Colossal silicon-armored extremophile nesting in the 300m geothermal fissure. Blocks deeper drilling until cleared!",
         relicRewardCount = 1,
         mutagenCoresReward = 2.0,
         goldReward = 65.0,
@@ -1894,8 +1894,8 @@ enum class SubterraneanBossType(
     ARMORED_TUNNEL_LEVIATHAN(
         id = "ARMORED_TUNNEL_LEVIATHAN",
         depthThresholdMeters = 900,
-        title = "Lithic Borehole Leviathan (900m)",
-        subtitle = "Subterranean apex wyrm crushing deep-core pipes at 900m. Rich in Pre-Fall Relics & Thorium!",
+        title = "Noctis Borehole Leviathan (900m)",
+        subtitle = "Subterranean basalt-crushing worm blocking deep-crust pipes at 900m. Rich in Ares Relics & Pu-238!",
         relicRewardCount = 2,
         mutagenCoresReward = 4.0,
         goldReward = 140.0,
@@ -1905,8 +1905,8 @@ enum class SubterraneanBossType(
     AETHER_CORE_AUTOMATON(
         id = "AETHER_CORE_AUTOMATON",
         depthThresholdMeters = 1800,
-        title = "Pre-Fall Aether Core Warden (1,800m)",
-        subtitle = "Ancient autonomous war-construct guarding the 1,800m Pre-Fall Vault Core.",
+        title = "Ares-1 Autonomous Tunnel Boring Boss (1,800m)",
+        subtitle = "Runaway nuclear-powered Ares-1 excavation construct guarding the 1,800m deep mantle core.",
         relicRewardCount = 3,
         mutagenCoresReward = 6.0,
         goldReward = 260.0,
@@ -1941,9 +1941,9 @@ enum class VaultRationingPolicy(
 ) {
     HALF_RATIONS(
         id = "HALF_RATIONS",
-        shortLabel = "HALF RATIONS (-35% FOOD/WATER)",
-        title = "Emergency Half-Rations Decree",
-        summary = "Cuts Dweller 60s & daily Food/Water consumption by -35% during droughts, at the cost of -15% Morale & -10% Output.",
+        shortLabel = "HALF RATIONS (-35% BIO/H2O)",
+        title = "Emergency Apollo-13 Rationing Protocol",
+        summary = "Cuts Astronaut 60s & daily Bio-Ration/Water consumption by -35% during ice shortages, at the cost of -15% Morale & -10% Output.",
         foodWaterUpkeepMultiplier = 0.65,
         moraleBonusDelta = -15,
         outputMultiplier = 0.90,
@@ -1953,8 +1953,8 @@ enum class VaultRationingPolicy(
     STANDARD_RATIONS(
         id = "STANDARD_RATIONS",
         shortLabel = "STANDARD ISSUE (100%)",
-        title = "Standard Vault Rationing",
-        summary = "Balanced 100% Food & Water rations with steady Crew Morale and normal shift stamina.",
+        title = "Standard NASA/Ares Crew Rationing",
+        summary = "Balanced 100% Bio-Ration & Water allocation with steady Astronaut Morale and normal EVA stamina.",
         foodWaterUpkeepMultiplier = 1.0,
         moraleBonusDelta = 0,
         outputMultiplier = 1.0,
@@ -1963,9 +1963,9 @@ enum class VaultRationingPolicy(
     ),
     DOUBLE_RATIONS(
         id = "DOUBLE_RATIONS",
-        shortLabel = "FEAST RATIONS (+22% OUTPUT)",
-        title = "Double Ration & High-Calorie Feast",
-        summary = "Boosts Crew Output by +22%, Morale by +18%, and doubles Stamina recovery, while taking +35% more Food & Water.",
+        shortLabel = "HIGH-CALORIE (+22% OUTPUT)",
+        title = "High-Calorie Hydroponic Feast Protocol",
+        summary = "Boosts Crew Output by +22%, Morale by +18%, and doubles EVA Stamina recovery, while taking +35% more Bio-Rations & Water.",
         foodWaterUpkeepMultiplier = 1.35,
         moraleBonusDelta = 18,
         outputMultiplier = 1.22,
@@ -2000,9 +2000,9 @@ enum class WastelandSeason(
 ) {
     SCORCHING_FALLOUT(
         id = "SCORCHING_FALLOUT",
-        title = "Scorching Fallout Glare",
-        shortLabel = "SCORCHING FALLOUT",
-        weatherSummary = "+25% Solar MW, -15% Water Condenser yield • Clear skies supercharge solar arrays but evaporate aquifer vapor.",
+        title = "Perihelion Solar Glare",
+        shortLabel = "PERIHELION GLARE",
+        weatherSummary = "+25% Solar MW, -15% Glacial Ice Melter yield • Clear Martian skies supercharge solar arrays but sublimate surface frost.",
         solarMwMultiplier = 1.25,
         waterCondenserMultiplier = 0.85,
         hydroponicsFoodMultiplier = 1.0,
@@ -2015,9 +2015,9 @@ enum class WastelandSeason(
     ),
     ACID_MONSOON(
         id = "ACID_MONSOON",
-        title = "Corrosive Acid Monsoon",
-        shortLabel = "ACID MONSOON",
-        weatherSummary = "+35% Water Purifier & +10% Hydroponics, -20% Solar MW, +10% Daily Scrap Maintenance • Heavy downpours flood aquifers.",
+        title = "Valles Marineris Vapor Thaw",
+        shortLabel = "VAPOR THAW",
+        weatherSummary = "+35% Ice Melter & +10% Aeroponics, -20% Solar MW, +10% Daily Perchlorate Maintenance • Dense ice-fog saturates condensers.",
         solarMwMultiplier = 0.80,
         waterCondenserMultiplier = 1.35,
         hydroponicsFoodMultiplier = 1.10,
@@ -2030,9 +2030,9 @@ enum class WastelandSeason(
     ),
     NUCLEAR_WINTER(
         id = "NUCLEAR_WINTER",
-        title = "Sub-Zero Nuclear Winter",
-        shortLabel = "NUCLEAR WINTER",
-        weatherSummary = "-45% Solar MW, -20% Water Purifier, +35% Daily Heating Fuel Upkeep • Deep freeze taxes bunker heating & solar panels.",
+        title = "Aphelion -125°C Deep Freeze",
+        shortLabel = "APHELION FREEZE",
+        weatherSummary = "-45% Solar MW, -20% Ice Melter, +35% Daily Methane Heater Upkeep • Extreme orbital winter taxes habitat heating & solar arrays.",
         solarMwMultiplier = 0.55,
         waterCondenserMultiplier = 0.80,
         hydroponicsFoodMultiplier = 0.90,
@@ -2045,9 +2045,9 @@ enum class WastelandSeason(
     ),
     ASH_STORM_BLACKOUT(
         id = "ASH_STORM_BLACKOUT",
-        title = "Volcanic Ash-Storm Blackout",
-        shortLabel = "ASH-STORM BLACKOUT",
-        weatherSummary = "+25% Scrap Salvage, -60% Solar MW, +15% Raider Siege Threat • Choking ash clouds hide approaching raider warbands.",
+        title = "Planet-Encircling Dust-Storm Blackout",
+        shortLabel = "DUST-STORM BLACKOUT",
+        weatherSummary = "+25% Regolith Salvage, -60% Solar MW, +15% Storm Hazard Threat • Choking iron-oxide dust clouds blanket solar arrays.",
         solarMwMultiplier = 0.40,
         waterCondenserMultiplier = 0.95,
         hydroponicsFoodMultiplier = 1.0,
@@ -2060,9 +2060,9 @@ enum class WastelandSeason(
     ),
     BIOLUMINESCENT_BLOOM(
         id = "BIOLUMINESCENT_BLOOM",
-        title = "Bioluminescent Spore Thaw",
-        shortLabel = "BIOLUMINESCENT BLOOM",
-        weatherSummary = "+35% Hydroponics Food, +15% Water Purifier & +10% Crew Morale • Nutrient-rich subterranean bloom revitalizes the Vault.",
+        title = "Martian Aurora & Bio-Dome Bloom",
+        shortLabel = "AURORA BLOOM",
+        weatherSummary = "+35% Aeroponics Bio-Rations, +15% Ice Melter & +10% Astronaut Morale • Crustal magnetic auroras & algal bloom revitalize the colony.",
         solarMwMultiplier = 1.05,
         waterCondenserMultiplier = 1.15,
         hydroponicsFoodMultiplier = 1.35,
@@ -2107,25 +2107,25 @@ enum class VaultCascadeStage(
 ) {
     STAGE_0_STABLE(
         stageNumber = 0,
-        title = "Stage 0: All Vault Systems Nominal",
+        title = "Stage 0: All Habitat Systems Nominal",
         shortBadge = "NOMINAL (0 HAZARDS)",
         accentColor = SurplusGreen
     ),
     STAGE_1_WARNING(
         stageNumber = 1,
-        title = "Stage 1: Early Subsystem Warning",
-        shortBadge = "STAGE 1 WARNING",
+        title = "Stage 1: Early Telemetry Caution",
+        shortBadge = "STAGE 1 CAUTION",
         accentColor = SolarAmber
     ),
     STAGE_2_SUBSYSTEM_STRAIN(
         stageNumber = 2,
-        title = "Stage 2: Compounding Subsystem Strain",
+        title = "Stage 2: Compounding Life-Support Strain",
         shortBadge = "STAGE 2 STRAIN",
         accentColor = WarningOrange
     ),
     STAGE_3_CRITICAL_CASCADE(
         stageNumber = 3,
-        title = "Stage 3: Critical Failure Cascade",
+        title = "Stage 3: Critical Decompression Cascade",
         shortBadge = "STAGE 3 CASCADE",
         accentColor = HazardRed
     )
@@ -2140,37 +2140,37 @@ enum class VaultTechEra(
 ) {
     ERA_1_SURVIVAL_BUNKER(
         eraNumber = 1,
-        title = "Era I: Makeshift Survival Shelter",
-        shortBadge = "ERA I • SHELTER",
-        milestoneSummary = "Mine with Pickaxe (0 Heat/0 Scrap), build Water Purifier & Hydroponics to unlock automated Water & Food.",
+        title = "Era I: Ares Landing Pod Shelter",
+        shortBadge = "ERA I • LANDER POD",
+        milestoneSummary = "Excavate regolith with Laser Drill (0 Heat/0 Cost), build Glacial Ice Melter & Aeroponics to automate Water & Bio-Rations.",
         accentColor = SolarAmber
     ),
     ERA_2_HYDRO_INDUSTRIAL(
         eraNumber = 2,
-        title = "Era II: Hydro-Industrial Grid",
-        shortBadge = "ERA II • HYDRO-GRID",
-        milestoneSummary = "Expand Storage Cap via Room Upgrades, staff Dwellers, and balance per-level daily maintenance.",
+        title = "Era II: Pressurized Lava-Tube Grid",
+        shortBadge = "ERA II • LAVA-TUBE",
+        milestoneSummary = "Expand Cargo Hold Cap via Bay Upgrades, assign Astronauts, and balance per-sol life-support upkeep.",
         accentColor = CryoCyan
     ),
     ERA_3_DEEP_THERMAL(
         eraNumber = 3,
-        title = "Era III: Deep-Core Thermal Bunker",
-        shortBadge = "ERA III • DEEP-CORE",
-        milestoneSummary = "Tap Floor B5 Geothermal & Cryo-Stasis, drill past 300m Abyssal Bosses, and survive Nuclear Winter.",
+        title = "Era III: Tharsis Areothermal Colony",
+        shortBadge = "ERA III • AREOTHERMAL",
+        milestoneSummary = "Tap Level B5 Areothermal Vents & Seed Vaults, drill past 300m Crustal Bosses, and survive Aphelion Freeze.",
         accentColor = RadTeal
     ),
     ERA_4_ATOMIC_AUTOMATION(
         eraNumber = 4,
-        title = "Era IV: Atomic Fortress Automation",
-        shortBadge = "ERA IV • ATOMIC",
-        milestoneSummary = "Run Thorium/Aether Reactors, automate Siege Turrets, and master Multi-Season Directives.",
+        title = "Era IV: Kilopower Fission Automation",
+        shortBadge = "ERA IV • KILOPOWER",
+        milestoneSummary = "Run Kilopower & He-3 Fusion Reactors, automate Dome Defense Lasers, and master Multi-Sol Directives.",
         accentColor = BioluminescentViolet
     ),
     ERA_5_EDEN_METROPOLIS(
         eraNumber = 5,
-        title = "Era V: Self-Sustaining Eden Metropolis",
-        shortBadge = "ERA V • EDEN CORE",
-        milestoneSummary = "Complete the 4-Phase Eden Core, achieve Tier V Certification, and Ascend for Permanent Prestige.",
+        title = "Era V: Self-Sustaining Ares Terra-Dome",
+        shortBadge = "ERA V • TERRA-DOME",
+        milestoneSummary = "Complete the 4-Phase Terraforming Core, achieve Tier V Certification, and Ascend for Permanent Prestige.",
         accentColor = XpGold
     );
 
@@ -2204,4 +2204,227 @@ data class VaultDirectiveStatus(
         get() = "+${goldReward.toInt()} Gold, +${researchReward.toInt()} Tech, +${coresReward.toInt()} Core(s) & $permanentBlueprintSummary"
 }
 
+/**
+ * Mars Astronaut 7-stat S.P.E.C.I.A.L. Mission Aptitude system.
+ */
+enum class SpecialStat(
+    val code: String,
+    val fullName: String,
+    val roomRoleSummary: String,
+    val accentColor: Color
+) {
+    STRENGTH("S", "Strength", "Solar/RTG Power Arrays, Areothermal Vents & Regolith Sintering", SolarAmber),
+    PERCEPTION("P", "Perception", "Glacial Ice Melter, Railgun Munitions & Meteor Defense Aim", CryoCyan),
+    ENDURANCE("E", "Endurance", "Sabatier Methane Plant, Cargo Hold & Cryo Seed Vault", RustCopper),
+    CHARISMA("C", "Charisma", "Astronaut Crew Quarters & Deep-Space Telemetry Dish", XpGold),
+    INTELLIGENCE("I", "Intelligence", "MOXIE O2 Scrubbers, Medbay & Astrobiology Core Lab", RadTeal),
+    AGILITY("A", "Agility", "Aeroponic Bio-Dome & Rapid Bio-Ration Harvesting", SurplusGreen),
+    LUCK("L", "Luck", "Rare Gold Ore Strikes, Overclock Payouts & Lower Incident Risk", BioluminescentViolet)
+}
 
+data class SpecialProfile(
+    val strength: Int,
+    val perception: Int,
+    val endurance: Int,
+    val charisma: Int,
+    val intelligence: Int,
+    val agility: Int,
+    val luck: Int
+) {
+    fun statFor(stat: SpecialStat): Int = when (stat) {
+        SpecialStat.STRENGTH -> strength
+        SpecialStat.PERCEPTION -> perception
+        SpecialStat.ENDURANCE -> endurance
+        SpecialStat.CHARISMA -> charisma
+        SpecialStat.INTELLIGENCE -> intelligence
+        SpecialStat.AGILITY -> agility
+        SpecialStat.LUCK -> luck
+    }
+
+    val totalPoints: Int
+        get() = strength + perception + endurance + charisma + intelligence + agility + luck
+
+    fun compactSummary(): String =
+        "S:$strength P:$perception E:$endurance C:$charisma I:$intelligence A:$agility L:$luck"
+}
+
+val BuildingType.primarySpecialStat: SpecialStat
+    get() = when (this) {
+        BuildingType.SURVIVOR_HAB_BLOCK -> SpecialStat.CHARISMA
+        BuildingType.SALVAGE_YARD -> SpecialStat.STRENGTH
+        BuildingType.ATMOSPHERIC_CONDENSER -> SpecialStat.PERCEPTION
+        BuildingType.HYDROPONIC_GREENHOUSE -> SpecialStat.AGILITY
+        BuildingType.REINFORCED_SILO -> SpecialStat.INTELLIGENCE
+        BuildingType.BIO_SLUDGE_REFINERY -> SpecialStat.ENDURANCE
+        BuildingType.SIGNAL_RESEARCH_ARRAY -> SpecialStat.CHARISMA
+        BuildingType.NOCTURNAL_EXTRACTION_RIG -> SpecialStat.INTELLIGENCE
+        BuildingType.GEOTHERMAL_TAP -> SpecialStat.STRENGTH
+        BuildingType.CRYO_STASIS_VAULT -> SpecialStat.ENDURANCE
+        BuildingType.VAULT_STORE_ROOM -> SpecialStat.ENDURANCE
+    }
+
+val BuildingType.falloutRoomTitle: String
+    get() = when (this) {
+        BuildingType.SURVIVOR_HAB_BLOCK -> "Astronaut Crew Quarters (C)"
+        BuildingType.SALVAGE_YARD -> "Regolith Sintering Foundry (S)"
+        BuildingType.ATMOSPHERIC_CONDENSER -> "Glacial Ice Melter (P)"
+        BuildingType.HYDROPONIC_GREENHOUSE -> "Aeroponic Bio-Dome (A)"
+        BuildingType.REINFORCED_SILO -> "MOXIE O2 & Medbay (I)"
+        BuildingType.BIO_SLUDGE_REFINERY -> "Sabatier Methane Plant (E)"
+        BuildingType.SIGNAL_RESEARCH_ARRAY -> "Deep-Space Telemetry Dish (C)"
+        BuildingType.NOCTURNAL_EXTRACTION_RIG -> "Astrobiology Core Lab (I)"
+        BuildingType.GEOTHERMAL_TAP -> "Areothermal Magma Vent (S)"
+        BuildingType.CRYO_STASIS_VAULT -> "Cryo-Seed & Ration Vault (E)"
+        BuildingType.VAULT_STORE_ROOM -> "Pressurized Cargo Hold (E)"
+    }
+
+val WorkerClassType.primarySpecialStat: SpecialStat
+    get() = when (this) {
+        WorkerClassType.SCRAPPER -> SpecialStat.STRENGTH
+        WorkerClassType.HYDRO_ENGINEER -> SpecialStat.PERCEPTION
+        WorkerClassType.NIGHT_STALKER -> SpecialStat.AGILITY
+        WorkerClassType.TECH_SAVANT -> SpecialStat.INTELLIGENCE
+    }
+
+fun WorkerClassType.computeSpecialProfile(
+    classLevel: Int = 1,
+    isUniqueDweller: Boolean = false
+): SpecialProfile {
+    val lvBonus = ((classLevel.coerceAtLeast(1) - 1) / 2).coerceIn(0, 4)
+    val uniqueBonus = if (isUniqueDweller) 2 else 0
+    fun clampStat(base: Int): Int = (base + lvBonus + uniqueBonus).coerceIn(1, 10)
+    return when (this) {
+        WorkerClassType.SCRAPPER -> SpecialProfile(
+            strength = clampStat(7),
+            perception = clampStat(4),
+            endurance = clampStat(6),
+            charisma = clampStat(3),
+            intelligence = clampStat(3),
+            agility = clampStat(4),
+            luck = clampStat(5)
+        )
+        WorkerClassType.HYDRO_ENGINEER -> SpecialProfile(
+            strength = clampStat(4),
+            perception = clampStat(7),
+            endurance = clampStat(5),
+            charisma = clampStat(4),
+            intelligence = clampStat(5),
+            agility = clampStat(6),
+            luck = clampStat(4)
+        )
+        WorkerClassType.NIGHT_STALKER -> SpecialProfile(
+            strength = clampStat(5),
+            perception = clampStat(6),
+            endurance = clampStat(6),
+            charisma = clampStat(3),
+            intelligence = clampStat(4),
+            agility = clampStat(7),
+            luck = clampStat(6)
+        )
+        WorkerClassType.TECH_SAVANT -> SpecialProfile(
+            strength = clampStat(3),
+            perception = clampStat(5),
+            endurance = clampStat(4),
+            charisma = clampStat(6),
+            intelligence = clampStat(8),
+            agility = clampStat(4),
+            luck = clampStat(5)
+        )
+    }
+}
+
+/**
+ * Modular 1x / 2x / 3x Mars Habitat Bay Merging Tiers:
+ * Upgrading a module expands and links adjacent lava-tube bays into wider multi-bay pressurized domes!
+ */
+enum class RoomMergeTier(
+    val bayWidth: Int,
+    val badgeLabel: String,
+    val mergeTitle: String,
+    val outputMergeBonusPercent: Int,
+    val accentColor: Color
+) {
+    UNBUILT_0X(
+        bayWidth = 0,
+        badgeLabel = "0x UNSEALED",
+        mergeTitle = "Unsealed Lava-Tube Cavity",
+        outputMergeBonusPercent = 0,
+        accentColor = WarningOrange
+    ),
+    SINGLE_1X(
+        bayWidth = 1,
+        badgeLabel = "1x SINGLE POD",
+        mergeTitle = "Single Pressurized Pod (1x Bay)",
+        outputMergeBonusPercent = 0,
+        accentColor = CryoCyan
+    ),
+    DOUBLE_2X(
+        bayWidth = 2,
+        badgeLabel = "2x DUAL HAB BAY",
+        mergeTitle = "Dual Linked Habitat Bay (2x Wide • +25% Merge Synergy)",
+        outputMergeBonusPercent = 25,
+        accentColor = SolarAmber
+    ),
+    TRIPLE_3X(
+        bayWidth = 3,
+        badgeLabel = "3x TRIPLE DOME",
+        mergeTitle = "Triple Pressurized Dome (3x Wide • +55% Merge Synergy)",
+        outputMergeBonusPercent = 55,
+        accentColor = SurplusGreen
+    )
+}
+
+/**
+ * Subterranean Mars Habitat Incidents triggered by failed Bay Overclocks or planetary hazards.
+ */
+enum class VaultIncidentType(
+    val id: String,
+    val title: String,
+    val emergencyPrompt: String,
+    val resolveButtonLabel: String,
+    val accentColor: Color
+) {
+    VAULT_FIRE(
+        id = "VAULT_FIRE",
+        title = "🔥 O2 SCRUBBER FLASH FIRE",
+        emergencyPrompt = "Overclocked MOXIE electrolysis coils sparked a pressurized O2 flash fire! Vent Halon immediately to restore output.",
+        resolveButtonLabel = "🧯 VENT HALON & EXTINGUISH (+25 XP)",
+        accentColor = HazardRed
+    ),
+    RADROACH_SWARM(
+        id = "RADROACH_SWARM",
+        title = "🌪 PERCHLORATE DUST INFILTRATION",
+        emergencyPrompt = "Toxic Martian perchlorate dust breached the airlock seals! Purge filters to resume production.",
+        resolveButtonLabel = "💨 PURGE PERCHLORATE FILTERS (+25 XP)",
+        accentColor = WarningOrange
+    ),
+    MOLERAT_SHORT(
+        id = "MOLERAT_SHORT",
+        title = "❄ CRYOGENIC COOLANT RUPTURE",
+        emergencyPrompt = "Sub-zero ammonia coolant lines ruptured inside the lava-tube wall! Seal valves and splice conduits.",
+        resolveButtonLabel = "🔧 SEAL COOLANT & SPLICE (+25 XP)",
+        accentColor = SolarAmber
+    ),
+    RAIDER_BREACH(
+        id = "RAIDER_BREACH",
+        title = "☄ MICROMETEOROID HULL PUNCTURE",
+        emergencyPrompt = "High-velocity micrometeoroid punctured the habitat pressure bladder! Apply epoxy patch and repressurize.",
+        resolveButtonLabel = "🛡 PATCH HULL & REPRESSURIZE (+25 XP)",
+        accentColor = HazardRed
+    )
+}
+
+data class RushRoomPreview(
+    val buildingType: BuildingType,
+    val roomLevel: Int,
+    val mergeTier: RoomMergeTier,
+    val primarySpecial: SpecialStat,
+    val matchingSpecialScore: Int,
+    val incidentRiskPercent: Int,
+    val instantResourceAmount: Double,
+    val instantResourceLabel: String,
+    val bonusGoldCaps: Double,
+    val xpReward: Double,
+    val canRush: Boolean,
+    val statusNote: String
+)

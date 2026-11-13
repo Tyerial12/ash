@@ -693,7 +693,8 @@ fun AshfallOutpostApp(
                             onToggleBuildingMothball = viewModel::toggleBuildingMothball,
                             onMothballNonEssentialRooms = viewModel::mothballAllNonEssentialRooms,
                             onResumeAllMothballedRooms = viewModel::resumeAllMothballedRooms,
-                            onClaimVaultDirective = viewModel::claimCurrentVaultDirective
+                            onClaimVaultDirective = viewModel::claimCurrentVaultDirective,
+                            onRushRoom = viewModel::rushVaultRoom
                         )
                         OutpostDestination.CREW -> CrewAndPowerTabScreen(
                             uiState = uiState,

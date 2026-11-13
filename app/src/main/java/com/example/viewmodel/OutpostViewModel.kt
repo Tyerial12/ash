@@ -48,6 +48,7 @@ import com.example.model.VaultRationingPolicy
 import com.example.model.WastelandExpeditionType
 import com.example.model.WastelandSeason
 import com.example.model.WorkerClassType
+import com.example.model.falloutRoomTitle
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -1731,6 +1732,7 @@ class OutpostViewModel(
                 )
             }
             repository.updateOutpostState(updated)
+            com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.BLAST_DOOR_HYDRAULIC)
             repository.logEvent(
                 "DEFENSE",
                 "Repelled ${raid.title}! +${raid.bountyGoldReward.toInt()} Gold, +${raid.bountyScrapReward.toInt()} Scrap. $repairNote"
@@ -1792,6 +1794,7 @@ class OutpostViewModel(
                 storageCap = current.production.storageCap
             )
             repository.updateOutpostState(updated)
+            com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.BLAST_DOOR_HYDRAULIC)
             val msg = "Started reinforcing Vault Blast Door to Lv.$targetLevel (${cost.upgradeTimeSeconds}s timer)..."
             overlayFlow.update {
                 it.copy(
@@ -2531,6 +2534,7 @@ class OutpostViewModel(
                     storageCap = snap.storageCap
                 )
                 repository.updateOutpostState(updatedState)
+                com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.PIP_BOY_CLICK)
                 val hazardSuffix = buildString {
                     if (nextDurability <= 20) append(" • Pickaxe Dull ($nextDurability%)!")
                     if (nextStamina <= 30) append(" • Stamina Low ($nextStamina% — Rest Crew)!")
@@ -2611,6 +2615,7 @@ class OutpostViewModel(
                     storageCap = snap.storageCap
                 )
                 repository.updateOutpostState(updatedState)
+                com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.RESOURCE_CHIME)
 
                 val replacementType = pickReplacementNode(slotIndex, snap.activePhase)
                 val formattedVeinGold = String.format(java.util.Locale.US, "%.1f", yieldPreview.goldAmount)
@@ -3006,6 +3011,7 @@ class OutpostViewModel(
                 storageCap = current.production.storageCap
             )
             repository.updateOutpostState(updatedState)
+            com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.BLAST_DOOR_HYDRAULIC)
             overlayFlow.update {
                 it.copy(
                     activeConstruction = ActiveBuildingConstruction(
@@ -3863,28 +3869,124 @@ class OutpostViewModel(
         }
     }
 
-    fun repairSabotagedBuilding() {
+    private val roomRushStacks = mutableMapOf<String, Int>()
+
+    fun rushVaultRoom(buildingType: BuildingType) {
+        viewModelScope.launch {
+            val current = uiState.value
+            val state = current.state
+            val level = current.buildingsMap[buildingType.id] ?: 0
+            val currentStacks = roomRushStacks[buildingType.id] ?: 0
+            val preview = OutpostCalculator.computeRushRoomPreview(
+                buildingType = buildingType,
+                level = level,
+                state = state,
+                workersMap = current.workersMap,
+                consecutiveRushes = currentStacks
+            )
+            if (!preview.canRush) {
+                com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.PIP_BOY_CLICK)
+                overlayFlow.update { it.copy(lastSalvageFeedback = preview.statusNote) }
+                return@launch
+            }
+
+            val roll = Random.nextInt(100)
+            if (roll >= preview.incidentRiskPercent) {
+                // RUSH SUCCEEDED!
+                roomRushStacks[buildingType.id] = (currentStacks + 1).coerceAtMost(4)
+                val amt = preview.instantResourceAmount
+                val updated = applyXpAndResourceDelta(
+                    baseState = state.copy(
+                        totalGoldSalvaged = state.totalGoldSalvaged + preview.bonusGoldCaps
+                    ),
+                    scrapDelta = if (buildingType in setOf(
+                            BuildingType.SALVAGE_YARD,
+                            BuildingType.SURVIVOR_HAB_BLOCK,
+                            BuildingType.REINFORCED_SILO,
+                            BuildingType.VAULT_STORE_ROOM
+                        )
+                    ) amt else 0.0,
+                    waterDelta = if (buildingType == BuildingType.ATMOSPHERIC_CONDENSER) amt else 0.0,
+                    rationsDelta = if (buildingType in setOf(
+                            BuildingType.HYDROPONIC_GREENHOUSE,
+                            BuildingType.CRYO_STASIS_VAULT
+                        )
+                    ) amt else 0.0,
+                    fuelDelta = if (buildingType in setOf(
+                            BuildingType.BIO_SLUDGE_REFINERY,
+                            BuildingType.GEOTHERMAL_TAP
+                        )
+                    ) amt else 0.0,
+                    researchDelta = if (buildingType in setOf(
+                            BuildingType.SIGNAL_RESEARCH_ARRAY,
+                            BuildingType.NOCTURNAL_EXTRACTION_RIG
+                        )
+                    ) amt else 0.0,
+                    goldDelta = preview.bonusGoldCaps,
+                    xpDelta = preview.xpReward,
+                    storageCap = current.production.storageCap
+                )
+                repository.updateOutpostState(updated)
+                com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.RUSH_SUCCESS)
+                val winMsg = "⚡ RUSH SUCCESS (${buildingType.falloutRoomTitle} • ${preview.mergeTier.badgeLabel}): +${amt.toInt()} ${preview.instantResourceLabel}, +${preview.bonusGoldCaps.toInt()} Gold Caps & +${preview.xpReward.toInt()} XP!"
+                overlayFlow.update { it.copy(lastSalvageFeedback = winMsg) }
+                repository.logEvent("RUSH SUCCESS", winMsg)
+            } else {
+                // RUSH FAILED -> TRIGGER FALLOUT SHELTER ROOM INCIDENT!
+                roomRushStacks[buildingType.id] = 0
+                val incident = OutpostCalculator.resolveActiveIncidentType(buildingType.id, state.dayCounter)
+                    ?: com.example.model.VaultIncidentType.VAULT_FIRE
+                val updated = state.copy(
+                    sabotagedBuildingId = buildingType.id,
+                    sabotagedBuildingPenaltyPercent = 45,
+                    roomStructuralWearPercent = (state.roomStructuralWearPercent + 8).coerceAtMost(100)
+                )
+                repository.updateOutpostState(updated)
+                com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.KLAXON_ALARM)
+                val failMsg = "🚨 RUSH INCIDENT (${incident.title} in ${buildingType.falloutRoomTitle}): ${incident.emergencyPrompt}"
+                overlayFlow.update {
+                    it.copy(
+                        lastSalvageFeedback = failMsg,
+                        lastDefenseDamageFeedback = failMsg
+                    )
+                }
+                repository.logEvent("ROOM INCIDENT", failMsg)
+            }
+        }
+    }
+
+    fun resolveVaultIncident() {
         viewModelScope.launch {
             val current = uiState.value
             val state = current.state
             if (state.sabotagedBuildingId.isEmpty()) return@launch
-            val scrapCost = 25.0
-            if (state.scrap < scrapCost) {
-                overlayFlow.update {
-                    it.copy(lastSalvageFeedback = "Need 25 Scrap to repair the sabotaged room!")
-                }
-                return@launch
-            }
-            val updated = state.copy(
-                scrap = state.scrap - scrapCost,
-                sabotagedBuildingId = "",
-                sabotagedBuildingPenaltyPercent = 0
+            val incident = OutpostCalculator.resolveActiveIncidentType(state.sabotagedBuildingId, state.dayCounter)
+            val bType = BuildingType.entries.find { it.id == state.sabotagedBuildingId }
+            val updated = applyXpAndResourceDelta(
+                baseState = state.copy(
+                    sabotagedBuildingId = "",
+                    sabotagedBuildingPenaltyPercent = 0,
+                    roomStructuralWearPercent = (state.roomStructuralWearPercent - 10).coerceAtLeast(0)
+                ),
+                goldDelta = 3.0,
+                xpDelta = 25.0,
+                storageCap = current.production.storageCap
             )
             repository.updateOutpostState(updated)
-            val msg = "SABOTAGE REPAIRED: Restored room to 100% operational output (-25 Scrap)!"
-            overlayFlow.update { it.copy(lastSalvageFeedback = msg) }
-            repository.logEvent("REPAIR", msg)
+            com.example.audio.VaultSoundManager.play(com.example.audio.VaultSoundEffect.INCIDENT_EXTINGUISH)
+            val msg = "🧯 INCIDENT CLEARED (${incident?.title ?: "ROOM EMERGENCY"}): ${bType?.falloutRoomTitle ?: state.sabotagedBuildingId} restored to 100% output (+3 Gold Caps & +25 XP)!"
+            overlayFlow.update {
+                it.copy(
+                    lastSalvageFeedback = msg,
+                    lastDefenseDamageFeedback = msg
+                )
+            }
+            repository.logEvent("INCIDENT CLEARED", msg)
         }
+    }
+
+    fun repairSabotagedBuilding() {
+        resolveVaultIncident()
     }
 
     fun forageSubterraneanRations() {

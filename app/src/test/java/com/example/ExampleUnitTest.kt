@@ -18,8 +18,11 @@ import com.example.model.VaultMapStation
 import com.example.model.VaultOperationalPosture
 import com.example.model.WastelandExpeditionType
 import com.example.model.WorkerClassType
+import com.example.model.computeSpecialProfile
+import com.example.model.primarySpecialStat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -1154,7 +1157,7 @@ class ExampleUnitTest {
             ),
             snapLv3
         )
-        assertEquals("v23.0", widgetSnap.versionName)
+        assertEquals("v24.0", widgetSnap.versionName)
         assertEquals(88.0, widgetSnap.scrap, 0.01)
         assertEquals(42.0, widgetSnap.gold, 0.01)
         assertTrue("Phone widget snapshot includes Gold/s rate", widgetSnap.goldPerSec > 0.0)
@@ -1430,6 +1433,63 @@ class ExampleUnitTest {
         assertFalse("Day 11 is the first attack day (outside peace window)", snapDay11.isPreparationPeaceWindow)
         assertEquals(0, snapDay11.preparationDaysRemaining)
     }
+
+    @Test
+    fun falloutShelterRoomMerging_specialStats_rushRoomIncidents_andVaultSoundSynth_workAsExpected() {
+        // 1. Verify Fallout Shelter 1x / 2x / 3x Room Merging Tiers
+        assertEquals(com.example.model.RoomMergeTier.UNBUILT_0X, OutpostCalculator.computeRoomMergeTier(0))
+        assertEquals(com.example.model.RoomMergeTier.SINGLE_1X, OutpostCalculator.computeRoomMergeTier(1))
+        assertEquals(com.example.model.RoomMergeTier.DOUBLE_2X, OutpostCalculator.computeRoomMergeTier(2))
+        assertEquals(com.example.model.RoomMergeTier.TRIPLE_3X, OutpostCalculator.computeRoomMergeTier(3))
+        assertEquals(com.example.model.RoomMergeTier.TRIPLE_3X, OutpostCalculator.computeRoomMergeTier(5))
+        assertTrue(
+            "3x Triple Merged room grants higher merge synergy than 2x Double and 1x Single Bay",
+            com.example.model.RoomMergeTier.TRIPLE_3X.outputMergeBonusPercent > com.example.model.RoomMergeTier.DOUBLE_2X.outputMergeBonusPercent &&
+                com.example.model.RoomMergeTier.DOUBLE_2X.outputMergeBonusPercent > com.example.model.RoomMergeTier.SINGLE_1X.outputMergeBonusPercent
+        )
+
+        // 2. Verify 7-stat S.P.E.C.I.A.L. profiles and room mappings
+        assertEquals(7, com.example.model.SpecialStat.entries.size)
+        val scrapperLv1 = WorkerClassType.SCRAPPER.computeSpecialProfile(classLevel = 1, isUniqueDweller = false)
+        val scrapperUniqueLv5 = WorkerClassType.SCRAPPER.computeSpecialProfile(classLevel = 5, isUniqueDweller = true)
+        assertTrue("Unique high-level Scrapper has higher S.P.E.C.I.A.L. points than Lv.1", scrapperUniqueLv5.totalPoints > scrapperLv1.totalPoints)
+        assertEquals(com.example.model.SpecialStat.STRENGTH, BuildingType.SALVAGE_YARD.primarySpecialStat)
+        assertEquals(com.example.model.SpecialStat.PERCEPTION, BuildingType.ATMOSPHERIC_CONDENSER.primarySpecialStat)
+        assertEquals(com.example.model.SpecialStat.AGILITY, BuildingType.HYDROPONIC_GREENHOUSE.primarySpecialStat)
+
+        // 3. Verify Rush Room risk & instant reward scaling, plus Vault Incident resolution
+        val state = OutpostStateEntity(totalSurvivors = 3, uniqueDwellersCount = 1, dwellerStaminaPercent = 90)
+        val workers = mapOf(
+            WorkerClassType.SCRAPPER.id to WorkerClassEntity(WorkerClassType.SCRAPPER.id, assignedCount = 3, classLevel = 4)
+        )
+        val unbuiltRush = OutpostCalculator.computeRushRoomPreview(BuildingType.SALVAGE_YARD, 0, state, workers, 0)
+        val lv1Rush = OutpostCalculator.computeRushRoomPreview(BuildingType.SALVAGE_YARD, 1, state, workers, 0)
+        val lv3MergedRush = OutpostCalculator.computeRushRoomPreview(BuildingType.SALVAGE_YARD, 3, state, workers, 0)
+        val consecutiveRush = OutpostCalculator.computeRushRoomPreview(BuildingType.SALVAGE_YARD, 3, state, workers, 3)
+
+        assertFalse("Unbuilt Lv.0 room cannot be rushed", unbuiltRush.canRush)
+        assertTrue("Built Lv.1 and Lv.3 rooms can be rushed", lv1Rush.canRush && lv3MergedRush.canRush)
+        assertTrue("3x Merged Lv.3 room Rush grants more resources and Gold Caps than 1x Single Lv.1 room",
+            lv3MergedRush.instantResourceAmount > lv1Rush.instantResourceAmount &&
+                lv3MergedRush.bonusGoldCaps > lv1Rush.bonusGoldCaps
+        )
+        assertTrue("Consecutive room rushes increase Incident failure risk %",
+            consecutiveRush.incidentRiskPercent > lv3MergedRush.incidentRiskPercent
+        )
+
+        val incident = OutpostCalculator.resolveActiveIncidentType(BuildingType.SALVAGE_YARD.id, dayCounter = 2)
+        assertNotNull("Sabotaged room resolves to a Fallout Shelter Vault Incident", incident)
+
+        // 4. Verify Procedural Vault Sound Synthesizer generates valid non-empty 16-bit PCM waveforms for all 7 effects + Reactor Hum
+        com.example.audio.VaultSoundEffect.entries.forEach { effect ->
+            val samples = com.example.audio.VaultSoundManager.generatePcmSamples(effect)
+            assertTrue("Sound effect ${effect.name} generates non-empty PCM samples", samples.isNotEmpty())
+            assertTrue("Sound effect ${effect.name} has audible non-zero waveform peaks", samples.any { it.toInt() != 0 })
+        }
+        val humPcm = com.example.audio.VaultSoundManager.generateAmbientReactorHumPcm()
+        assertTrue("Ambient underground reactor hum generates non-empty PCM loop", humPcm.size > 10_000)
+    }
 }
+
 
 

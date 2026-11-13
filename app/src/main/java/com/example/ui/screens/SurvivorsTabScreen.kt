@@ -64,8 +64,11 @@ import com.example.domain.OutpostCalculator
 import com.example.model.ActiveDwellerExpedition
 import com.example.model.CaravanCandidateGenerator
 import com.example.model.HireableCandidate
+import com.example.model.SpecialStat
 import com.example.model.WastelandExpeditionType
 import com.example.model.WorkerClassType
+import com.example.model.computeSpecialProfile
+import com.example.model.primarySpecialStat
 import com.example.ui.theme.BioluminescentViolet
 import com.example.ui.theme.BunkerCharcoal
 import com.example.ui.theme.ElevatedSlate
@@ -168,13 +171,13 @@ fun SurvivorsTabScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "VAULT CITY DWELLER CENSUS & DAILY UPKEEP",
+                                    text = "ARES OUTPOST ASTRONAUT CENSUS & SOL UPKEEP",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = SolarAmber,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Living Dwellers: ${state.totalSurvivors} / ${prod.maxWorkerCapacity} Quarters Cap (15 Max Vault Cap) • Assigned: ${prod.totalAssignedWorkers} • Injured: ${state.injuredDwellersCount} • Lost: ${state.totalDwellersLost}",
+                                    text = "Active Astronauts: ${state.totalSurvivors} / ${prod.maxWorkerCapacity} Hab Cap (15 Max Colony Cap) • Assigned: ${prod.totalAssignedWorkers} • Injured: ${state.injuredDwellersCount} • Lost: ${state.totalDwellersLost}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold
@@ -182,7 +185,7 @@ fun SurvivorsTabScreen(
                                 Text(
                                     text = String.format(
                                         Locale.US,
-                                        "Each New Day Consumption: -%.0f Food & -%.0f Water (-2 Food & -2 Water per Dweller each new day!)",
+                                        "Each New Sol Consumption: -%.0f Bio-Rations & -%.0f Water (-2 Bio-Rations & -2 Water per Astronaut each Sol!)",
                                         prod.dailyFoodUpkeepPerDay,
                                         prod.dailyWaterUpkeepPerDay
                                     ),
@@ -190,27 +193,27 @@ fun SurvivorsTabScreen(
                                     color = if (prod.citizenMoralePercent >= 100) SurplusGreen else WarningOrange
                                 )
                                 Text(
-                                    text = "★ Unique Vault Dwellers (${CaravanCandidateGenerator.UNIQUE_DWELLER_CHANCE_PERCENT}% Rare Chance): ${state.uniqueDwellersCount} (+${state.uniqueDwellersCount * 40}% All-Resource Gathering Ability)",
+                                    text = "★ Mission Commanders (${CaravanCandidateGenerator.UNIQUE_DWELLER_CHANCE_PERCENT}% Rare Chance): ${state.uniqueDwellersCount} (+${state.uniqueDwellersCount * 40}% All-Resource Output)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = BioluminescentViolet,
                                     fontWeight = FontWeight.Bold
                                 )
                                 if (state.totalSurvivors == 0) {
                                     Text(
-                                        text = "You start ALONE in an empty broken Vault (0 Dwellers)! Repair Room #1 (Vault Living Quarters) in the Mine & Build tab, mine Gold with your Pickaxe, and hire Survivors below or fire the Rescue Beacon to automate your shelter.",
+                                        text = "You landed ALONE in an unpressurized Mars Lava-Tube (0 Astronauts)! Pressurize Bay #1 (Astronaut Crew Quarters) in the Mine & Build tab, drill Gold Ore with your Laser Drill, and recruit Specialists below or fire the Orbital Drop Beacon.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = XpGold
                                     )
                                 } else if (state.totalSurvivors >= OutpostCalculator.MAX_VAULT_DWELLERS) {
                                     Text(
-                                        text = "Maximum Vault Dweller limit reached (${state.totalSurvivors}/${OutpostCalculator.MAX_VAULT_DWELLERS} Max Vault Cap)!",
+                                        text = "Maximum Mars Colony Astronaut limit reached (${state.totalSurvivors}/${OutpostCalculator.MAX_VAULT_DWELLERS} Max Colony Cap)!",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = SolarAmber,
                                         fontWeight = FontWeight.Bold
                                     )
                                 } else if (!hasHousingSpace) {
                                     Text(
-                                        text = "Vault Living Quarters full (${state.totalSurvivors}/${prod.maxWorkerCapacity} • ${OutpostCalculator.MAX_VAULT_DWELLERS} Max Vault Cap)! Upgrade Vault Living Quarters in Mine & Build to hire more Dwellers.",
+                                        text = "Astronaut Crew Quarters full (${state.totalSurvivors}/${prod.maxWorkerCapacity} • ${OutpostCalculator.MAX_VAULT_DWELLERS} Max Colony Cap)! Upgrade Crew Quarters in Mine & Build to house more Specialists.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = HazardRed
                                     )
@@ -527,6 +530,17 @@ fun SurvivorsTabScreen(
                                                 }
                                             }
                                         }
+                                        val candProfile = candidate.specialtyClass.computeSpecialProfile(
+                                            classLevel = 1,
+                                            isUniqueDweller = candidate.isUniqueDweller
+                                        )
+                                        val primaryStat = candidate.specialtyClass.primarySpecialStat
+                                        Text(
+                                            text = "S.P.E.C.I.A.L. [${primaryStat.code}]: ${candProfile.compactSummary()}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = primaryStat.accentColor,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                         Text(
                                             text = candidate.traitSummary,
                                             style = MaterialTheme.typography.bodySmall,
@@ -953,6 +967,65 @@ private fun SurvivorClassCard(
                             .testTag("assign_${workerType.id.lowercase()}")
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "Assign ${workerType.displayName}")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val specialProfile = workerType.computeSpecialProfile(entity.classLevel, isUniqueDweller = false)
+            val primaryStat = workerType.primarySpecialStat
+            Surface(
+                color = BunkerCharcoal,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, primaryStat.accentColor.copy(alpha = 0.55f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "FALLOUT S.P.E.C.I.A.L. [${primaryStat.code} - ${primaryStat.fullName.uppercase()}]: ${primaryStat.roomRoleSummary}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = primaryStat.accentColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        SpecialStat.entries.forEach { stat ->
+                            val value = specialProfile.statFor(stat)
+                            val isPrimary = stat == primaryStat
+                            Surface(
+                                color = if (isPrimary) stat.accentColor.copy(alpha = 0.25f) else ElevatedSlate,
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (isPrimary) stat.accentColor else PanelBorder
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = stat.code,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isPrimary) stat.accentColor else TextSecondary,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                    Text(
+                                        text = "$value",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

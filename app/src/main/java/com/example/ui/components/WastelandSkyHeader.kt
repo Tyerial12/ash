@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,6 +40,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.audio.VaultSoundManager
 import com.example.data.local.OutpostStateEntity
 import com.example.domain.ProductionSnapshot
 import com.example.widget.VaultStatusAppWidgetProvider
@@ -92,6 +94,8 @@ fun WastelandSkyHeader(
     modifier: Modifier = Modifier
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(HeaderTelemetryTab.COMPACT) }
+    val isSfxEnabled by VaultSoundManager.isSfxEnabled.collectAsState()
+    val isHumEnabled by VaultSoundManager.isAmbientHumEnabled.collectAsState()
     val phase = production.activePhase
     val xpReq = CommandLevelProgression.xpRequiredForLevel(state.commandLevel)
     val xpFraction = (state.currentXp / xpReq).toFloat().coerceIn(0f, 1f)
@@ -128,7 +132,7 @@ fun WastelandSkyHeader(
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.img_wasteland_outpost_1794107188307),
-                    contentDescription = "Vault City Skyline",
+                    contentDescription = "Mars Colony Outpost Horizon",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -183,7 +187,7 @@ fun WastelandSkyHeader(
                                 )
                             }
                             Text(
-                                text = "DAY ${state.dayCounter} • ${phase.displayName}",
+                                text = "SOL ${state.dayCounter} • ${phase.displayName}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isNightDanger) BioluminescentViolet else MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Bold
@@ -192,8 +196,46 @@ fun WastelandSkyHeader(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
+                            val sfxColor = if (isSfxEnabled) SurplusGreen else TextMutedAsh
+                            Surface(
+                                color = sfxColor.copy(alpha = 0.20f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, sfxColor.copy(alpha = 0.85f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { VaultSoundManager.toggleSfx() }
+                                    .testTag("header_sfx_toggle_button")
+                            ) {
+                                Text(
+                                    text = if (isSfxEnabled) "🔊 SFX" else "🔇 SFX",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = sfxColor,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            val humColor = if (isHumEnabled) CryoCyan else TextMutedAsh
+                            Surface(
+                                color = humColor.copy(alpha = 0.20f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, humColor.copy(alpha = 0.85f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { VaultSoundManager.toggleAmbientHum() }
+                                    .testTag("header_hum_toggle_button")
+                            ) {
+                                Text(
+                                    text = if (isHumEnabled) "⚙ HUM ON" else "⚙ HUM",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = humColor,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+
                             if (onOpenAlertsTab != null) {
                                 val alertChipColor = if (activeAlertCount > 0) WarningOrange else SurplusGreen
                                 Surface(
@@ -210,7 +252,7 @@ fun WastelandSkyHeader(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = alertChipColor,
                                         fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
@@ -229,7 +271,7 @@ fun WastelandSkyHeader(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = HazardRed,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
@@ -730,9 +772,9 @@ private fun CurrentSystemsOnlineDrawerPanel(
                     VaultStatusAppWidgetProvider.pushLiveStateToWidgets(context, state, production)
                     val pinned = VaultStatusAppWidgetProvider.requestPinVaultWidget(context)
                     widgetFeedback = if (pinned) {
-                        "v23.0 3-Row Widget pin requested & synced (Quick Mine & Stabilize ready)!"
+                        "v24.0 3-Row Widget pin requested & synced (Quick Mine & Stabilize ready)!"
                     } else {
-                        "v23.0 Widget synced! Long-press Home Screen -> Widgets -> Vault City v23.0 Command."
+                        "v24.0 Widget synced! Long-press Home Screen -> Widgets -> Vault City v24.0 Command."
                     }
                 }
                 .testTag("pin_phone_widget_btn")
@@ -743,7 +785,7 @@ private fun CurrentSystemsOnlineDrawerPanel(
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "📱 PIN / SYNC VAULT WIDGET v23.0 (3-ROW • 10D PREP, 6D CLOCKS & QUICK ACTIONS)",
+                    text = "📱 PIN / SYNC VAULT WIDGET v24.0 (3-ROW • 10D PREP, 6D CLOCKS & QUICK ACTIONS)",
                     style = MaterialTheme.typography.labelSmall,
                     color = SolarAmber,
                     fontWeight = FontWeight.Bold

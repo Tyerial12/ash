@@ -85,9 +85,9 @@ import com.example.viewmodel.OutpostUiState
 
 private enum class ArmorySubView(val label: String) {
     ALL("All"),
-    SIEGE_AND_MEDBAY("Siege & Medbay"),
-    ARMORY_CRAFT("Armory & Gear"),
-    HUNT_AND_FISH("Hunt & Fish")
+    SIEGE_AND_MEDBAY("Dome & Medbay"),
+    ARMORY_CRAFT("EVA & Defense"),
+    HUNT_AND_FISH("Recon & Brine")
 }
 
 @Composable
@@ -325,8 +325,8 @@ fun CraftHuntDefenseTabScreen(
                 // 4. Craft Base Defenses, Munitions & Medical Supplies
                 item(key = "craft_defense_section") {
                     SectionDividerTitle(
-                        title = "CRAFT DEFENSES, AMMO CRATES & MEDICAL PACKS",
-                        subtitle = "Forge Ballistic Ammo Crates (+30 Rds), Field Medkits + RadAway, Barricade Mines & Powered Turrets"
+                        title = "FABRICATE DOME DEFENSES, RAILGUN SLUGS & MED-PACKS",
+                        subtitle = "Fabricate Railgun Slugs (+30 Rds), EVA Med-Packs + Anti-Rad Gel, Micrometeoroid Shields & Laser Turrets"
                     )
                 }
 
@@ -338,11 +338,11 @@ fun CraftHuntDefenseTabScreen(
                     )
                 }
 
-                // 5. Craft Hunting, Fishing & Hazmat Expedition Gear
+                // 5. Craft EVA Spacesuits, Rebreathers & Surface Recon Gear
                 item(key = "craft_hunting_section") {
                     SectionDividerTitle(
-                        title = "CRAFT HAZMAT SUITS, GAS MASKS & HUNTING GEAR",
-                        subtitle = "Forge Gas Masks (-3% Expedition Death Risk), Lead-Lined Hazmat Suits (-4% Risk), Spears & Traps"
+                        title = "FABRICATE EVA SPACESUITS, REBREATHERS & RECON GEAR",
+                        subtitle = "Fabricate MOXIE Rebreathers (-3% Rover Hazard Risk), Pressurized EVA Suits (-4% Risk), Harpoons & Auto-Samplers"
                     )
                 }
 
@@ -408,13 +408,13 @@ private fun MedbayAndDeconCard(
                     )
                     Column {
                         Text(
-                            text = "MEDBAY, DECON SHOWERS & SURVIVAL GEAR",
+                            text = "MOXIE MEDBAY, DECON AIRLOCK & EVA GEAR",
                             style = MaterialTheme.typography.titleSmall,
                             color = SurplusGreen,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Health: $healthPercent% • Rads: $radiationMsv mSv • O2: $oxygenPercent% • Injured: $injuredDwellers",
+                            text = "Health: $healthPercent% • Cosmic Rad: $radiationMsv mSv • O2: $oxygenPercent% • Injured: $injuredDwellers",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextMutedAsh
                         )
@@ -423,7 +423,7 @@ private fun MedbayAndDeconCard(
             }
 
             Text(
-                text = "Stockpile: $medkitsCount Medkit(s) • $radAwayCount RadAway • $gasMasksCount Gas Mask(s) • $hazmatSuitsCount Hazmat Suit(s) • $ammoRounds Ammo Rds",
+                text = "Stockpile: $medkitsCount Med-Pack(s) • $radAwayCount Anti-Rad Gel • $gasMasksCount Rebreather(s) • $hazmatSuitsCount EVA Suit(s) • $ammoRounds Railgun Slugs",
                 style = MaterialTheme.typography.labelSmall,
                 color = XpGold,
                 fontWeight = FontWeight.Bold
@@ -502,13 +502,13 @@ private fun ActiveBlastDoorUpgradeCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "REINFORCING VAULT BLAST DOOR -> LV.${doorUpgrade.targetLevel}",
+                        text = "REINFORCING MARS AIRLOCK BULKHEAD -> LV.${doorUpgrade.targetLevel}",
                         style = MaterialTheme.typography.titleSmall,
                         color = RadTeal,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Door Lv.${doorUpgrade.targetLevel} Upgrade Timer: ${doorUpgrade.remainingSeconds}s / ${doorUpgrade.totalSeconds}s (+20 DEF & 100% Integrity on finish)",
+                        text = "Airlock Lv.${doorUpgrade.targetLevel} Upgrade Timer: ${doorUpgrade.remainingSeconds}s / ${doorUpgrade.totalSeconds}s (+20 DEF & 100% Integrity on finish)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )

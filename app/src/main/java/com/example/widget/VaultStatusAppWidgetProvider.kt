@@ -160,7 +160,7 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        const val WIDGET_VERSION_NAME = "v23.0"
+        const val WIDGET_VERSION_NAME = "v24.0"
         const val ACTION_REFRESH_VAULT_WIDGET = "com.example.widget.ACTION_REFRESH_VAULT_WIDGET"
         const val ACTION_WIDGET_QUICK_MINE = "com.example.widget.ACTION_WIDGET_QUICK_MINE"
         const val ACTION_WIDGET_QUICK_STABILIZE = "com.example.widget.ACTION_WIDGET_QUICK_STABILIZE"
@@ -556,7 +556,7 @@ class VaultStatusAppWidgetProvider : AppWidgetProvider() {
             val result = when (action) {
                 ACTION_WIDGET_QUICK_MINE -> applyWidgetQuickMine(projectedState, currentProd, now)
                 ACTION_WIDGET_QUICK_STABILIZE -> applyWidgetQuickStabilize(projectedState, currentProd, now)
-                else -> WidgetQuickActionResult(projectedState, "↻ Synced v23.0 Telemetry", "WIDGET SYNC")
+                else -> WidgetQuickActionResult(projectedState, "↻ Synced v24.0 Telemetry", "WIDGET SYNC")
             }
 
             dao.upsertOutpostState(result.updatedState)
